@@ -1,27 +1,32 @@
-'use client';
+"use client";
 
-import { useRouter } from 'next/navigation';
-import useUserStore from '@/stores/userStore';
-import { useEffect } from 'react';
-
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/stores/authStore";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import { useEffect } from "react";
 export default function ChatPage() {
-  const user = useUserStore((state) => state.user);
+  const { accessToken, logout } = useAuthStore();
   const router = useRouter();
 
   useEffect(() => {
-    if (!user) {
-      router.push('/login'); // Chuyển hướng nếu chưa đăng nhập
+    if (!accessToken) {
+      router.push("/login");
     }
-  }, [user, router]);
-
-  if (!user) {
-    return null; // Tránh render trong khi chờ chuyển hướng
-  }
+  }, [accessToken, router]);
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-gray-50">
-      <h1 className="text-2xl font-bold">Chào, {user.username}!</h1>
-      <p className="mt-4 text-lg">Đây là trang chat của bạn.</p>
-    </div>
+    
+      <SidebarProvider>
+        <AppSidebar />
+        <main className="min-h-screen">
+          <SidebarTrigger />
+        <div className="flex flex-col items-center justify-center h-screen bg-gray-50">
+          <p className="mt-4 text-lg">Đây là trang chat của bạn.</p>
+          <button onClick={logout}>Đăng xuất</button>
+        </div>
+        </main>
+      </SidebarProvider>
+    
   );
 }

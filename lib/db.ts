@@ -4,9 +4,9 @@ const pgp = pgPromise();
 const db = pgp({
   host: "localhost",
   port: 5432,
-  database: "my_database",
-  user: "my-user",
-  password: "my-password",
+  database: "bondhub",
+  user: "postgres",
+  password: "root",
 });
 
 export default db;
