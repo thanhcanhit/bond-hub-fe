@@ -1,67 +1,73 @@
-import { Calendar, Home, Inbox, Search, Settings } from "lucide-react"
+// import { Calendar, Home, Inbox, Search, Settings } from "lucide-react"
 
 import {
     Sidebar,
     SidebarContent,
-    SidebarGroup,
-    SidebarGroupContent,
-    SidebarGroupLabel,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
+    SidebarFooter,
+    // SidebarGroup,
+    // SidebarGroupContent,
+    // SidebarGroupLabel,
+    SidebarHeader,
+    // SidebarMenu,
+    // SidebarMenuButton,
+    // SidebarMenuItem,
+    SidebarRail,
 } from "@/components/ui/sidebar"
+import { NavMain } from "@/components/nav-main";
+import { NavUser } from "@/components/nav-user"
+import { TeamSwitcher } from "@/components/team-switcher"
 
-// Menu items.
-const items = [
-    {
-        title: "Home",
-        url: "#",
-        icon: Home,
+const data = {
+    user: {
+        name: "Nhu Twm",
+        email: "m@example.com",
+        avatar: "/avatars/shadcn.jpg",
     },
-    {
-        title: "Inbox",
-        url: "#",
-        icon: Inbox,
-    },
-    {
-        title: "Calendar",
-        url: "#",
-        icon: Calendar,
-    },
-    {
-        title: "Search",
-        url: "#",
-        icon: Search,
-    },
-    {
-        title: "Settings",
-        url: "#",
-        icon: Settings,
-    },
-]
+    teams: [
+        {
+            name: "Nâng cấp tài khoản",
+            // logo: GalleryVerticalEnd,
+            plan: "Enterprise",
+        },
+        {
+            name: "Hồ sơ của bạn",
+            // logo: AudioWaveform,
+            plan: "Startup",
+        },
+        {
+            name: "Cài đặt",
+            // logo: Command,
+            plan: "Free",
+        },
+    ],
+    navMain: [
+        {
+            title: "Tin nhắn",
+            url: "#",
+            // icon: SquareTerminal,
+            isActive: true,
+        },
+        {
+            title: "Danh bạ",
+            url: "#",
+            // icon: Bot,
+        },
+    ],
+}
 
-export function AppSidebar() {
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return (
-        <Sidebar>
+        <Sidebar collapsible="icon" {...props}>
+            <SidebarHeader>
+                <TeamSwitcher teams={data.teams} />
+            </SidebarHeader>
             <SidebarContent>
-                <SidebarGroup>
-                    <SidebarGroupLabel>Application</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            {items.map((item) => (
-                                <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild>
-                                        <a href={item.url}>
-                                            <item.icon />
-                                            <span>{item.title}</span>
-                                        </a>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
+                <NavMain items={data.navMain} />
             </SidebarContent>
+            <SidebarFooter>
+                <NavUser user={data.user} />
+            </SidebarFooter>
+            <SidebarRail />
         </Sidebar>
     )
 }

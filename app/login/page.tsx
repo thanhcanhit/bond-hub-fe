@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, {   useState } from "react";
 import Image from "next/image";
 import QrLogin from "@/components/QrLogin";
 import LoginForm from "@/components/LoginForm";
@@ -9,10 +9,20 @@ import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
+// import { useAuthStore } from "@/stores/authStore";
+//import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [open, setOpen] = React.useState(false);
+  //const router = useRouter();
+
+  // useEffect(() => {
+  //   const accessToken = localStorage.getItem("accessToken");
+  //   if (accessToken) {
+  //     router.push("/");
+  //   }
+  // }, [router]);
 
   const handleSelect = (currentValue:string) => {
     if (currentValue === "password-login") {
@@ -73,35 +83,4 @@ export default function LoginPage() {
       </div>
     </div>
   );
-  // return (
-  //   <>
-  //     <div className="flex justify-center items-start pt-10 h-screen bg-[#e8f3ff]">
-  //       {/* {isLoading ? (
-  //       <p className="text-xl font-semibold">Đang xử lý...</p>
-  //     ) : ( */}
-  //       <div className="flex flex-col items-center justify-center gap-5">
-  //         <div className="flex flex-col items-center justify-center">
-  //           <img
-  //             src="/bondhublogo.png"
-  //             style={{ width: "300px"}}
-  //           ></img>
-  //           <h2 className="text-center text-l text-gray-600">
-  //             Đăng nhập tài khoản Bondhub <p></p> để kết nối với ứng dụng Bondhub
-  //             Web
-  //           </h2>
-  //         </div>
-  //         <div className="p-7 bg-white shadow-lg rounded-xl flex flex-row justify-between gap-10">
-  //           <div>
-  //             <p>Đăng nhập bằng quét mã QR</p>
-  //             <button></button>
-  //           </div>
-  //           <QrLogin />
-  //           <LoginForm />
-  //         </div>
-  //       </div>
-  //       {/* )} */}
-  //     </div>
-  //   </>
-    
-  // );
 }
