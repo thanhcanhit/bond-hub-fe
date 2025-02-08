@@ -7,11 +7,10 @@ export default function QrLogin() {
   const [qrToken, setQrToken] = useState("");
   const { setAccessToken } = useAuthStore();
   useEffect(() => {
-    // Gọi API để tạo mã QR khi component được mount
     const generateQrCode = async () => {
       try {
         const res = await api.post("/qrcode/generate");
-        setQrToken(res.data.qrCode); // Giả định API trả về { qrCode: "token" }
+        setQrToken((res.data as { qrToken: string }).qrToken);
       } catch (error) {
         console.error("Lỗi khi tạo mã QR:", error);
       }
@@ -21,16 +20,14 @@ export default function QrLogin() {
   }, []);
 
   useEffect(() => {
-    // Gọi API lấy mã QR khi component được render
-    // api.get("/qr/generate").then((res) => setQrCode(res.data.qrCode));
 
-    // Lắng nghe server trả về kết quả đăng nhập (có thể dùng WebSocket nếu cần)
     const interval = setInterval(async () => {
       if (!qrToken) return;
       try {
         const res = await api.get(`/qrcode/status/${qrToken}`);
-        if (res.data.accessToken) {
-          setAccessToken(res.data.accessToken);
+        const data = res.data as { accessToken?: string };
+        if (data.accessToken) {
+          setAccessToken((res.data as { accessToken: string }).accessToken);
           clearInterval(interval);
         }
       } catch (error) {
@@ -38,13 +35,28 @@ export default function QrLogin() {
       }
     }, 3000); // Kiểm tra mỗi 3 giây
 
-    return () => clearInterval(interval);
+    return () => clearInterval(interval); 
   }, [qrToken, setAccessToken]);
 
   return (
     <div className="flex flex-col items-center">
       {qrToken ? (
-        <QRCodeCanvas value={qrToken} size={200} />
+        <div className="flex flex-col items-center gap-9">
+          <div className="h-[290px] w-[235px] flex flex-col items-center border border-gray-300 p-4 rounded-[20px] space-y-4"> 
+            <div>
+              <QRCodeCanvas value={qrToken} size={200} />
+            </div>
+            <div className="text-center">
+              <p className="text-[#2a83f7] text-[18px]">Chỉ dùng để đăng nhập</p>
+              <p>Bondhub trên máy tính</p>
+            </div>
+          </div>
+          <div className="h-[105px] w-[515px] text-center border border-gray-300 p-4 rounded-[30px]">
+            <p>Nâng cao hiệu quả công việc với Bondhub PC</p>
+            <p>Coming soon...</p>
+          </div>
+        </div>
+        
       ) : (
         <p>Đang tạo mã QR...</p>
       )}
