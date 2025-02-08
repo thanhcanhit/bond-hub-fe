@@ -5,12 +5,17 @@ import { useAuthStore } from "../stores/authStore";
 
 export default function QrLogin() {
   const [qrToken, setQrToken] = useState("");
+  const [expiresAt, setExpiresAt] = useState<number>(0);
+  const [isQrExpired, setIsQrExpired] = useState<boolean>(false);
   const { setAccessToken } = useAuthStore();
   useEffect(() => {
     const generateQrCode = async () => {
       try {
         const res = await api.post("/qrcode/generate");
-        setQrToken((res.data as { qrToken: string }).qrToken);
+        setQrToken((res.data as { qrToken: string, expires_in: number }).qrToken);
+        setExpiresAt(Date.now() + res.data.expires_in * 1000);
+        setIsQrExpired(false);
+        console.log(res.data);
       } catch (error) {
         console.error("Lỗi khi tạo mã QR:", error);
       }
@@ -23,6 +28,10 @@ export default function QrLogin() {
 
     const interval = setInterval(async () => {
       if (!qrToken) return;
+      if (Date.now() > expiresAt) {
+        setIsQrExpired(true); 
+        return;
+      }
       try {
         const res = await api.get(`/qrcode/status/${qrToken}`);
         const data = res.data as { accessToken?: string };
@@ -36,7 +45,25 @@ export default function QrLogin() {
     }, 3000); // Kiểm tra mỗi 3 giây
 
     return () => clearInterval(interval); 
-  }, [qrToken, setAccessToken]);
+  }, [qrToken, setAccessToken, expiresAt]);
+
+  const getNewQRCode = () => {
+    // setQrToken("");
+    // setExpiresAt(0);
+    const generateQrCode = async () => {
+      try {
+        const res = await api.post("/qrcode/generate");
+        setQrToken((res.data as { qrToken: string, expires_in: number }).qrToken);
+        setExpiresAt(Date.now() + res.data.expires_in * 1000);
+        setIsQrExpired(false);
+        console.log(res.data);
+      } catch (error) {
+        console.error("Lỗi khi tạo mã QR:", error);
+      }
+    };
+
+    generateQrCode();
+  };
 
   return (
     <div className="flex flex-col items-center">
@@ -44,7 +71,15 @@ export default function QrLogin() {
         <div className="flex flex-col items-center gap-9">
           <div className="h-[290px] w-[235px] flex flex-col items-center border border-gray-300 p-4 rounded-[20px] space-y-4"> 
             <div>
-              <QRCodeCanvas value={qrToken} size={200} />
+              {isQrExpired ? (
+                <div>
+                  <p>Mã QR hết hạn</p>
+                  <button onClick={getNewQRCode} className="bg-[#2a83f7] text-white px-4 py-2 rounded-[10px]">Lấy mã mới</button>
+                </div>
+               ) :(
+                <QRCodeCanvas value={qrToken} size={200} />
+              )}
+              
             </div>
             <div className="text-center">
               <p className="text-[#2a83f7] text-[18px]">Chỉ dùng để đăng nhập</p>
