@@ -7,7 +7,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { useEffect } from "react";
 export default function ChatPage() {
   const accessToken = useAuthStore(
-    (state: { accessToken: string }) => state.accessToken,
+    (state: { accessToken: string | null }) => state.accessToken,
   );
   const logout = useAuthStore((state: { logout: () => void }) => state.logout);
   const router = useRouter();

@@ -1,8 +1,10 @@
 import axios from "axios";
+
+const NEXT_PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 //import { useAuthStore } from "../stores/authStore";
 
 const api = axios.create({
-  baseURL: "http://localhost:3000", // Đổi thành URL backend
+  baseURL: NEXT_PUBLIC_BACKEND_URL, // Đổi thành URL backend
   withCredentials: true,
 });
 
