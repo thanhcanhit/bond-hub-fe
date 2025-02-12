@@ -6,8 +6,10 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useEffect } from "react";
 export default function ChatPage() {
-  const accessToken = useAuthStore((state) => state.accessToken);
-  const logout = useAuthStore((state) => state.logout);
+  const accessToken = useAuthStore(
+    (state: { accessToken: string }) => state.accessToken,
+  );
+  const logout = useAuthStore((state: { logout: () => void }) => state.logout);
   const router = useRouter();
 
   useEffect(() => {
