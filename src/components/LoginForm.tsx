@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import { useAuthStore } from "@/stores/authStore";
+import useAuthStore from "@/stores/authStore";
 import { useRouter } from "next/navigation";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Smartphone, Lock } from "lucide-react";
 
 export default function LoginForm() {
-  const { loginWithPhoneNumber } = useAuthStore();
+  const { login } = useAuthStore();
   const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [showSetPasswordForm, setShowSetPasswordForm] = useState(false);
@@ -15,7 +15,7 @@ export default function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await loginWithPhoneNumber(phoneNumber, password);
+      await login({ phoneNumber, password });
       alert("Đăng nhập thành công!");
       router.push("/");
     } catch (error: any) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useAuthStore } from "@/stores/authStore";
+import useAuthStore from "@/stores/authStore";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useEffect } from "react";
@@ -14,11 +14,8 @@ export default function ChatPage() {
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
-    if (token) {
-      useAuthStore.getState().setAccessToken(token);
-    } else {
-      router.push("/login");
-    }
+    if (!token) router.push("/login");
+    else router.push("/");
   }, [accessToken, router]);
 
   // Hiển thị loading khi đang xử lý đăng nhập hoặc đăng xuất

@@ -1,36 +1,37 @@
 // 'use client';
+//stores/authStore.ts
 import { create } from "zustand";
-import api from "@/lib/api";
+import { AuthState } from "@/types/auth";
+import { login as apiLogin } from "@/lib/api";
 
-interface AuthState {
-  user: string | null;
-  accessToken: string | null;
-  setAccessToken: (token: string) => void;
-  loginWithPhoneNumber: (
-    phoneNumber: string,
-    password: string,
-  ) => Promise<void> | void;
-  logout: () => void;
-}
-
-export const useAuthStore = create<AuthState>((set) => ({
+const useAuthStore = create<AuthState>((set) => ({
   user: null,
   accessToken: null,
+  isAuthenticated: false,
+  setAuth: (accessToken, user) =>
+    set({ accessToken, user, isAuthenticated: !!accessToken }),
 
-  setAccessToken: (token) => set({ accessToken: token }),
-
-  loginWithPhoneNumber(phoneNumber, password) {
-    return api.post("/auth/login", { phoneNumber, password }).then((res) => {
-      console.log("Response from /auth/login:", res);
-      const { accessToken } = res.data;
-      localStorage.setItem("accessToken", accessToken);
-      set({ user: phoneNumber, accessToken: res.data.accessToken });
+  login: async (credentials: { phoneNumber: string; password: string }) => {
+    const { accessToken, user } = await apiLogin(credentials); // Call API
+    const finalUser = user || {
+      id: 0,
+      phoneNumber: credentials.phoneNumber,
+      roles: [],
+    }; // Fallback
+    localStorage.setItem("accessToken", accessToken); // Save token to local storage
+    set({ accessToken, user: finalUser, isAuthenticated: true }); // Update state
+  },
+  logout: () => {
+    localStorage.removeItem("accessToken"); // Remove token from local storage
+    set({
+      accessToken: null,
+      user: null,
+      isAuthenticated: false,
     });
   },
-
-  logout: () => {
-    api.post("/auth/logout");
-    localStorage.removeItem("accessToken");
-    set({ user: null, accessToken: null });
-  },
 }));
+const storedToken = localStorage.getItem("accessToken");
+if (storedToken) {
+  useAuthStore.getState().setAuth(storedToken, useAuthStore.getState().user!);
+}
+export default useAuthStore;

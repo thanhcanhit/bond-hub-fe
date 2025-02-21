@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import api from "@/lib/api";
-import { useAuthStore } from "../stores/authStore";
+import useAuthStore from "../stores/authStore";
 import { useRouter } from "next/navigation";
 
 export default function QrLogin() {
@@ -9,7 +9,7 @@ export default function QrLogin() {
   const [expiresAt, setExpiresAt] = useState<number>(0);
   const [isQrExpired, setIsQrExpired] = useState<boolean>(false);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const { setAccessToken } = useAuthStore();
+  const { setAuth } = useAuthStore();
   const router = useRouter();
   const generateQrCode = async () => {
     try {
@@ -37,7 +37,7 @@ export default function QrLogin() {
         const res = await api.get(`/qrcode/status/${qrToken}`);
         const data = res.data as { accessToken?: string };
         if (data.accessToken) {
-          setAccessToken(data.accessToken);
+          setAuth(data.accessToken, { id: 0, phoneNumber: "qr-user" });
           setIsLoggedIn(true);
           clearInterval(interval);
         }
@@ -47,7 +47,7 @@ export default function QrLogin() {
     }, 3000); // Kiểm tra mỗi 3 giây
 
     return () => clearInterval(interval);
-  }, [qrToken, setAccessToken, expiresAt]);
+  }, [qrToken, setAuth, expiresAt]);
 
   useEffect(() => {
     if (isLoggedIn) {
