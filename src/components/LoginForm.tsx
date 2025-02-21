@@ -14,17 +14,9 @@ export default function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      await login({ phoneNumber, password });
-      alert("Đăng nhập thành công!");
-      router.push("/");
-    } catch (error: any) {
-      if (error.request) {
-        console.log("Request:", error.request); // Lỗi request (không có response)
-        alert("Lỗi kết nối đến server");
-      }
-      alert("Sai email hoặc mật khẩu!");
-    }
+    await login({ phoneNumber, password });
+    alert("Đăng nhập thành công!");
+    router.push("/");
   };
 
   const handleSelect = (currentValue: string) => {

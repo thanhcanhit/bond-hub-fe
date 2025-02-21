@@ -19,4 +19,9 @@ export interface AuthState {
     password: string;
   }) => Promise<void>;
   logout: () => void;
+  register: (
+    phoneNumber: string,
+    password: string,
+    fullName: string,
+  ) => Promise<void>;
 }

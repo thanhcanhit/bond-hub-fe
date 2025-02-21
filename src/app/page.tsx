@@ -6,10 +6,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useEffect } from "react";
 export default function ChatPage() {
-  const accessToken = useAuthStore(
-    (state: { accessToken: string | null }) => state.accessToken,
-  );
-  const logout = useAuthStore((state: { logout: () => void }) => state.logout);
+  const accessToken = useAuthStore();
+  const logout = useAuthStore((state) => state.logout);
   const router = useRouter();
 
   useEffect(() => {
@@ -17,18 +15,6 @@ export default function ChatPage() {
     if (!token) router.push("/login");
     else router.push("/");
   }, [accessToken, router]);
-
-  // Hiển thị loading khi đang xử lý đăng nhập hoặc đăng xuất
-  // if (isLoading) {
-  //   return (
-  //     <div className="flex items-center justify-center h-screen bg-white">
-  //       <div className="flex flex-col items-center">
-  //         <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-500 border-solid mb-4"></div>
-  //         <p className="text-gray-700 text-lg font-medium">Đang tải...</p>
-  //       </div>
-  //     </div>
-  //   );
-  // }
 
   return (
     <SidebarProvider suppressHydrationWarning={true}>

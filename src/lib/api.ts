@@ -4,10 +4,9 @@ import useAuthStore from "@/stores/authStore";
 import { AuthResponse } from "@/types/auth";
 
 const NEXT_PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-//import { useAuthStore } from "../stores/authStore";
 
 const api = axios.create({
-  baseURL: NEXT_PUBLIC_BACKEND_URL, // Đổi thành URL backend
+  baseURL: NEXT_PUBLIC_BACKEND_URL,
   withCredentials: true,
 });
 
@@ -16,12 +15,12 @@ api.interceptors.request.use(
   (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
     const accessToken = useAuthStore.getState().accessToken;
     if (accessToken) {
-      config.headers = config.headers || {}; // Ensure headers is defined
-      config.headers.Authorization = `Bearer ${accessToken}`; // Set Authorization header
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${accessToken}`;
     }
     return config;
   },
-  (error) => Promise.reject(error), // Handle request errors
+  (error) => Promise.reject(error),
 );
 
 // Response interceptor for token refresh
@@ -66,6 +65,20 @@ export const login = async (credentials: {
 // Logout function
 export const logout = async (): Promise<void> => {
   await api.post("/auth/logout", null);
+};
+
+// Đăng ký tài khoản (Bỏ qua xác thực OTP)
+export const register = async (
+  phoneNumber: string,
+  password: string,
+  fullName: string,
+): Promise<AuthResponse> => {
+  const response = await api.post<AuthResponse>("/auth/register", {
+    phoneNumber,
+    password,
+    fullName,
+  });
+  return response.data;
 };
 
 export default api;
