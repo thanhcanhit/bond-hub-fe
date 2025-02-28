@@ -15,7 +15,6 @@ export default function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await login({ phoneNumber, password });
-    alert("Đăng nhập thành công!");
     router.push("/");
   };
 

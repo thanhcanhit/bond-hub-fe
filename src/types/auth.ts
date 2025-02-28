@@ -13,7 +13,9 @@ export interface AuthState {
   accessToken: string | null;
   user: User | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   setAuth: (accessToken: string, user: User) => void;
+  setLoading: (loading: boolean) => void;
   login: (credentials: {
     phoneNumber: string;
     password: string;
