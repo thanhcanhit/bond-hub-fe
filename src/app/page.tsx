@@ -7,35 +7,91 @@ import useAuthStore from "@/stores/authStore";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+//import {
+// Popover,
+//PopoverContent,
+//PopoverTrigger,
+//} from "@/components/ui/popover";
 import {
   Bell,
+  Compass,
+  Contact,
+  MessageSquare,
   MoreHorizontal,
-  PanelLeft,
+  Pen,
+  //  PanelLeft,
   Pin,
-  Plug,
-  Plus,
+  // Plug,
+  // Plus,
   Users,
 } from "lucide-react";
 import Loading from "@/components/Loading";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuPortal,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 export default function ChatPage() {
-  const { accessToken, logout, isLoading } = useAuthStore();
+  const { accessToken, logout, isLoading, user } = useAuthStore();
   const router = useRouter();
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  //const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState("chat"); // Tab hiện tại: "chat", "contacts", "explore"
+  const [selectedChat, setSelectedChat] = useState<{
+    id: number;
+    name: string;
+    message?: string;
+    time?: string;
+    avatar: string;
+    phone?: string;
+    content?: string;
+  } | null>(null); // Mục chat/danh bạ/bài viết được chọn
+  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
+  const [isTabContentVisible, setIsTabContentVisible] = useState(true);
+  const [showProfile, setShowProfile] = useState(false); // State để hiển thị hồ sơ người dùng
+  const [nickname, setNickname] = useState(""); // State để chỉnh sửa biệt danh
+  const [isEditingNickname, setIsEditingNickname] = useState(false); // State để bật/tắt chỉnh sửa biệt danh
 
-  const toggleSidebar = () => {
-    setIsSidebarCollapsed((prev) => !prev);
+  const handleShowProfile = () => setShowProfile(true);
+  const handleEditNickname = () => {
+    setIsEditingNickname(true);
+    setNickname(selectedChat?.name || ""); // Lấy tên hiện tại làm giá trị ban đầu
+  };
+  const handleSaveNickname = () => {
+    // Logic để lưu biệt danh (giả sử cập nhật vào selectedChat hoặc API)
+    console.log("Biệt danh mới:", nickname);
+    setIsEditingNickname(false);
   };
 
-  // useEffect(() => {
-  //   if(!accessToken) {
-  //     router.push("/login");
-  //   }
-  // }, [accessToken, router]);
+  useEffect(() => {
+    const handleResize = () => {
+      // Ẩn phần thanh chứa nội dung tab khi độ rộng cửa sổ nhỏ hơn 1024px (khoảng 1/2 màn hình full HD)
+      setIsTabContentVisible(window.innerWidth >= 1024);
+    };
+
+    // Gọi lần đầu và lắng nghe sự kiện resize
+    handleResize();
+    window.addEventListener("resize", handleResize);
+
+    // Cleanup
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+  // const toggleSidebar = () => {
+  //   setIsSidebarCollapsed((prev) => !prev);
+  // };
+  const toggleRightSidebar = () => {
+    setIsRightSidebarCollapsed((prev) => !prev);
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
     if (!token) router.push("/login");
@@ -45,189 +101,443 @@ export default function ChatPage() {
     logout();
     setTimeout(() => router.push("/login"), 2000); // Chờ 2s rồi chuyển hướng
   };
+
+  // Dữ liệu mẫu
+  const chats = [
+    {
+      id: 1,
+      name: "Như Ngọc",
+      message: "Chờ em mua cái máy sấy tóc...",
+      time: "16 giờ",
+      avatar:
+        "https://i.ibb.co/XxXXczsK/480479681-599145336423941-8941882180530449347-n.jpg",
+    },
+    {
+      id: 2,
+      name: "Ultimate Zalo",
+      message: "nhutam050@gmail.com",
+      time: "1 giờ",
+      avatar: "https://i.ibb.co/xSpQqbFY/khok.jpg",
+    },
+    // Thêm các chat khác...
+  ];
+
+  const contacts = [
+    {
+      id: 1,
+      name: "Như Ngọc",
+      phone: "0123456789",
+      avatar:
+        "https://i.ibb.co/XxXXczsK/480479681-599145336423941-8941882180530449347-n.jpg",
+    },
+    {
+      id: 2,
+      name: "Như Tâm",
+      phone: "0987654321",
+      avatar: "https://i.ibb.co/xSpQqbFY/khok.jpg",
+    },
+    // Thêm các liên hệ khác...
+  ];
+
+  const posts = [
+    {
+      id: 1,
+      user: "Như Ngọc",
+      content: "Hôm nay đẹp trời quá!",
+      time: "2 giờ trước",
+      avatar: "https://via.placeholder.com/40",
+    },
+    // Thêm các bài viết khác...
+  ];
   return (
     <>
       {isLoading && <Loading />}
       <div className="flex h-screen bg-gray-100">
-        <div>
-          <Button onClick={handleLogout}>Đăng xuất</Button>
-        </div>
-        {/* Left Sidebar - Chat List */}
-        <div className="w-[408px] bg-[#005ae0] text-white p-4 flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold">Danh sách chat</h2>
-            <Button variant="ghost" size="icon" className="text-white">
-              <Plug className="h-4 w-4" />
-            </Button>
+        {/* Sidebar trái - Tabs */}
+        <div className="w-16 bg-[#005ae0] text-white flex flex-col items-center py-4 space-y-6">
+          <div className="mt-5">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Avatar className="cursor-pointer">
+                  <AvatarImage src="https://i.ibb.co/XxXXczsK/480479681-599145336423941-8941882180530449347-n.jpg" />
+                  <AvatarFallback>NT</AvatarFallback>
+                </Avatar>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                className="w-56"
+                side="right"
+                align="start"
+                sideOffset={5}
+                alignOffset={5}
+              >
+                <DropdownMenuLabel>Như Tâm</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem>
+                    Nâng cấp tài khoản
+                    <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>Hồ sơ của bạn</DropdownMenuItem>
+                  <DropdownMenuItem>Cài đặt</DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem>Đăng xuất</DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          <div className="space-y-2 overflow-y-auto flex-1">
-            {/* Chat Items */}
-            <ChatItem
-              name="Cloud của tôi"
-              message="Hôm qua"
-              time="2 giờ"
-              avatar="https://via.placeholder.com/40"
-            />
-            <ChatItem
-              name="Ultimate Zalo"
-              message="Bạn: nhutam050@gmail.com"
-              time="1 giờ"
-              avatar="https://via.placeholder.com/40"
-            />
-            <ChatItem
-              name="Hủy diệt Thắng"
-              message="Khẳng: https://meet.google.com/..."
-              time="2 giờ"
-              avatar="https://via.placeholder.com/40"
-            />
-            <ChatItem
-              name="Nguyệt"
-              message="Bạn: Rồi à ❤️ Nguyệt"
-              time="2 giờ"
-              avatar="https://via.placeholder.com/40"
-            />
-            <ChatItem
-              name="Hồ Văn Toàn"
-              message="Hình ảnh"
-              time="2 giờ"
-              avatar="https://via.placeholder.com/40"
-            />
-            <ChatItem
-              name="CN-DHKTPM17C"
-              message="Học hành để đăng hoàng nhận cái..."
-              time="3 giờ"
-              avatar="https://via.placeholder.com/40"
-            />
-            <ChatItem
-              name="Như Ngọc"
-              message="Bạn: Chờ em mua cái máy sấy tóc cái..."
-              time="16 giờ"
-              avatar="https://via.placeholder.com/40"
-            />
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white"
+            onClick={() => setActiveTab("chat")}
+          >
+            <MessageSquare className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white"
+            onClick={() => setActiveTab("contacts")}
+          >
+            <Contact className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white"
+            onClick={() => setActiveTab("explore")}
+          >
+            <Compass className="h-5 w-5" />
+          </Button>
+          <div>
+            <Button onClick={handleLogout}>Đăng xuất</Button>
+          </div>
+        </div>
+
+        {/* Left Sidebar - Chat List */}
+        <div
+          className={`w-[408px] bg-white border-r flex flex-col ${isTabContentVisible ? "flex" : "hidden"}`}
+        >
+          <div className="p-4 border-b">
+            <h2 className="text-lg font-bold">
+              {activeTab === "chat" && "Danh sách chat"}
+              {activeTab === "contacts" && "Danh bạ"}
+              {activeTab === "explore" && "Khám phá"}
+            </h2>
+          </div>
+          <div className="flex-1 overflow-y-scroll scroll-container custom-scrollbar">
+            {activeTab === "chat" &&
+              chats.map((chat) => (
+                <ChatItem
+                  key={chat.id}
+                  {...chat}
+                  onClick={() => setSelectedChat(chat)}
+                />
+              ))}
+            {activeTab === "contacts" &&
+              contacts.map((contact) => (
+                <ContactItem
+                  key={contact.id}
+                  {...contact}
+                  onClick={() => setSelectedChat(contact)}
+                />
+              ))}
+            {activeTab === "explore" &&
+              posts.map((post) => (
+                <PostItem
+                  key={post.id}
+                  {...post}
+                  onClick={() => setSelectedChat({ ...post, name: post.user })}
+                />
+              ))}
           </div>
         </div>
 
         {/* Main Chat Area */}
         <div
-          className={`flex-1 flex flex-col ${isSidebarCollapsed ? "w-full" : "w-[calc(100%-64rem)]"} transition-all duration-300`}
+          className={`flex-1 flex flex-col ${isRightSidebarCollapsed ? "w-full" : "w-[calc(100%-344px)]"} transition-all duration-300 ${isTabContentVisible ? "md:w-[calc(100%-408px)]" : "w-full"}`}
         >
-          {/* Chat Header */}
           <div className="border-b bg-white p-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Avatar>
-                <AvatarImage src="https://via.placeholder.com/40" />
-                <AvatarFallback>UZ</AvatarFallback>
-              </Avatar>
-              <div>
-                <h2 className="font-semibold">Ultimate Zalo</h2>
-                <p className="text-sm text-gray-500">4 thành viên</p>
-              </div>
-            </div>
+            <h2 className="font-semibold">
+              {selectedChat
+                ? selectedChat.name
+                : "Chọn một mục để xem chi tiết"}
+            </h2>
             <div className="flex gap-2">
-              <Button variant="ghost" size="icon">
-                <Bell className="h-4 w-4" />
+              <Button variant="ghost" size="icon" onClick={toggleRightSidebar}>
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-48">
-                  <div className="space-y-2">
-                    <Button variant="ghost" className="w-full justify-start">
-                      Bắt buộc
-                    </Button>
-                    <Button variant="ghost" className="w-full justify-start">
-                      Ghim hội thoại
-                    </Button>
-                    <Button variant="ghost" className="w-full justify-start">
-                      Thêm thành viên
-                    </Button>
-                    <Button variant="ghost" className="w-full justify-start">
-                      Quan lý nhóm
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <Button variant="ghost" size="icon" onClick={toggleSidebar}>
-                <PanelLeft className="h-4 w-4" />
+              <Button onClick={handleLogout} className="bg-red-500 text-white">
+                Đăng xuất
               </Button>
             </div>
           </div>
-
-          {/* Chat Messages */}
-          <div className="flex-1 bg-[#ebecf0] p-4 overflow-y-auto space-y-4">
-            <div className="flex justify-center">
-              <div className="bg-purple-600 text-white p-4 rounded-lg max-w-md">
-                <p>Hostinger - Bring Your Idea Online With a Website</p>
-                <p>
-                  Choose Hostinger and make the perfect site. From Shared
-                  Hosting and Domains to VPS and Cloud plans. We have all...
-                </p>
-                <p className="text-sm text-gray-200 mt-2">www.hostinger.com</p>
-              </div>
-            </div>
-            <div className="flex items-end gap-2">
-              <Avatar>
-                <AvatarImage src="https://via.placeholder.com/40" />
-                <AvatarFallback>NT</AvatarFallback>
-              </Avatar>
-              <div className="bg-blue-100 p-2 rounded-lg max-w-xs">
-                <p>nhutam050@gmail.com</p>
-              </div>
-              <span className="text-sm text-gray-500">13:30</span>
-            </div>
-          </div>
-
-          {/* Input Area */}
-          <div className="border-t p-4 bg-white flex items-center gap-2">
-            <Button variant="ghost" size="icon">
-              <img
-                src="/attachment-icon.png"
-                alt="Attach"
-                className="h-5 w-5"
+          <div className="flex-1 bg-[#ebecf0] overflow-y-auto">
+            {selectedChat && activeTab === "chat" && (
+              <ChatContent chat={selectedChat} />
+            )}
+            {selectedChat && activeTab === "contacts" && selectedChat.phone && (
+              <ContactContent
+                contact={
+                  selectedChat as {
+                    id: number;
+                    name: string;
+                    phone: string;
+                    avatar: string;
+                  }
+                }
               />
-            </Button>
-            <input
-              type="text"
-              placeholder="Nhập tin nhắn..."
-              className="flex-1 p-2 border rounded-lg focus:outline-none"
-            />
-            <Button variant="ghost" size="icon">
-              <img src="/emoji-icon.png" alt="Emoji" className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon">
-              <img src="/send-icon.png" alt="Send" className="h-5 w-5" />
-            </Button>
+            )}
+            {selectedChat && activeTab === "explore" && (
+              <PostContent post={selectedChat} />
+            )}
           </div>
         </div>
 
         {/* Right Sidebar - Group Info (Collapsible) */}
         <div
           className={`bg-white border-l transition-all duration-300 ${
-            isSidebarCollapsed ? "w-0 overflow-hidden" : "w-[344px]"
+            isRightSidebarCollapsed ? "w-0 overflow-hidden" : "w-[344px]"
           }`}
         >
-          <h3 className="font-semibold mb-4">Thông tin nhóm</h3>
-          <div className="space-y-2">
-            <Button variant="ghost" className="w-full justify-start">
-              Bắt buộc <Bell className="ml-2 h-4 w-4" />
-            </Button>
-            <Button variant="ghost" className="w-full justify-start">
-              Ghim hội thoại <Pin className="ml-2 h-4 w-4" />
-            </Button>
-            <Button variant="ghost" className="w-full justify-start">
-              Thêm thành viên <Plus className="ml-2 h-4 w-4" />
-            </Button>
-            <Button variant="ghost" className="w-full justify-start">
-              Quan lý nhóm <Users className="ml-2 h-4 w-4" />
-            </Button>
+          <div className="p-4 border-b items-center justify-center flex">
+            <h3 className="font-semibold">Conversation Infor</h3>
           </div>
-          <div className="mt-4">
-            <h4 className="font-medium">Thành viên nhóm</h4>
-            <p>4 thành viên</p>
-          </div>
+          {selectedChat && (
+            <div className="p-4 space-y-4 overflow-y-auto scroll-container custom-scrollbar max-h-full">
+              <div className="flex flex-col items-center gap-2 mb-4">
+                <Avatar
+                  onClick={handleShowProfile}
+                  className="cursor-pointer w-20 h-20 border"
+                >
+                  <AvatarImage src={selectedChat.avatar} />
+                  <AvatarFallback>
+                    {selectedChat.name.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  {isEditingNickname ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={nickname}
+                        onChange={(e) => setNickname(e.target.value)}
+                        className="w-full"
+                        placeholder="Nhập biệt danh"
+                      />
+                      <Button onClick={handleSaveNickname} size="sm">
+                        Lưu
+                      </Button>
+                      <Button
+                        onClick={() => setIsEditingNickname(false)}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        Hủy
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-medium text-lg">
+                        {selectedChat.name}
+                      </h4>
+                      <Button
+                        onClick={handleEditNickname}
+                        size="icon"
+                        variant="ghost"
+                      >
+                        <Pen className="h-5 w-5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {/* Nút chức năng: Mute, Pin, Create group */}
+                <div className="flex gap-8 mb-4">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-gray-500 flex flex-col"
+                  >
+                    <Bell className="h-4 w-4" />
+                    <p>Mute</p>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-gray-500 flex flex-col"
+                  >
+                    <Pin className="h-4 w-4" />
+                    <p>Pin</p>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-gray-500 flex flex-col"
+                  >
+                    <Users className="h-4 w-4" />
+                    <p>
+                      Create <br></br> group
+                    </p>
+                  </Button>
+                </div>
+              </div>
+
+              {/* Reminder board */}
+              <div className="border-t border-gray-200 pt-2 mb-4">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-gray-500"
+                >
+                  <span className="mr-2">⏰</span> Reminder board
+                </Button>
+              </div>
+
+              {/* Mutual groups */}
+              <div className="border-t border-gray-200 pt-2 mb-4">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-gray-500"
+                >
+                  <span className="mr-2">👥</span> 4 mutual groups
+                </Button>
+              </div>
+
+              {/* Photos/Videos - Hiển thị 8 ảnh/video mới nhất, bố cục 4 cột */}
+              <div className="space-y-2">
+                <h5 className="font-medium">Photos/Videos</h5>
+                <div className="grid grid-cols-4 gap-2">
+                  {Array.from({ length: 8 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="w-full aspect-square bg-gray-200 rounded-lg overflow-hidden"
+                    >
+                      <img
+                        src={`https://via.placeholder.com/80?index=${index}`}
+                        alt={`Photo/Video ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-gray-500 mt-2"
+                >
+                  View all
+                </Button>
+              </div>
+
+              {/* Files - Hiển thị 3 file mới nhất */}
+              <div className="space-y-2">
+                <h5 className="font-medium">File</h5>
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-2 p-2 bg-gray-100 rounded-lg"
+                  >
+                    <span className="text-blue-500">W</span>{" "}
+                    {/* Icon file Word */}
+                    <div>
+                      <p className="text-sm font-medium">
+                        File {index + 1}.docx
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {(index + 1) * 10} KB •{" "}
+                        {new Date().toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-gray-500 mt-2"
+                >
+                  View all
+                </Button>
+              </div>
+
+              {/* Links - Hiển thị 3 link mới nhất */}
+              <div className="space-y-2">
+                <h5 className="font-medium">Link</h5>
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-2 p-2 bg-gray-100 rounded-lg"
+                  >
+                    <span className="text-blue-500">🔗</span> {/* Icon link */}
+                    <div>
+                      <p className="text-sm font-medium">
+                        Link {index + 1} • www.example.com
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {new Date().toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-gray-500 mt-2"
+                >
+                  View all
+                </Button>
+              </div>
+
+              {/* Privacy settings */}
+              <div className="space-y-2">
+                <h5 className="font-medium">Privacy settings</h5>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-2 bg-gray-100 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">⏳</span>
+                      <p className="text-sm">Disappearing messages</p>
+                    </div>
+                    <select className="border rounded p-1 text-sm">
+                      <option>Never</option>
+                      <option>1 hour</option>
+                      <option>1 day</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-between p-2 bg-gray-100 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">👁️</span>
+                      <p className="text-sm">Hide conversation</p>
+                    </div>
+                    <input type="checkbox" className="toggle" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Report và Delete chat history */}
+              <div className="space-y-2">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-gray-500"
+                >
+                  <span className="mr-2">⚠️</span> Report
+                </Button>
+                <Button variant="destructive" className="w-full justify-start">
+                  <span className="mr-2">🗑️</span> Delete chat history
+                </Button>
+              </div>
+            </div>
+          )}
+          {/* Modal hiển thị hồ sơ (nếu cần) */}
+          {showProfile && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+              <div className="bg-white p-6 rounded-lg w-[400px]">
+                <h3 className="font-semibold text-lg mb-4">
+                  Hồ sơ của {selectedChat?.name}
+                </h3>
+                <p>Thông tin chi tiết về {selectedChat?.name}...</p>
+                <Button onClick={() => setShowProfile(false)} className="mt-4">
+                  Đóng
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>
@@ -239,14 +549,19 @@ export default function ChatPage() {
     message,
     time,
     avatar,
+    onClick,
   }: {
     name: string;
     message: string;
     time: string;
     avatar: string;
+    onClick: () => void;
   }) {
     return (
-      <div className="flex items-center gap-2 p-2 hover:bg-blue-700 rounded-lg cursor-pointer">
+      <div
+        className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg cursor-pointer"
+        onClick={onClick}
+      >
         <Avatar>
           <AvatarImage src={avatar} />
           <AvatarFallback>{name.slice(0, 2).toUpperCase()}</AvatarFallback>
@@ -254,12 +569,154 @@ export default function ChatPage() {
         <div className="flex-1">
           <div className="flex justify-between">
             <p className="font-medium">{name}</p>
-            <span className="text-xs">{time}</span>
+            <span className="text-xs text-gray-500">{time}</span>
           </div>
-          <p className="text-sm truncate">{message}</p>
+          <p className="text-sm text-gray-500 truncate">{message}</p>
         </div>
       </div>
     );
   }
-  //);
+  // Component con - Contact Item
+  function ContactItem({
+    name,
+    phone,
+    avatar,
+    onClick,
+  }: {
+    name: string;
+    phone: string;
+    avatar: string;
+    onClick: () => void;
+  }) {
+    return (
+      <div
+        className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg cursor-pointer"
+        onClick={onClick}
+      >
+        <Avatar>
+          <AvatarImage src={avatar} />
+          <AvatarFallback>{name.slice(0, 2).toUpperCase()}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1">
+          <p className="font-medium">{name}</p>
+          <p className="text-sm text-gray-500">{phone}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Component con - Post Item
+  function PostItem({
+    user,
+    content,
+    time,
+    avatar,
+    onClick,
+  }: {
+    user: string;
+    content: string;
+    time: string;
+    avatar: string;
+    onClick: () => void;
+  }) {
+    return (
+      <div
+        className="p-2 hover:bg-gray-100 rounded-lg cursor-pointer"
+        onClick={onClick}
+      >
+        <div className="flex items-center gap-2">
+          <Avatar>
+            <AvatarImage src={avatar} />
+            <AvatarFallback>{user.slice(0, 2).toUpperCase()}</AvatarFallback>
+          </Avatar>
+          <div>
+            <p className="font-medium">{user}</p>
+            <p className="text-sm text-gray-500">{content}</p>
+            <span className="text-xs text-gray-400">{time}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Component con - Chat Content
+  function ChatContent({
+    chat,
+  }: {
+    chat: {
+      id: number;
+      name: string;
+      message?: string;
+      time?: string;
+      avatar: string;
+      phone?: string;
+      content?: string;
+    };
+  }) {
+    return (
+      <div className="flex flex-col h-full justify-end overflow-y-auto gap-4">
+        <div className="flex flex-col h-full justify-end overflow-y-scroll scroll-container custom-scrollbar gap-4 p-4">
+          <div className="bg-blue-100 p-2 rounded-lg max-w-xs self-end">
+            <p>{chat.message}</p>
+          </div>
+          <div className="bg-gray-200 p-2 rounded-lg max-w-xs">
+            <p>{chat.name}: Tin nhắn trả lời...</p>
+          </div>
+        </div>
+
+        <div className="border p-4 bg-white flex items-center gap-2">
+          <Button variant="ghost" size="icon">
+            <img src="/attachment-icon.png" alt="Attach" className="h-5 w-5" />
+          </Button>
+          <input
+            type="text"
+            placeholder="Nhập tin nhắn..."
+            className="flex-1 p-2 border rounded-lg focus:outline-none"
+          />
+          <Button variant="ghost" size="icon">
+            <img src="/emoji-icon.png" alt="Emoji" className="h-5 w-5" />
+          </Button>
+          <Button variant="ghost" size="icon">
+            <img src="/send-icon.png" alt="Send" className="h-5 w-5" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Component con - Contact Content
+  function ContactContent({
+    contact,
+  }: {
+    contact: { id: number; name: string; phone: string; avatar: string };
+  }) {
+    return (
+      <div className="p-4">
+        <h3 className="font-semibold">{contact.name}</h3>
+        <p>Số điện thoại: {contact.phone}</p>
+        <p>Thông tin chi tiết khác...</p>
+      </div>
+    );
+  }
+
+  // Component con - Post Content
+  function PostContent({
+    post,
+  }: {
+    post: {
+      id: number;
+      user: string;
+      content: string;
+      time: string;
+      avatar: string;
+    };
+  }) {
+    return (
+      <div className="p-4">
+        <h3 className="font-semibold">{post.user}</h3>
+        <p>{post.content}</p>
+        <span className="text-sm text-gray-500">{post.time}</span>
+      </div>
+    );
+  }
 }
