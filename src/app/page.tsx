@@ -1,17 +1,9 @@
 "use client";
-
 import { useRouter } from "next/navigation";
 import useAuthStore from "@/stores/authStore";
-// import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-// import { AppSidebar } from "@/components/app-sidebar";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-//import {
-// Popover,
-//PopoverContent,
-//PopoverTrigger,
-//} from "@/components/ui/popover";
 import {
   Bell,
   Compass,
@@ -19,10 +11,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   Pen,
-  //  PanelLeft,
   Pin,
-  // Plug,
-  // Plus,
   Users,
 } from "lucide-react";
 import Loading from "@/components/Loading";
@@ -33,18 +22,19 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuPortal,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-export default function ChatPage() {
-  const { accessToken, logout, isLoading, user } = useAuthStore();
+import PostContent from "@/components/PostContent";
+import ContactContent from "@/components/ContactContent";
+import ChatContent from "@/components/ChatContent";
+import PostItem from "@/components/PostItem";
+import ContactItem from "@/components/ContactItem";
+import ChatItem from "@/components/ChatItem";
+export default function CoreUI() {
+  const { accessToken, logout, isLoading } = useAuthStore();
   const router = useRouter();
-  //const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState("chat"); // Tab hiện tại: "chat", "contacts", "explore"
   const [selectedChat, setSelectedChat] = useState<{
     id: number;
@@ -292,7 +282,14 @@ export default function ChatPage() {
               />
             )}
             {selectedChat && activeTab === "explore" && (
-              <PostContent post={selectedChat} />
+              <PostContent
+                post={{
+                  ...selectedChat,
+                  user: selectedChat.name,
+                  content: selectedChat.content || "",
+                  time: selectedChat.time || "",
+                }}
+              />
             )}
           </div>
         </div>
@@ -542,181 +539,4 @@ export default function ChatPage() {
       </div>
     </>
   );
-
-  // Chat Item Component
-  function ChatItem({
-    name,
-    message,
-    time,
-    avatar,
-    onClick,
-  }: {
-    name: string;
-    message: string;
-    time: string;
-    avatar: string;
-    onClick: () => void;
-  }) {
-    return (
-      <div
-        className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg cursor-pointer"
-        onClick={onClick}
-      >
-        <Avatar>
-          <AvatarImage src={avatar} />
-          <AvatarFallback>{name.slice(0, 2).toUpperCase()}</AvatarFallback>
-        </Avatar>
-        <div className="flex-1">
-          <div className="flex justify-between">
-            <p className="font-medium">{name}</p>
-            <span className="text-xs text-gray-500">{time}</span>
-          </div>
-          <p className="text-sm text-gray-500 truncate">{message}</p>
-        </div>
-      </div>
-    );
-  }
-  // Component con - Contact Item
-  function ContactItem({
-    name,
-    phone,
-    avatar,
-    onClick,
-  }: {
-    name: string;
-    phone: string;
-    avatar: string;
-    onClick: () => void;
-  }) {
-    return (
-      <div
-        className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg cursor-pointer"
-        onClick={onClick}
-      >
-        <Avatar>
-          <AvatarImage src={avatar} />
-          <AvatarFallback>{name.slice(0, 2).toUpperCase()}</AvatarFallback>
-        </Avatar>
-        <div className="flex-1">
-          <p className="font-medium">{name}</p>
-          <p className="text-sm text-gray-500">{phone}</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Component con - Post Item
-  function PostItem({
-    user,
-    content,
-    time,
-    avatar,
-    onClick,
-  }: {
-    user: string;
-    content: string;
-    time: string;
-    avatar: string;
-    onClick: () => void;
-  }) {
-    return (
-      <div
-        className="p-2 hover:bg-gray-100 rounded-lg cursor-pointer"
-        onClick={onClick}
-      >
-        <div className="flex items-center gap-2">
-          <Avatar>
-            <AvatarImage src={avatar} />
-            <AvatarFallback>{user.slice(0, 2).toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <div>
-            <p className="font-medium">{user}</p>
-            <p className="text-sm text-gray-500">{content}</p>
-            <span className="text-xs text-gray-400">{time}</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Component con - Chat Content
-  function ChatContent({
-    chat,
-  }: {
-    chat: {
-      id: number;
-      name: string;
-      message?: string;
-      time?: string;
-      avatar: string;
-      phone?: string;
-      content?: string;
-    };
-  }) {
-    return (
-      <div className="flex flex-col h-full justify-end overflow-y-auto gap-4">
-        <div className="flex flex-col h-full justify-end overflow-y-scroll scroll-container custom-scrollbar gap-4 p-4">
-          <div className="bg-blue-100 p-2 rounded-lg max-w-xs self-end">
-            <p>{chat.message}</p>
-          </div>
-          <div className="bg-gray-200 p-2 rounded-lg max-w-xs">
-            <p>{chat.name}: Tin nhắn trả lời...</p>
-          </div>
-        </div>
-
-        <div className="border p-4 bg-white flex items-center gap-2">
-          <Button variant="ghost" size="icon">
-            <img src="/attachment-icon.png" alt="Attach" className="h-5 w-5" />
-          </Button>
-          <input
-            type="text"
-            placeholder="Nhập tin nhắn..."
-            className="flex-1 p-2 border rounded-lg focus:outline-none"
-          />
-          <Button variant="ghost" size="icon">
-            <img src="/emoji-icon.png" alt="Emoji" className="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon">
-            <img src="/send-icon.png" alt="Send" className="h-5 w-5" />
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Component con - Contact Content
-  function ContactContent({
-    contact,
-  }: {
-    contact: { id: number; name: string; phone: string; avatar: string };
-  }) {
-    return (
-      <div className="p-4">
-        <h3 className="font-semibold">{contact.name}</h3>
-        <p>Số điện thoại: {contact.phone}</p>
-        <p>Thông tin chi tiết khác...</p>
-      </div>
-    );
-  }
-
-  // Component con - Post Content
-  function PostContent({
-    post,
-  }: {
-    post: {
-      id: number;
-      user: string;
-      content: string;
-      time: string;
-      avatar: string;
-    };
-  }) {
-    return (
-      <div className="p-4">
-        <h3 className="font-semibold">{post.user}</h3>
-        <p>{post.content}</p>
-        <span className="text-sm text-gray-500">{post.time}</span>
-      </div>
-    );
-  }
 }
