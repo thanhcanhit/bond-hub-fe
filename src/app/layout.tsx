@@ -1,4 +1,3 @@
-import { Provider } from "@/components/ui/provider";
 import "@/styles/globals.css";
 
 export default function RootLayout({
@@ -15,10 +14,7 @@ export default function RootLayout({
         <link rel="icon" href="/bondhub.png" />
       </head>
       <body>
-        <Provider>
-          <main className="min-h-screen">{children}</main>
-        </Provider>
-        {/* <main className="min-h-screen">{children}</main> */}
+        <main className="min-h-screen">{children}</main>
       </body>
     </html>
   );

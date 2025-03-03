@@ -4,7 +4,14 @@ import useAuthStore from "@/stores/authStore";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Compass, Contact, MessageSquare } from "lucide-react";
+import {
+  Compass,
+  Contact,
+  MessageSquare,
+  Search,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import Loading from "@/components/Loading";
 import {
   DropdownMenu,
@@ -22,6 +29,7 @@ import ChatContent from "@/components/ChatContent";
 import PostItem from "@/components/PostItem";
 import ContactItem from "@/components/ContactItem";
 import ChatItem from "@/components/ChatItem";
+import { Input } from "@/components/ui/input";
 export default function CoreUI() {
   const { accessToken, logout, isLoading } = useAuthStore();
   const router = useRouter();
@@ -192,14 +200,15 @@ export default function CoreUI() {
 
         {/* Left Sidebar - Chat List */}
         <div
-          className={`w-[408px] bg-white border-r flex flex-col ${isTabContentVisible ? "flex" : "hidden"}`}
+          className={`w-[340px] bg-white border-r flex flex-col ${isTabContentVisible ? "flex" : "hidden"}`}
         >
-          <div className="p-4 border-b">
-            <h2 className="text-lg font-bold">
-              {activeTab === "chat" && "Danh sách chat"}
-              {activeTab === "contacts" && "Danh bạ"}
-              {activeTab === "explore" && "Khám phá"}
-            </h2>
+          <div className="p-4 border-b flex items-center justify-between">
+            <div className="flex items-center space-x-2 border bg-gray-200 rounded-md pl-2 h-8">
+              <Search className="h-4 w-4" />
+              <Input placeholder="Tìm kiếm" />
+            </div>
+            <UserPlus className="h-4 w-4" />
+            <Users className="h-4 w-4" />
           </div>
           <div className="flex-1 overflow-y-scroll scroll-container custom-scrollbar">
             {activeTab === "chat" &&
