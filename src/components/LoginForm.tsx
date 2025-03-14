@@ -1,12 +1,31 @@
 import React, { useState } from "react";
-import useAuthStore from "@/stores/authStore";
 import { useRouter } from "next/navigation";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
+import { login } from "@/actions/auth.action";
 import { Smartphone, Lock } from "lucide-react";
+import { DeviceType } from "@/types/base";
+import { useAuthStore } from "@/stores/authStore";
+
+// Hàm để xác định deviceType dựa trên userAgent
+const getDeviceType = (): DeviceType => {
+  if (typeof window === "undefined") return DeviceType.OTHER; // Trường hợp không xác định được
+
+  const userAgent = navigator.userAgent.toLowerCase();
+
+  // Logic đơn giản để xác định thiết bị
+  if (/mobile|iphone|android/.test(userAgent)) {
+    return DeviceType.MOBILE;
+  } else if (/tablet|ipad/.test(userAgent)) {
+    return DeviceType.TABLET;
+  } else if (/mac|win|linux/.test(userAgent)) {
+    return DeviceType.DESKTOP;
+  } else {
+    return DeviceType.OTHER;
+  }
+};
 
 export default function LoginForm() {
-  const { login } = useAuthStore();
   const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [showSetPasswordForm, setShowSetPasswordForm] = useState(false);
@@ -14,8 +33,21 @@ export default function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await login({ phoneNumber, password });
-    router.push("/");
+    try {
+      const deviceType = getDeviceType();
+      const result = await login(phoneNumber, password, deviceType);
+      if (result.success) {
+        // localStorage.setItem("accessToken", result.accessToken);
+        // Cập nhật store với user và tokens
+        useAuthStore.getState().setAuth(result.user, result.accessToken);
+        router.push("/dashboard");
+      } else {
+        console.error("Login failed:", result.error);
+        // Có thể thêm thông báo lỗi cho người dùng ở đây
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+    }
   };
 
   const handleSelect = (currentValue: string) => {

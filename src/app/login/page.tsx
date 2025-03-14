@@ -13,25 +13,25 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import RegisterForm from "@/components/RegisterFrom";
-import useAuthStore from "@/stores/authStore";
+import RegisterForm from "../signup/RegisterFrom";
+import { useAuthStore } from "@/stores/authStore";
 import { useRouter } from "next/navigation";
 import Loading from "@/components/Loading";
 
 export default function LoginPage() {
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [showRegisterForm, setShowRegisterForm] = useState(false);
-  const { accessToken, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading } = useAuthStore();
   const [open, setOpen] = React.useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    if (accessToken) {
+    if (isAuthenticated) {
       setTimeout(() => {
-        router.push("/");
+        router.push("/dashboard");
       }, 1000);
     }
-  }, [accessToken, router]);
+  }, [isAuthenticated, router]);
 
   const handleSelect = (currentValue: string) => {
     if (currentValue === "password-login") {
@@ -50,7 +50,7 @@ export default function LoginPage() {
   return (
     <>
       {isLoading && <Loading />}
-      <div className="flex justify-center items-start pt-10 h-screen bg-[#e8f3ff]">
+      <div className="flex justify-center items-start p-10 bg-[#e8f3ff]">
         <div className="flex flex-col items-center justify-center gap-5">
           <div className="flex flex-col items-center justify-center">
             <Image

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { QRCodeCanvas } from "qrcode.react";
-import api from "@/lib/api";
-import useAuthStore from "../stores/authStore";
+import api from "@/lib/axios";
+import { useAuthStore } from "../stores/authStore";
 import { useRouter } from "next/navigation";
 
 export default function QrLogin() {
@@ -35,10 +35,21 @@ export default function QrLogin() {
       }
       try {
         const res = await api.get(`/qrcode/status/${qrToken}`);
-        const data = res.data as { accessToken?: string };
-        if (data.accessToken) {
-          setAuth(data.accessToken, { id: 0, phoneNumber: "qr-user" });
-          setIsLoggedIn(true);
+        const data = res.data as { status: string };
+        if (data.status === "CONFIRMED") {
+          // Khi trạng thái là CONFIRMED, lấy accessToken từ API khác
+          const authRes = await api.get(`/qrcode/auth/${qrToken}`);
+          const authData = authRes.data as { accessToken: string };
+
+          if (authData.accessToken) {
+            //setAuth({ id: "0", phoneNumber: "qr-user" }, authData.accessToken);
+            setIsLoggedIn(true);
+            clearInterval(interval);
+          }
+        }
+
+        if (data.status === "EXPIRED" || data.status === "CANCELLED") {
+          setIsQrExpired(true);
           clearInterval(interval);
         }
       } catch (error) {
