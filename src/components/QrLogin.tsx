@@ -37,7 +37,6 @@ export default function QrLogin() {
         const res = await api.get(`/qrcode/status/${qrToken}`);
         const data = res.data as { status: string };
         if (data.status === "CONFIRMED") {
-          // Khi trạng thái là CONFIRMED, lấy accessToken từ API khác
           const authRes = await api.get(`/qrcode/auth/${qrToken}`);
           const authData = authRes.data as { accessToken: string };
 
@@ -62,7 +61,7 @@ export default function QrLogin() {
 
   useEffect(() => {
     if (isLoggedIn) {
-      router.push("/"); // Điều hướng tới trang chủ sau khi đăng nhập thành công
+      router.push("/dashboard");
     }
   }, [isLoggedIn, router]);
 

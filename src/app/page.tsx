@@ -1,6 +1,17 @@
+"use client";
+
+import { useAuthStore } from "@/stores/authStore";
 import Link from "next/link";
+import { useEffect } from "react";
 
 export default function Home() {
+  const [isAuthenticated] = useAuthStore((state) => [state.isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      window.location.href = "/dashboard";
+    }
+  }, [isAuthenticated]);
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
       <h1 className="text-4xl font-bold mb-4">Chào mừng đến với Bondhub</h1>

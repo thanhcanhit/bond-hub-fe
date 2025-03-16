@@ -5,10 +5,13 @@ const NEXT_PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 const axiosInstance = axios.create({
   baseURL: NEXT_PUBLIC_BACKEND_URL, // Thay bằng URL backend thực tế
-  withCredentials: true, // Gửi cookie khi request
+  //withCredentials: true, // Gửi cookie khi request
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
-// Interceptor để xử lý refresh token khi access token hết hạn
+//Interceptor để xử lý refresh token khi access token hết hạn
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const accessToken = useAuthStore.getState().accessToken;

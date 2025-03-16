@@ -28,7 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 // import { Contact } from "@/types/auth";
 export default function CoreUI() {
-  const { isAuthenticated, logout, isLoading } = useAuthStore();
+  const { logout, isLoading } = useAuthStore();
   const user = useAuthStore((state) => state.user);
   const router = useRouter();
 
@@ -45,32 +45,10 @@ export default function CoreUI() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push("/login");
-    }
-  }, [isAuthenticated, router]);
-
   const handleLogout = () => {
     logout();
     setTimeout(() => router.push("/login"), 2000); // Chờ 2s rồi chuyển hướng
   };
-  // const handleFilterSelect = (filter: string) => {
-  //   // setActiveFilter(filter);
-  //   setSelectedChat(null); // Reset chat/contact khi đổi filter
-  // };
-  // Xử lý khi chọn contact để chuyển sang ChatContent
-  // const handleContactSelect = (contact: Contact) => {
-  //   setSelectedChat({
-  //     id: Number(contact.id),
-  //     name: contact.user.userInfo.fullName,
-  //     message: "Tin nhắn đầu tiên...",
-  //     time: new Date().toLocaleTimeString(),
-  //     avatar: contact.user.userInfo.profilePictureUrl,
-  //     phone: contact.user.phoneNumber || "",
-  //     content: "",
-  //   });
-  // };
 
   return (
     <>

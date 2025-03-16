@@ -37,13 +37,10 @@ export default function LoginForm() {
       const deviceType = getDeviceType();
       const result = await login(phoneNumber, password, deviceType);
       if (result.success) {
-        // localStorage.setItem("accessToken", result.accessToken);
-        // Cập nhật store với user và tokens
         useAuthStore.getState().setAuth(result.user, result.accessToken);
         router.push("/dashboard");
       } else {
         console.error("Login failed:", result.error);
-        // Có thể thêm thông báo lỗi cho người dùng ở đây
       }
     } catch (error) {
       console.error("Login error:", error);
@@ -67,7 +64,8 @@ export default function LoginForm() {
             <Smartphone className="w-5 h-5" />
             <Input
               className="w-[350px] h-[50px]"
-              type="phoneNumber"
+              type="text"
+              name="phoneNumber"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
               placeholder="Số điện thoại"
@@ -104,6 +102,7 @@ export default function LoginForm() {
             <Input
               className="w-[350px] h-[50px]"
               type="password"
+              name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Mật khẩu"

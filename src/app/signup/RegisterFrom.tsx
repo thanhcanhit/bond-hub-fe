@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-// import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -34,8 +33,11 @@ import {
 import {
   completeRegistration,
   initiateRegistration,
+  login,
   verifyOtp,
 } from "@/actions/auth.action";
+import { DeviceType } from "@/types/base";
+import { useAuthStore } from "@/stores/authStore";
 
 // Hàm kiểm tra định dạng email hoặc số điện thoại
 const isEmail = (input: string): boolean => {
@@ -59,7 +61,6 @@ export default function RegisterForm() {
   const [registrationId, setRegistrationId] = useState(""); // Lưu registrationId từ bước 1
   const [error, setError] = useState<string | null>(null); // Xử lý lỗi
   const [loading, setLoading] = useState(false);
-  // const router = useRouter();
 
   // Bước 1: Gửi yêu cầu OTP
   const handleRequestOTP = async () => {
@@ -118,68 +119,35 @@ export default function RegisterForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    if (!date) {
+      setError("Vui lòng chọn ngày sinh.");
+      setLoading(false);
+      return;
+    }
 
     const result = await completeRegistration(
       registrationId,
       password,
       fullName,
+      date.toISOString(),
+      gender,
     );
     setLoading(false);
 
     if (result.success) {
-      alert("Đăng ký thành công!");
-      // Có thể redirect hoặc làm gì đó sau khi đăng ký thành công
-      // Ví dụ: router.push("/login");
-    } else {
-      setError(result.error || "Đăng ký thất bại. Vui lòng thử lại.");
+      const loginResult = await login(inputValue, password, DeviceType.DESKTOP);
+      if (loginResult.success) {
+        useAuthStore
+          .getState()
+          .setAuth(loginResult.user, loginResult.accessToken);
+      } else {
+        setError(result.error || "Đăng ký thất bại. Vui lòng thử lại.");
+      }
     }
   };
+
   return (
     <div className="mb-4">
-      {/* <form onSubmit={handleSubmit}>
-        <div className="flex flex-col gap-2 justify-center items-center">
-          <div className="flex items-center gap-2 border-b border-gray-200 mb-3">
-          <CircleUserRound className="w-5 h-5" />
-          <Input
-            className="w-[350px] h-[50px]"
-            type="fullName"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="Họ tên"
-            required
-          />
-        </div>
-          <div className="flex items-center gap-2 border-b border-gray-200 mb-3">
-            <UsersRound className="w-5 h-5" />
-            <Input
-              className="w-[350px] h-[50px]"
-              type="receiveOTP"
-              value={receiveOTP}
-              onChange={(e) => setReceiveOTP(e.target.value)}
-              placeholder="Số điện thoại hoặc Email"
-              required
-            />
-          </div>
-          <div className="flex items-center gap-2 border-b border-gray-200 mb-7">
-          <Lock className="w-5 h-5" />
-          <Input
-            className="w-[350px] h-[50px]"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Mật khẩu"
-            required
-          />
-        </div>
-
-          <Button
-            className="w-[373px] h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
-            type="submit"
-          >
-            Đăng ký tài khoản
-          </Button>
-        </div>
-      </form> */}
       {step === 1 && (
         <div className="items-center">
           <div className="flex items-center gap-2 border-b border-gray-200 mb-6">
