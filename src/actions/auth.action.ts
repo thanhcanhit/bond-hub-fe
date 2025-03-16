@@ -2,9 +2,7 @@
 import axiosInstance from "@/lib/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { DeviceType } from "@/types/base";
-//const { cookies } = await import("next/headers");
 
-// Đăng ký - Bước 1: Khởi tạo đăng ký
 export async function initiateRegistration(email: string) {
   try {
     const response = await axiosInstance.post("/auth/register/initiate", {
@@ -22,7 +20,6 @@ export async function initiateRegistration(email: string) {
   }
 }
 
-// Đăng ký - Bước 2: Xác thực OTP
 export async function verifyOtp(registrationId: string, otp: string) {
   try {
     const response = await axiosInstance.post("/auth/register/verify", {
@@ -39,7 +36,6 @@ export async function verifyOtp(registrationId: string, otp: string) {
   }
 }
 
-// Đăng ký - Bước 3: Hoàn tất đăng ký
 export async function completeRegistration(
   registrationId: string,
   password: string,
@@ -67,7 +63,6 @@ export async function completeRegistration(
   }
 }
 
-// Đăng nhập
 export async function login(
   identifier: string,
   password: string,
@@ -81,21 +76,10 @@ export async function login(
     });
     const { user, accessToken, refreshToken } = response.data;
 
-    // Cập nhật store (chỉ hoạt động phía client)
     if (typeof window !== "undefined") {
       useAuthStore.getState().setAuth(user, accessToken);
       useAuthStore.getState().setTokens(accessToken, refreshToken);
     }
-    // Lưu accessToken vào cookie
-    // const cookieOptions = {
-    //   httpOnly: true, // Chỉ server có thể truy cập cookie
-    //   secure: process.env.NODE_ENV === "production", // HTTPS trong production
-    //   maxAge: 60 * 60 * 24 * 7, // Hết hạn sau 7 ngày
-    //   path: "/",
-    // };
-    // // // Dùng Next.js cookies API để lưu cookie
-
-    // (await cookies()).set("access_token", accessToken, cookieOptions);
 
     return { success: true, user, accessToken, refreshToken };
   } catch (error) {
@@ -106,12 +90,12 @@ export async function login(
     };
   }
 }
-// Hàm kiểm tra email
+
 function isEmail(input: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(input);
 }
-// Đăng xuất
+
 export async function logout() {
   try {
     const refreshToken = useAuthStore.getState().refreshToken;
@@ -125,14 +109,9 @@ export async function logout() {
       );
     }
 
-    // Xóa accessToken từ localStorage và reset store
     if (typeof window !== "undefined") {
       useAuthStore.getState().logout();
-      // document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;";
     }
-
-    // // Xóa cookie
-    // (await cookies()).delete("access_token");
 
     return { success: true };
   } catch (error) {
@@ -189,7 +168,6 @@ export async function refreshToken() {
   }
 }
 
-// Quên mật khẩu - Bước 1: Khởi tạo
 export async function initiateForgotPassword(phoneNumber: string) {
   try {
     const response = await axiosInstance.post("/auth/forgot-password", {
@@ -207,7 +185,6 @@ export async function initiateForgotPassword(phoneNumber: string) {
   }
 }
 
-// Quên mật khẩu - Bước 2: Xác thực OTP
 export async function verifyForgotPasswordOtp(resetId: string, otp: string) {
   try {
     const response = await axiosInstance.post("/auth/forgot-password/verify", {
@@ -224,7 +201,6 @@ export async function verifyForgotPasswordOtp(resetId: string, otp: string) {
   }
 }
 
-// Quên mật khẩu - Bước 3: Đặt lại mật khẩu
 export async function resetPassword(resetId: string, newPassword: string) {
   try {
     const response = await axiosInstance.post("/auth/forgot-password/reset", {
