@@ -1,28 +1,36 @@
 import { create } from "zustand";
-import { DeviceType, User } from "@/types/base";
-import { persist, PersistStorage } from "zustand/middleware";
+import { DeviceType, User, UserInfo } from "@/types/base";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { login as loginAction } from "@/actions/auth.action";
 import { getUserDataById } from "@/actions/user.action";
 
-// Define the storage type (localStorage in this case)
-const storage: PersistStorage<Partial<AuthState>> = {
-  getItem: (name) => {
-    const value = localStorage.getItem(name);
-    return value ? JSON.parse(value) : null;
+// Custom storage that handles SSR
+const storage = {
+  getItem: (name: string): string | null => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(name);
   },
-  setItem: (name, value) => {
-    localStorage.setItem(name, JSON.stringify(value));
+  setItem: (name: string, value: string): void => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(name, value);
   },
-  removeItem: (name) => {
+  removeItem: (name: string): void => {
+    if (typeof window === "undefined") return;
     localStorage.removeItem(name);
   },
 };
 
+interface UserWithInfo extends User {
+  userInfo: UserInfo;
+}
+
 interface AuthState {
-  user: User | null;
+  user: UserWithInfo | null;
   accessToken: string | null;
   refreshToken: string | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
+  _hasHydrated: boolean;
   setAuth: (user: User, accessToken: string) => void;
   login: (
     phoneNumber: string,
@@ -32,9 +40,10 @@ interface AuthState {
   updateUser: (user: Partial<User>) => void;
   logout: () => void;
   setTokens: (accessToken: string, refreshToken: string) => void;
-  isLoading: boolean;
   setLoading: (loading: boolean) => void;
+  setHasHydrated: (state: boolean) => void;
 }
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -43,10 +52,12 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
+      _hasHydrated: false,
+      setHasHydrated: (state) => set({ _hasHydrated: state }),
       setAuth: (user: User, accessToken: string) =>
         set({
           accessToken,
-          user,
+          user: user as UserWithInfo,
           isAuthenticated: !!accessToken,
           isLoading: false,
         }),
@@ -55,27 +66,56 @@ export const useAuthStore = create<AuthState>()(
         password: string,
         deviceType: DeviceType,
       ) => {
-        const result = await loginAction(phoneNumber, password, deviceType);
-        if (result.success) {
-          const userData = await getUserDataById(result.user.id);
-          if (userData.success) {
-            const data = userData.user;
+        try {
+          set({ isLoading: true });
+          const result = await loginAction(phoneNumber, password, deviceType);
+
+          if (result.success) {
+            // First set the tokens and basic user data
             set({
-              user: data,
               accessToken: result.accessToken,
               refreshToken: result.refreshToken,
               isAuthenticated: true,
               isLoading: false,
             });
+
+            // Then try to get additional user data
+            try {
+              const userData = await getUserDataById(result.user.id);
+              if (userData.success && userData.user) {
+                set({
+                  user: userData.user as UserWithInfo,
+                  isLoading: false,
+                });
+              }
+            } catch (userDataError) {
+              console.warn(
+                "Failed to fetch additional user data:",
+                userDataError,
+              );
+              // Set basic user data if additional data fetch fails
+              set({
+                user: result.user as UserWithInfo,
+                isLoading: false,
+              });
+            }
+
+            return true;
           }
-          return true;
+          return false;
+        } catch (error) {
+          console.error("Login error:", error);
+          return false;
+        } finally {
+          set({ isLoading: false });
         }
-        return false;
       },
       setLoading: (loading: boolean) => set({ isLoading: loading }),
       updateUser: (updatedUser) =>
         set((state) => ({
-          user: state.user ? { ...state.user, ...updatedUser } : null,
+          user: state.user
+            ? { ...state.user, ...updatedUser, userInfo: state.user.userInfo }
+            : null,
         })),
       logout: () => {
         set({
@@ -85,7 +125,6 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           isLoading: false,
         });
-        storage.removeItem("auth-storage");
       },
       setTokens: (accessToken, refreshToken) =>
         set({
@@ -96,13 +135,19 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "auth-storage",
-      storage,
+      storage: createJSONStorage(() => storage),
       partialize: (state) => ({
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
         user: state.user,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.setHasHydrated(true);
+        }
+      },
+      skipHydration: true,
     },
   ),
 );

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -31,23 +31,25 @@ export default function LoginForm() {
   const { login } = useAuthStore();
   const router = useRouter();
 
+  // Handle hydration
+  useEffect(() => {
+    useAuthStore.persist.rehydrate();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // try {
-    //   const deviceType = getDeviceType();
-    //   const result = await login(phoneNumber, password, deviceType);
-    //   if (result.success) {
-    //     useAuthStore.getState().setAuth(result.user, result.accessToken);
-    //     router.push("/dashboard");
-    //   } else {
-    //     console.error("Login failed:", result.error);
-    //   }
-    // } catch (error) {
-    //   console.error("Login error:", error);
-    // }
-    const isSuccess = await login(phoneNumber, password, getDeviceType());
-    if (isSuccess) {
-      router.push("/dashboard");
+    try {
+      const deviceType = getDeviceType();
+      const isSuccess = await login(phoneNumber, password, deviceType);
+      if (isSuccess) {
+        // Debug: Check localStorage
+        console.log("Auth Storage:", localStorage.getItem("auth-storage"));
+        console.log("Store State:", useAuthStore.getState());
+
+        router.push("/dashboard");
+      }
+    } catch (error) {
+      console.error("Login error:", error);
     }
   };
 
