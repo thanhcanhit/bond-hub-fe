@@ -13,7 +13,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Compass, LucideContactRound, MessageCircleMore } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { logout } from "@/actions/auth.action";
 
 export default function Sidebar() {
   const { logout: logoutFromStore } = useAuthStore();
@@ -22,12 +21,11 @@ export default function Sidebar() {
   // State for editable fields
 
   const handleLogout = async () => {
-    const result = await logout();
-    if (result.success) {
-      logoutFromStore();
+    const result = await logoutFromStore();
+    if (result) {
       router.push("/login");
     } else {
-      console.log("Logout failed:", result.error);
+      console.log("Logout failed:");
     }
   };
 

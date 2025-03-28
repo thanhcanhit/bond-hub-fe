@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import { DeviceType, User, UserInfo } from "@/types/base";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { login as loginAction } from "@/actions/auth.action";
+import {
+  login as loginAction,
+  logout as logoutAction,
+} from "@/actions/auth.action";
 import { getUserDataById } from "@/actions/user.action";
 
 // Custom storage that handles SSR
@@ -38,7 +41,7 @@ interface AuthState {
     deviceType: DeviceType,
   ) => Promise<boolean>;
   updateUser: (user: Partial<User>) => void;
-  logout: () => void;
+  logout: () => Promise<boolean>;
   setTokens: (accessToken: string, refreshToken: string) => void;
   setLoading: (loading: boolean) => void;
   setHasHydrated: (state: boolean) => void;
@@ -117,14 +120,18 @@ export const useAuthStore = create<AuthState>()(
             ? { ...state.user, ...updatedUser, userInfo: state.user.userInfo }
             : null,
         })),
-      logout: () => {
-        set({
-          user: null,
-          accessToken: null,
-          refreshToken: null,
-          isAuthenticated: false,
-          isLoading: false,
-        });
+      logout: async () => {
+        const result = await logoutAction();
+        if (result.success) {
+          set({
+            user: null,
+            accessToken: null,
+            refreshToken: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+        }
+        return result.success;
       },
       setTokens: (accessToken, refreshToken) =>
         set({
