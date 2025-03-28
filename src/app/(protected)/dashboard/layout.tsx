@@ -7,7 +7,7 @@ export default function ProtectedLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="protected-layout">
+    <div className="protected-layout h-full flex">
       <div className="flex h-screen bg-gray-100">
         {/* Sidebar trái - Tabs */}
         <Sidebar />

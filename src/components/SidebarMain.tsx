@@ -16,12 +16,15 @@ import { useRouter } from "next/navigation";
 import { logout } from "@/actions/auth.action";
 
 export default function Sidebar() {
-  const { user } = useAuthStore();
+  const { logout: logoutFromStore } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
+  console.log("User:", user);
   const router = useRouter();
 
   const handleLogout = async () => {
     const result = await logout();
     if (result.success) {
+      logoutFromStore();
       router.push("/login");
     } else {
       console.log("Logout failed:", result.error);
@@ -46,7 +49,7 @@ export default function Sidebar() {
             alignOffset={5}
           >
             <DropdownMenuLabel>
-              {user?.userInfo?.fullName ?? "Guest"}
+              {user?.userInfo?.fullName || "Guest"}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -64,13 +67,25 @@ export default function Sidebar() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <Button variant="ghost" className="text-white focus:bg-[#005ae0]">
+      <Button
+        variant="ghost"
+        className="text-white focus:bg-[#005ae0]"
+        onClick={() => router.push("/dashboard/chat")}
+      >
         <MessageCircleMore className="h-20 w-20" />
       </Button>
-      <Button variant="ghost" className="text-white focus:bg-[#005ae0]">
+      <Button
+        variant="ghost"
+        className="text-white focus:bg-[#005ae0]"
+        onClick={() => router.push("/dashboard/contact")}
+      >
         <LucideContactRound className="h-20 w-20" />
       </Button>
-      <Button variant="ghost" className="text-white focus:bg-[#005ae0]">
+      <Button
+        variant="ghost"
+        className="text-white focus:bg-[#005ae0]"
+        onClick={() => router.push("/dashboard/post")}
+      >
         <Compass className="h-20 w-20" />
       </Button>
       <div>

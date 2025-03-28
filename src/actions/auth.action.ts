@@ -76,11 +76,6 @@ export async function login(
     });
     const { user, accessToken, refreshToken } = response.data;
 
-    if (typeof window !== "undefined") {
-      useAuthStore.getState().setAuth(user, accessToken);
-      useAuthStore.getState().setTokens(accessToken, refreshToken);
-    }
-
     return { success: true, user, accessToken, refreshToken };
   } catch (error) {
     console.error("Login failed:", error);
@@ -108,11 +103,6 @@ export async function logout() {
         },
       );
     }
-
-    if (typeof window !== "undefined") {
-      useAuthStore.getState().logout();
-    }
-
     return { success: true };
   } catch (error) {
     console.error("Logout failed:", error);
@@ -140,12 +130,12 @@ export async function refreshToken() {
     );
     const { accessToken, refreshToken: newRefreshToken } = response.data;
 
-    // Cập nhật token trong store
     if (typeof window !== "undefined") {
       useAuthStore
         .getState()
         .setTokens(accessToken, newRefreshToken || refreshToken);
     }
+
     // Cập nhật cookie
     const { cookies } = await import("next/headers");
     (await cookies()).set("access_token", accessToken, {

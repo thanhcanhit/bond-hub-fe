@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { login } from "@/actions/auth.action";
 import { Smartphone, Lock } from "lucide-react";
 import { DeviceType } from "@/types/base";
 import { useAuthStore } from "@/stores/authStore";
@@ -29,21 +28,26 @@ export default function LoginForm() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [showSetPasswordForm, setShowSetPasswordForm] = useState(false);
+  const { login } = useAuthStore();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const deviceType = getDeviceType();
-      const result = await login(phoneNumber, password, deviceType);
-      if (result.success) {
-        useAuthStore.getState().setAuth(result.user, result.accessToken);
-        router.push("/dashboard");
-      } else {
-        console.error("Login failed:", result.error);
-      }
-    } catch (error) {
-      console.error("Login error:", error);
+    // try {
+    //   const deviceType = getDeviceType();
+    //   const result = await login(phoneNumber, password, deviceType);
+    //   if (result.success) {
+    //     useAuthStore.getState().setAuth(result.user, result.accessToken);
+    //     router.push("/dashboard");
+    //   } else {
+    //     console.error("Login failed:", result.error);
+    //   }
+    // } catch (error) {
+    //   console.error("Login error:", error);
+    // }
+    const isSuccess = await login(phoneNumber, password, getDeviceType());
+    if (isSuccess) {
+      router.push("/dashboard");
     }
   };
 
