@@ -18,8 +18,8 @@ import { logout } from "@/actions/auth.action";
 export default function Sidebar() {
   const { logout: logoutFromStore } = useAuthStore();
   const user = useAuthStore((state) => state.user);
-  console.log("User:", user);
   const router = useRouter();
+  // State for editable fields
 
   const handleLogout = async () => {
     const result = await logout();
@@ -37,7 +37,12 @@ export default function Sidebar() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Avatar className="cursor-pointer">
-              <AvatarImage src="https://i.ibb.co/XxXXczsK/480479681-599145336423941-8941882180530449347-n.jpg" />
+              <AvatarImage
+                src={
+                  user?.userInfo?.profilePictureUrl ||
+                  ` https://i.ibb.co/XxXXczsK/480479681-599145336423941-8941882180530449347-n.jpg`
+                }
+              />
               <AvatarFallback>NT</AvatarFallback>
             </Avatar>
           </DropdownMenuTrigger>
@@ -62,7 +67,9 @@ export default function Sidebar() {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>Đăng xuất</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogout}>
+                Đăng xuất
+              </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -88,14 +95,7 @@ export default function Sidebar() {
       >
         <Compass className="h-20 w-20" />
       </Button>
-      <div>
-        <Button
-          className="bg-[#005ae0] text-white rounded-full"
-          onClick={handleLogout}
-        >
-          Đăng xuất
-        </Button>
-      </div>
+      <div></div>
     </div>
   );
 }
