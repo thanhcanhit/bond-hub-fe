@@ -62,18 +62,31 @@ export async function completeRegistration(
     };
   }
 }
-
 export async function login(
   identifier: string,
   password: string,
   deviceType: DeviceType,
 ) {
   try {
-    const response = await axiosInstance.post("/auth/login", {
-      [isEmail(identifier) ? "email" : "phoneNumber"]: identifier,
-      password,
-      deviceType,
-    });
+    const deviceName =
+      typeof window !== "undefined"
+        ? navigator.platform || "Unknown Device"
+        : "Server";
+    const response = await axiosInstance.post(
+      "/auth/login",
+      {
+        [isEmail(identifier) ? "email" : "phoneNumber"]: identifier,
+        password,
+        deviceType,
+      },
+      {
+        headers: {
+          "x-device-name": deviceName, // Gửi x-device-name
+        },
+      },
+    );
+    console.log("Login response:", response.data);
+
     const { user, accessToken, refreshToken } = response.data;
 
     return { success: true, user, accessToken, refreshToken };

@@ -54,7 +54,7 @@ export default function Sidebar() {
             alignOffset={5}
           >
             <DropdownMenuLabel>
-              {user?.userInfo?.fullName || "Guest"}
+              {user?.userInfo.fullName || "Guest"}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
