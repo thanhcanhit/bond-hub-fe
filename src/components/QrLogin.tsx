@@ -23,7 +23,7 @@ export default function QrLogin() {
     }
   };
   useEffect(() => {
-    generateQrCode();
+    //generateQrCode();
   }, []);
 
   useEffect(() => {
@@ -66,39 +66,43 @@ export default function QrLogin() {
   }, [isLoggedIn, router]);
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center w-full px-4 sm:px-0">
       {qrToken ? (
-        <div className="flex flex-col items-center gap-9">
-          <div className="h-[290px] w-[235px] flex flex-col items-center border border-gray-300 p-4 rounded-[20px] space-y-4">
+        <div className="flex flex-col items-center gap-6 sm:gap-9 w-full">
+          <div className="h-[250px] sm:h-[290px] w-full max-w-[235px] flex flex-col items-center border border-gray-300 p-4 rounded-[20px] space-y-4">
             <div>
               {isQrExpired ? (
-                <div>
-                  <p>Mã QR hết hạn</p>
+                <div className="text-center">
+                  <p className="text-sm sm:text-base">Mã QR hết hạn</p>
                   <button
                     onClick={() => generateQrCode()}
-                    className="bg-[#2a83f7] text-white px-4 py-2 rounded-[10px]"
+                    className="bg-[#2a83f7] text-white px-4 py-2 rounded-[10px] mt-2 text-sm sm:text-base"
                   >
                     Lấy mã mới
                   </button>
                 </div>
               ) : (
-                <QRCodeCanvas value={qrToken} size={200} />
+                <QRCodeCanvas
+                  value={qrToken}
+                  size={200}
+                  className="w-[150px] h-[150px] sm:w-[200px] sm:h-[200px]"
+                />
               )}
             </div>
             <div className="text-center">
-              <p className="text-[#2a83f7] text-[18px]">
+              <p className="text-[#2a83f7] text-sm sm:text-[18px]">
                 Chỉ dùng để đăng nhập
               </p>
-              <p>Bondhub trên máy tính</p>
+              <p className="text-sm sm:text-base">Bondhub trên máy tính</p>
             </div>
           </div>
-          <div className="h-[105px] w-[515px] text-center border border-gray-300 p-4 rounded-[30px]">
+          <div className="w-full max-w-[515px] text-center border border-gray-300 p-4 rounded-[30px] text-sm sm:text-base">
             <p>Nâng cao hiệu quả công việc với Bondhub PC</p>
             <p>Coming soon...</p>
           </div>
         </div>
       ) : (
-        <p>Đang tạo mã QR...</p>
+        <p className="text-sm sm:text-base">Đang tạo mã QR...</p>
       )}
     </div>
   );

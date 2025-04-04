@@ -38,6 +38,7 @@ interface AuthState {
   login: (
     phoneNumber: string,
     password: string,
+    deviceName: string,
     deviceType: DeviceType,
   ) => Promise<boolean>;
   updateUser: (user: Partial<User>) => void;
@@ -67,11 +68,17 @@ export const useAuthStore = create<AuthState>()(
       login: async (
         phoneNumber: string,
         password: string,
+        deviceName: string,
         deviceType: DeviceType,
       ) => {
         try {
           set({ isLoading: true });
-          const result = await loginAction(phoneNumber, password, deviceType);
+          const result = await loginAction(
+            phoneNumber,
+            password,
+            deviceName,
+            deviceType,
+          );
 
           if (result.success) {
             // First set the tokens and basic user data

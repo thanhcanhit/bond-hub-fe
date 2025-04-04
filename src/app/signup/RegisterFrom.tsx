@@ -33,11 +33,42 @@ import {
 import {
   completeRegistration,
   initiateRegistration,
-  login,
   verifyOtp,
 } from "@/actions/auth.action";
 import { DeviceType } from "@/types/base";
 import { useAuthStore } from "@/stores/authStore";
+import * as UAParser from "ua-parser-js";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+
+const getDeviceInfo = () => {
+  if (typeof window === "undefined") {
+    return { deviceType: DeviceType.OTHER, deviceName: "Unknown" };
+  }
+
+  const parser = new UAParser.UAParser();
+  const result = parser.getResult();
+
+  // Xác định deviceType
+  let deviceType: DeviceType;
+  const device = result.device.type?.toLowerCase();
+  const os = result.os.name?.toLowerCase();
+
+  if (device === "mobile" || /iphone|android/.test(result.ua.toLowerCase())) {
+    deviceType = DeviceType.MOBILE;
+  } else if (device === "tablet" || /ipad/.test(result.ua.toLowerCase())) {
+    deviceType = DeviceType.TABLET;
+  } else if (os && /mac|win|linux/.test(os)) {
+    deviceType = DeviceType.DESKTOP;
+  } else {
+    deviceType = DeviceType.OTHER;
+  }
+
+  // Lấy deviceName
+  const deviceName = result.device.model || result.os.name || "Unknown";
+
+  return { deviceType, deviceName };
+};
 
 // Hàm kiểm tra định dạng email hoặc số điện thoại
 const isEmail = (input: string): boolean => {
@@ -61,12 +92,15 @@ export default function RegisterForm() {
   const [registrationId, setRegistrationId] = useState(""); // Lưu registrationId từ bước 1
   const [error, setError] = useState<string | null>(null); // Xử lý lỗi
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const { login } = useAuthStore();
 
   // Bước 1: Gửi yêu cầu OTP
   const handleRequestOTP = async () => {
     setLoading(true);
     setError(null);
     if (!inputValue) {
+      toast.warning("Vui lòng nhập số điện thoại hoặc email.");
       setError("Vui lòng nhập số điện thoại hoặc email.");
       setLoading(false);
       return;
@@ -76,6 +110,7 @@ export default function RegisterForm() {
     const inputIsPhone = isPhoneNumber(inputValue);
 
     if (!inputIsEmail && !inputIsPhone) {
+      toast.warning("Vui lòng nhập email hoặc số điện thoại hợp lệ.");
       setError("Vui lòng nhập email hoặc số điện thoại hợp lệ.");
       setLoading(false);
       return;
@@ -90,9 +125,11 @@ export default function RegisterForm() {
         setRegistrationId(result.registrationId);
         setStep(2);
       } else {
+        toast.error("Không thể gửi OTP. Vui lòng thử lại.");
         setError(result.error || "Không thể gửi OTP. Vui lòng thử lại.");
       }
     } else if (inputIsPhone) {
+      toast.info("Hiện tại chúng tôi chỉ hỗ trợ gửi OTP qua email");
       setError(
         "Hiện tại chúng tôi chỉ hỗ trợ gửi OTP qua email. Vui lòng dùng email để đăng ký.",
       );
@@ -108,8 +145,10 @@ export default function RegisterForm() {
     setLoading(false);
 
     if (result.success) {
+      toast.success("Xác thực OTP thành công!");
       setStep(3);
     } else {
+      toast.error("Xác thực OTP thất bại!");
       setError(result.error || "Mã OTP không đúng. Vui lòng thử lại.");
     }
   };
@@ -120,6 +159,7 @@ export default function RegisterForm() {
     setLoading(true);
     setError(null);
     if (!date) {
+      toast.warning("Vui lòng chọn ngày sinh.");
       setError("Vui lòng chọn ngày sinh.");
       setLoading(false);
       return;
@@ -133,14 +173,19 @@ export default function RegisterForm() {
       gender,
     );
     setLoading(false);
-
+    const { deviceType, deviceName } = getDeviceInfo();
     if (result.success) {
-      const loginResult = await login(inputValue, password, DeviceType.DESKTOP);
-      if (loginResult.success) {
-        useAuthStore
-          .getState()
-          .setAuth(loginResult.user, loginResult.accessToken);
+      const loginResult = await login(
+        inputValue,
+        password,
+        deviceName,
+        deviceType,
+      );
+      if (loginResult) {
+        toast.success("Đăng ký thành công!");
+        router.push("/dashboard");
       } else {
+        toast.error("Đăng nhập thất bại!");
         setError(result.error || "Đăng ký thất bại. Vui lòng thử lại.");
       }
     }

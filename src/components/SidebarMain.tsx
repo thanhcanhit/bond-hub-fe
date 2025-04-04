@@ -11,14 +11,27 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Compass, LucideContactRound, MessageCircleMore } from "lucide-react";
+import {
+  Compass,
+  HelpCircle,
+  LogOut,
+  LucideContactRound,
+  MessageCircleMore,
+  Settings,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
+import SettingsDialog from "./SettingDialog";
+
+import { useState } from "react";
+import ProfileDialog from "./ProfileDialog";
 
 export default function Sidebar() {
-  const { logout: logoutFromStore } = useAuthStore();
-  const user = useAuthStore((state) => state.user);
+  const { logout: logoutFromStore, user } = useAuthStore();
+  console.log("user", user);
+  // const user = useAuthStore((state) => state.user);
   const router = useRouter();
-  // State for editable fields
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleLogout = async () => {
     const result = await logoutFromStore();
@@ -60,8 +73,12 @@ export default function Sidebar() {
                 Nâng cấp tài khoản
                 <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
               </DropdownMenuItem>
-              <DropdownMenuItem>Hồ sơ của bạn</DropdownMenuItem>
-              <DropdownMenuItem>Cài đặt</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
+                Hồ sơ của bạn
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+                Cài đặt
+              </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -93,7 +110,44 @@ export default function Sidebar() {
       >
         <Compass className="h-20 w-20" />
       </Button>
-      <div></div>
+
+      <div className="flex-1" />
+
+      <div className="mb-5 flex flex-col items-center space-y-4">
+        <Button
+          variant="ghost"
+          className="text-red-400 hover:bg-[#0045b8] focus:bg-[#0045b8]"
+          onClick={handleLogout}
+        >
+          <LogOut className="h-6 w-6" />
+        </Button>
+        <Button
+          variant="ghost"
+          className="text-white hover:bg-[#0045b8] focus:bg-[#0045b8]"
+          onClick={() => setIsSettingsOpen(true)}
+        >
+          <Settings className="h-6 w-6" />
+        </Button>
+        <Button
+          variant="ghost"
+          className="text-white hover:bg-[#0045b8] focus:bg-[#0045b8]"
+          onClick={() => router.push("/dashboard/help")}
+        >
+          <HelpCircle className="h-6 w-6" />
+        </Button>
+      </div>
+
+      <ProfileDialog
+        user={user}
+        isOpen={isProfileOpen}
+        onOpenChange={setIsProfileOpen}
+        isOwnProfile={true}
+      />
+
+      <SettingsDialog
+        isOpen={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+      />
     </div>
   );
 }
