@@ -329,9 +329,7 @@ export default function QrLogin() {
         <div className="flex flex-col items-center justify-center h-full w-full">
           <div className="mb-4">
             <div className="relative">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg bg-gray-100 flex items-center justify-center">
-                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-lg bg-gray-200 animate-pulse"></div>
-              </div>
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg flex items-center justify-center"></div>
               <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 text-blue-500 animate-spin absolute inset-0 m-auto" />
             </div>
           </div>
