@@ -1,0 +1,12 @@
+.dialogContent {
+  border-radius: 0 !important;
+}
+
+.scrollHidden {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.scrollHidden::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}

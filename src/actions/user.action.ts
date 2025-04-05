@@ -90,3 +90,79 @@ export async function deleteUser(id: string) {
     };
   }
 }
+
+// Upload profile picture
+export async function updateProfilePicture(file: File) {
+  try {
+    // Make sure file is not undefined
+    if (!file) {
+      throw new Error("No file selected");
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    // Change the content type to multipart/form-data
+    const response = await axiosInstance.post(
+      "/auth/profile-picture",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      },
+    );
+
+    const updatedUser = response.data;
+
+    // Update user in store
+    const currentUser = useAuthStore.getState().user;
+    if (currentUser) {
+      useAuthStore.getState().updateUser(updatedUser);
+    }
+
+    return { success: true, user: updatedUser };
+  } catch (error) {
+    console.error("Update profile picture failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// Upload cover image
+export async function updateCoverImage(file: File) {
+  try {
+    // Make sure file is not undefined
+    if (!file) {
+      throw new Error("No file selected");
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    // Change the content type to multipart/form-data
+    const response = await axiosInstance.post("/auth/cover-image", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    const updatedUser = response.data;
+
+    // Update user in store
+    const currentUser = useAuthStore.getState().user;
+    if (currentUser) {
+      useAuthStore.getState().updateUser(updatedUser);
+    }
+
+    return { success: true, user: updatedUser };
+  } catch (error) {
+    console.error("Update cover image failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
