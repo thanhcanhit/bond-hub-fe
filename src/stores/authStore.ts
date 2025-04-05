@@ -6,7 +6,7 @@ import {
   logout as logoutAction,
 } from "@/actions/auth.action";
 import { getUserDataById } from "@/actions/user.action";
-
+import { setupSocket } from "@/lib/socket";
 // Custom storage that handles SSR
 const storage = {
   getItem: (name: string): string | null => {
@@ -56,6 +56,7 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
+      socket: null,
       _hasHydrated: false,
       setHasHydrated: (state) => set({ _hasHydrated: state }),
       setAuth: (user: User, accessToken: string) =>
@@ -88,10 +89,13 @@ export const useAuthStore = create<AuthState>()(
               isAuthenticated: true,
               isLoading: false,
             });
-
+            // Khởi tạo socket ở client
+            if (typeof window !== "undefined") {
+              setupSocket(result.accessToken);
+            }
             // Then try to get additional user data
             try {
-              const userData = await getUserDataById(result.user.id);
+              const userData = await getUserDataById(result.user.userId);
               if (userData.success && userData.user) {
                 set({
                   user: userData.user as UserWithInfo,
@@ -109,9 +113,9 @@ export const useAuthStore = create<AuthState>()(
                 isLoading: false,
               });
             }
-
             return true;
           }
+
           return false;
         } catch (error) {
           console.error("Login error:", error);
@@ -147,6 +151,7 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
         }),
     }),
+
     {
       name: "auth-storage",
       storage: createJSONStorage(() => storage),
