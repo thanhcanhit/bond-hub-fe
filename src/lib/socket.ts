@@ -2,7 +2,7 @@
 import { Socket } from "socket.io-client";
 import io from "socket.io-client";
 
-let socket: typeof Socket | null = null;
+let socket: Socket | null = null;
 
 export const setupSocket = (token: string) => {
   if (!token) return;

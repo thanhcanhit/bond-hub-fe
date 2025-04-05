@@ -1,10 +1,9 @@
 import { useEffect, useRef } from "react";
-import io from "socket.io-client";
-import { Socket } from "socket.io-client";
+import { Socket, io } from "socket.io-client";
 import { SocketMessage, SocketAuth } from "../types/socket";
 import { useRouter } from "next/navigation";
 
-type SocketType = typeof Socket;
+type SocketType = Socket;
 
 const useSocket = (
   url: string,
