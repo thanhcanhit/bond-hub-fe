@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
-import QrLogin from "@/components/QrLogin";
+import QrLogin from "@/components/QrLogin/QrLogin";
+
 import LoginForm from "@/components/LoginForm";
 import { Button } from "@/components/ui/button";
 import { Check, AlignJustify } from "lucide-react";
