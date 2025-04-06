@@ -18,10 +18,6 @@ const nextConfig: NextConfig = {
     ],
   },
   output: "standalone",
-  experimental: {
-    // Ensure proper SWC compilation
-    forceSwcTransforms: true,
-  },
 };
 
 export default nextConfig;
