@@ -6,7 +6,7 @@ import {
   logout as logoutAction,
 } from "@/actions/auth.action";
 import { getUserDataById } from "@/actions/user.action";
-import { setupSocket } from "@/lib/socket";
+// Không cần import socket nữa vì đã sử dụng hook
 // Custom storage that handles SSR
 const storage = {
   getItem: (name: string): string | null => {
@@ -89,10 +89,7 @@ export const useAuthStore = create<AuthState>()(
               isAuthenticated: true,
               isLoading: false,
             });
-            // Khởi tạo socket ở client
-            if (typeof window !== "undefined") {
-              setupSocket(result.accessToken);
-            }
+            // Socket sẽ được khởi tạo tự động bởi SocketProvider
             // Then try to get additional user data
             try {
               const userData = await getUserDataById(result.user.userId);
@@ -143,8 +140,11 @@ export const useAuthStore = create<AuthState>()(
           };
         }),
       logout: async () => {
-        const result = await logoutAction();
-        if (result.success) {
+        try {
+          // Socket sẽ được ngắt kết nối tự động khi accessToken thay đổi
+          const result = await logoutAction();
+
+          // Reset store state
           set({
             user: null,
             accessToken: null,
@@ -152,15 +152,31 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: false,
             isLoading: false,
           });
+
+          return result.success || true; // Return true even if API call fails
+        } catch (error) {
+          console.error("Error during logout:", error);
+
+          // Reset store state even if there's an error
+          set({
+            user: null,
+            accessToken: null,
+            refreshToken: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+
+          return true; // Always return true to ensure UI updates
         }
-        return result.success;
       },
-      setTokens: (accessToken, refreshToken) =>
+      setTokens: (accessToken, refreshToken) => {
         set({
           accessToken,
           refreshToken,
           isAuthenticated: true,
-        }),
+        });
+        // Socket sẽ được cập nhật tự động bởi SocketProvider khi accessToken thay đổi
+      },
     }),
 
     {

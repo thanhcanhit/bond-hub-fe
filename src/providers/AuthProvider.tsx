@@ -3,6 +3,7 @@
 import { useAuthStore } from "@/stores/authStore";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
+import SocketProvider from "@/components/SocketProvider";
 
 // Các đường dẫn công khai (không cần đăng nhập)
 const publicPaths = ["/login", "/register", "/"];
@@ -65,5 +66,5 @@ export default function AuthProvider({
     );
   }
 
-  return <>{children}</>;
+  return <SocketProvider>{children}</SocketProvider>;
 }
