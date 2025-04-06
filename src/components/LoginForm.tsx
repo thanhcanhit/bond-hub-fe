@@ -107,7 +107,7 @@ export default function LoginForm() {
           <div className="flex items-center gap-2 border-b border-gray-200 mb-3 w-full max-w-[350px] mx-auto">
             <Smartphone className="w-4 h-4 sm:w-5 sm:h-5" />
             <Input
-              className="w-full h-[40px] sm:h-[50px]"
+              className="w-full h-[40px] pl-8 sm:h-[50px] border-none shadow-none"
               type="phoneNumber"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
@@ -118,7 +118,7 @@ export default function LoginForm() {
           <div className="flex items-center gap-2 border-b border-gray-200 mb-7 w-full max-w-[350px] mx-auto">
             <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
             <Input
-              className="w-full h-[40px] sm:h-[50px]"
+              className="w-full h-[40px] pl-8 sm:h-[50px]  border-none shadow-none"
               type="password"
               name="password"
               value={password}

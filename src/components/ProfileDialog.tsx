@@ -6,7 +6,6 @@ import {
   DialogDescription,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,8 +37,8 @@ import {
 } from "@/actions/user.action";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
-import styles from "./ProfileDialog.module.css";
 import { AnimatePresence, motion } from "framer-motion";
+import UserAvatar from "./UserAvatar";
 
 interface ProfileDialogProps {
   user: User | null;
@@ -152,7 +151,7 @@ export default function ProfileDialog({
     });
 
     if (result.success) {
-      toast.success("Profile updated successfully");
+      toast.success("Thông tin cá nhân đã được cập nhật thành công");
       setIsEditing(false);
 
       // Cập nhật lại user trong component
@@ -162,7 +161,7 @@ export default function ProfileDialog({
         setTimeout(() => onOpenChange(true), 100);
       }
     } else {
-      toast.error(result.error || "Failed to update profile");
+      toast.error(result.error || "Cập nhật thông tin cá nhân thất bại");
     }
   };
 
@@ -181,7 +180,7 @@ export default function ProfileDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
-        className={`sm:max-w-[425px] h-auto !p-0 mt-0 mb-16 max-h-[90vh] overflow-y-auto rounded-md ${styles.dialogContent} ${styles.scrollHidden}`}
+        className={`sm:max-w-[425px] h-auto !p-0 mt-0 mb-16 max-h-[90vh] overflow-y-auto `}
       >
         <AnimatePresence mode="wait">
           {isEditing && isOwnProfile ? (
@@ -202,14 +201,16 @@ export default function ProfileDialog({
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </Button>
-                <h2 className="text-base font-medium">
-                  Edit your personal information
-                </h2>
+                <DialogHeader>
+                  <DialogTitle className="text-base font-medium">
+                    Cập nhật thông tin cá nhân của bạn
+                  </DialogTitle>
+                </DialogHeader>
               </div>
 
               <form onSubmit={handleSubmit} className="p-6 space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="displayName">Display name</Label>
+                  <Label htmlFor="displayName">Tên hiển thị</Label>
                   <Input
                     id="displayName"
                     value={displayName}
@@ -219,10 +220,10 @@ export default function ProfileDialog({
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Personal information</h3>
+                  <h3 className="text-sm font-medium">Thông tin cá nhân</h3>
 
                   <div className="space-y-2">
-                    <Label>Gender</Label>
+                    <Label>Giới tính</Label>
                     <RadioGroup
                       value={gender}
                       onValueChange={setGender}
@@ -230,17 +231,17 @@ export default function ProfileDialog({
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="MALE" id="male" />
-                        <Label htmlFor="male">Male</Label>
+                        <Label htmlFor="male">Nam</Label>
                       </div>
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="FEMALE" id="female" />
-                        <Label htmlFor="female">Female</Label>
+                        <Label htmlFor="female">Nữ</Label>
                       </div>
                     </RadioGroup>
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Birthday</Label>
+                    <Label>Ngày sinh</Label>
                     <div className="flex gap-2">
                       <Select value={day} onValueChange={setDay}>
                         <SelectTrigger className="flex-1">
@@ -290,13 +291,13 @@ export default function ProfileDialog({
                     variant="outline"
                     onClick={() => setIsEditing(false)}
                   >
-                    Cancel
+                    Huỷ
                   </Button>
                   <Button
                     type="submit"
                     className="bg-blue-500 hover:bg-blue-600 text-white"
                   >
-                    Update
+                    Cập nhật
                   </Button>
                 </div>
               </form>
@@ -311,7 +312,7 @@ export default function ProfileDialog({
             >
               <DialogHeader className="px-6 py-0 flex flex-row justify-between items-center h-10">
                 <DialogTitle className="text-base font-semibold flex items-center h-10">
-                  Profile
+                  Thông tin cá nhân
                 </DialogTitle>
                 <DialogClose className="opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"></DialogClose>
                 <DialogDescription className="sr-only">
@@ -354,7 +355,7 @@ export default function ProfileDialog({
                               if (result.success && result.url) {
                                 toast.success(
                                   result.message ||
-                                    "Cover image updated successfully",
+                                    "Cập nhật ảnh bìa thành công",
                                 );
 
                                 // Cập nhật URL hình ảnh mới
@@ -365,14 +366,11 @@ export default function ProfileDialog({
                                 // Không cần đóng và mở lại dialog nữa vì đã cập nhật trực tiếp state
                               } else {
                                 toast.error(
-                                  result.error ||
-                                    "Failed to update cover image",
+                                  result.error || "Cập nhật ảnh bìa thất bại",
                                 );
                               }
                             } catch {
-                              toast.error(
-                                "An error occurred while updating cover image",
-                              );
+                              toast.error("Đã xảy ra lỗi khi cập nhật ảnh bìa");
                             }
                           }}
                         />
@@ -396,23 +394,9 @@ export default function ProfileDialog({
                 {/* Profile Picture and Name */}
                 <div className="flex flex-col items-center -mt-12 mb-4">
                   <div className="relative">
-                    <Avatar className="h-16 w-16 border-2 border-white">
-                      <AvatarImage
-                        src={
-                          profileImageUrl ||
-                          (currentUser?.userInfo?.profilePictureUrl
-                            ? `${currentUser.userInfo.profilePictureUrl}?t=${new Date().getTime()}`
-                            : "https://i.ibb.co/XxXXczsK/480479681-599145336423941-8941882180530449347-n.jpg")
-                        }
-                        key={
-                          currentUser?.userInfo?.profilePictureUrl ||
-                          "default-avatar"
-                        }
-                      />
-                      <AvatarFallback>
-                        {currentUser?.userInfo?.fullName?.charAt(0)}
-                      </AvatarFallback>
-                    </Avatar>
+                    {currentUser && (
+                      <UserAvatar user={currentUser} className="h-24 w-24" />
+                    )}
                     {isOwnProfile && (
                       <div className="absolute bottom-0 right-0">
                         <Button
@@ -441,40 +425,31 @@ export default function ProfileDialog({
                     <h3 className="text-base font-semibold">
                       {currentUser?.userInfo?.fullName || "Như Tâm"}
                     </h3>
-                    {isOwnProfile && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="p-1 h-auto ml-1"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    )}
                   </div>
                 </div>
 
                 {/* Call/Chat Buttons (for other users) */}
                 {!isOwnProfile && (
                   <div className="flex gap-2 px-4">
-                    <Button onClick={onCall}>Call</Button>
-                    <Button onClick={onChat}>Chat</Button>
+                    <Button onClick={onCall}>Gọi</Button>
+                    <Button onClick={onChat}>Trò chuyện</Button>
                   </div>
                 )}
 
                 {/* Personal Information */}
                 <div className="mt-4 px-6 py-4 border-t border-gray-200 bg-white">
                   <h4 className="font-semibold text-sm mb-3">
-                    Personal information
+                    Thông tin cá nhân
                   </h4>
                   <div className="space-y-1.5">
                     <div className="grid grid-cols-[100px_1fr] gap-1">
-                      <span className="text-xs text-gray-500">Bio</span>
+                      <span className="text-xs text-gray-500">Giới thiệu</span>
                       <span className="text-xs text-left">
-                        {currentUser?.userInfo?.bio || "Test bio"}
+                        {currentUser?.userInfo?.bio || "Giới thiệu"}
                       </span>
                     </div>
                     <div className="grid grid-cols-[100px_1fr] gap-1">
-                      <span className="text-xs text-gray-500">Gender</span>
+                      <span className="text-xs text-gray-500">Giới tính</span>
                       <span className="text-xs text-left">
                         {currentUser?.userInfo?.gender === "FEMALE"
                           ? "Nữ"
@@ -484,7 +459,7 @@ export default function ProfileDialog({
                       </span>
                     </div>
                     <div className="grid grid-cols-[100px_1fr] gap-1">
-                      <span className="text-xs text-gray-500">Birthday</span>
+                      <span className="text-xs text-gray-500">Ngày sinh</span>
                       <span className="text-xs text-left">
                         {currentUser?.userInfo?.dateOfBirth
                           ? new Date(
@@ -499,7 +474,7 @@ export default function ProfileDialog({
                     </div>
                     <div className="grid grid-cols-[100px_1fr] gap-1">
                       <span className="text-xs text-gray-500">
-                        Phone number
+                        Số điện thoại
                       </span>
                       <span className="text-xs text-left">
                         {currentUser?.phoneNumber || "+84 336 551 833"}
@@ -509,8 +484,8 @@ export default function ProfileDialog({
                       <>
                         <div className="h-1"></div>
                         <p className="text-xs text-gray-500">
-                          Only friends who have saved your number in their
-                          contacts can see this number
+                          Chỉ bạn bè có lưu số điện thoại của bạn trong danh bạ
+                          của họ mới có thể xem số điện thoại này
                         </p>
                       </>
                     )}
@@ -523,9 +498,11 @@ export default function ProfileDialog({
                   currentUser.posts.length > 0 && (
                     <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 mt-4">
                       <div className="flex justify-between items-center mb-2">
-                        <h4 className="font-medium text-base">Photos/Videos</h4>
+                        <h4 className="font-medium text-base">
+                          Hình ảnh/Video
+                        </h4>
                         <Button variant="link" className="text-sm p-0 h-auto">
-                          View all
+                          Xem tất cả
                         </Button>
                       </div>
                       <div className="grid grid-cols-4 gap-1">
@@ -548,26 +525,26 @@ export default function ProfileDialog({
                   <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 mt-4 space-y-4">
                     <div className="flex items-center gap-2">
                       <Users className="h-5 w-5 text-gray-500" />
-                      <span className="text-sm">4 mutual groups</span>
+                      <span className="text-sm">4 nhóm chung</span>
                     </div>
                     <Button variant="ghost" className="justify-start w-full">
                       <Share2 className="h-5 w-5 mr-2 text-gray-500" />
-                      Share contact
+                      Chia sẻ liên hệ
                     </Button>
                     <Button variant="ghost" className="justify-start w-full">
                       <Ban className="h-5 w-5 mr-2 text-gray-500" />
-                      Block messages and calls
+                      Chặn tin nhắn và cuộc gọi
                     </Button>
                     <Button variant="ghost" className="justify-start w-full">
                       <AlertTriangle className="h-5 w-5 mr-2 text-gray-500" />
-                      Report
+                      Báo cáo
                     </Button>
                     <Button
                       variant="ghost"
                       className="justify-start w-full text-red-500"
                     >
                       <UserMinus className="h-5 w-5 mr-2" />
-                      Remove friend
+                      Xóa bạn bè
                     </Button>
                   </div>
                 )}
@@ -580,9 +557,9 @@ export default function ProfileDialog({
                       variant="ghost"
                       onClick={() => setIsEditing(true)}
                     >
-                      <span className="flex items-center">
+                      <span className="flex items-center font-semibold">
                         <Pencil className="h-4 w-4 mr-2" />
-                        Update
+                        Cập nhật
                       </span>
                     </Button>
                   </div>

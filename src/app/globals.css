@@ -5,50 +5,6 @@
 body {
   font-family: "Roboto", sans-serif;
 }
-/* Ẩn thanh scrollbar mặc định của trình duyệt */
-.scroll-container {
-  -ms-overflow-style: none;
-  /* IE và Edge */
-  scrollbar-width: none;
-  /* Firefox */
-  overflow-y: scroll;
-  /* Đảm bảo vẫn cuộn được */
-}
-
-.scroll-container::-webkit-scrollbar {
-  display: none;
-  /* Chrome, Safari, và Opera */
-}
-
-/* Thanh scrollbar tùy chỉnh */
-.custom-scrollbar {
-  scrollbar-width: thin;
-  /* Firefox */
-  scrollbar-color: #888 #f1f1f1;
-  /* Firefox: màu thanh cuộn và nền */
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  /* Chiều rộng thanh cuộn cho Chrome/Safari */
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  /* Màu nền của thanh cuộn */
-  border-radius: 4px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #888;
-  /* Màu của thanh cuộn */
-  border-radius: 4px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #555;
-  /* Màu khi hover */
-}
 
 @layer base {
   :root {
@@ -131,30 +87,4 @@ body {
   }
 }
 
-/* Sidebar styles */
-.active-nav-item button {
-  background-color: #0841a3;
-}
-
-/* Sidebar animation effects */
-.sidebar-nav-button {
-  transition: all 0.15s ease-in-out;
-}
-
-.sidebar-nav-button:hover {
-  background-color: #0841a3;
-}
-
-/* Sidebar icon styles */
-.sidebar-nav-button svg {
-  width: 24px !important;
-  height: 24px !important;
-}
-
-/* Zalo-like sidebar styles */
-.sidebar-nav-button {
-  width: 100% !important;
-  height: auto !important;
-  padding: 12px !important;
-  border-radius: 6 !important;
-}
+/* Custom components can be added here */

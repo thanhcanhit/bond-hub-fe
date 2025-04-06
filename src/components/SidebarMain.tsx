@@ -29,6 +29,7 @@ import SettingsDialog from "./SettingDialog";
 import { useState } from "react";
 import ProfileDialog from "./ProfileDialog";
 import { LoadingWithMessage } from "./Loading";
+import { IconType } from "react-icons";
 
 export default function Sidebar() {
   const { logout: logoutFromStore, user } = useAuthStore();
@@ -55,9 +56,37 @@ export default function Sidebar() {
     }
   };
 
+  // Navigation items configuration
+  const navItems: { path: string; icon: IconType; label: string }[] = [
+    { path: "/dashboard/chat", icon: BsChatDotsFill, label: "Chat" },
+    { path: "/dashboard/contact", icon: RiContactsLine, label: "Contacts" },
+    { path: "/dashboard/post", icon: BsCompass, label: "Posts" },
+  ];
+
+  // Bottom navigation items
+  const bottomNavItems: {
+    icon: IconType;
+    label: string;
+    action?: () => void;
+    isActive?: boolean;
+    isDropdown?: boolean;
+  }[] = [
+    {
+      icon: BsGear,
+      label: "Settings",
+      isActive: isSettingsMenuOpen,
+      isDropdown: true,
+    },
+    {
+      icon: BsDoorOpenFill,
+      label: "Logout",
+      action: handleLogout,
+    },
+  ];
+
   // Hàm kiểm tra đường dẫn hiện tại để xác định mục đang được chọn
   const isActive = (path: string) => {
-    return pathname.startsWith(path);
+    return pathname === path || pathname.startsWith(`${path}/`);
   };
 
   return (
@@ -69,14 +98,12 @@ export default function Sidebar() {
             <DropdownMenuTrigger asChild>
               <Avatar className="cursor-pointer h-12 w-12 border-2 border-white hover:border-blue-300 transition-all">
                 <AvatarImage
-                  src={
-                    user?.userInfo?.profilePictureUrl
-                      ? `${user.userInfo.profilePictureUrl}?t=${new Date().getTime()}`
-                      : `https://i.ibb.co/XxXXczsK/480479681-599145336423941-8941882180530449347-n.jpg`
-                  }
-                  key={user?.userInfo?.profilePictureUrl || "default-avatar"}
+                  className="object-cover"
+                  src={user?.userInfo?.profilePictureUrl || ""}
                 />
-                <AvatarFallback>NT</AvatarFallback>
+                <AvatarFallback className="text-gray">
+                  {user?.userInfo?.fullName?.split(" ")?.map((w) => w[0])}
+                </AvatarFallback>
               </Avatar>
             </DropdownMenuTrigger>
             <DropdownMenuContent
@@ -114,105 +141,84 @@ export default function Sidebar() {
 
         {/* Main navigation buttons */}
         <div className="flex flex-col items-center w-full space-y-2">
-          <div
-            className={`relative group ${isActive("/dashboard/chat") ? "active-nav-item" : ""}`}
-          >
-            <Button
-              variant="ghost"
-              className={`sidebar-nav-button flex items-center justify-center ${isActive("/dashboard/chat") ? "bg-[#0045b8]" : ""}`}
-              onClick={() => router.push("/dashboard/chat")}
-            >
-              <BsChatDotsFill size={32} />
-            </Button>
-          </div>
-
-          <div
-            className={`relative group ${isActive("/dashboard/contact") ? "active-nav-item" : ""}`}
-          >
-            <Button
-              variant="ghost"
-              className={`sidebar-nav-button flex items-center justify-center ${isActive("/dashboard/contact") ? "bg-[#0045b8]" : ""}`}
-              onClick={() => router.push("/dashboard/contact")}
-            >
-              <RiContactsLine size={32} />
-            </Button>
-          </div>
-
-          <div
-            className={`relative group ${isActive("/dashboard/post") ? "active-nav-item" : ""}`}
-          >
-            <Button
-              variant="ghost"
-              className={`sidebar-nav-button flex items-center justify-center ${isActive("/dashboard/post") ? "bg-[#0045b8]" : ""}`}
-              onClick={() => router.push("/dashboard/post")}
-            >
-              <BsCompass size={32} />
-            </Button>
-          </div>
+          {navItems.map((item) => (
+            <div key={item.path} className="relative group">
+              <Button
+                variant="ghost"
+                className={`flex items-center justify-center text-white hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white ${isActive(item.path) ? "bg-[#0045b8]" : ""}`}
+                onClick={() => router.push(item.path)}
+                title={item.label}
+              >
+                <item.icon size={32} />
+              </Button>
+            </div>
+          ))}
         </div>
 
         <div className="flex-1" />
 
-        <div className="flex flex-col items-center w-full space-y-0">
-          <div
-            className={`relative group ${isSettingsMenuOpen ? "active-nav-item" : ""}`}
-          >
-            <DropdownMenu
-              open={isSettingsMenuOpen}
-              onOpenChange={setIsSettingsMenuOpen}
-            >
-              <DropdownMenuTrigger asChild>
+        <div className="flex flex-col items-center w-full space-y-2">
+          {bottomNavItems.map((item, index) => (
+            <div key={index} className="relative group">
+              {item.isDropdown ? (
+                <DropdownMenu
+                  open={isSettingsMenuOpen}
+                  onOpenChange={setIsSettingsMenuOpen}
+                >
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className={`flex items-center justify-center text-white hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white ${item.isActive ? "bg-[#0045b8]" : ""}`}
+                      title={item.label}
+                    >
+                      <item.icon size={32} />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    className="w-56 ml-8"
+                    side="top"
+                    align="center"
+                    sideOffset={5}
+                    alignOffset={0}
+                  >
+                    <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
+                      Thông tin tài khoản
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+                      Cài đặt
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>Dữ liệu</DropdownMenuItem>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>Ngôn ngữ</DropdownMenuSubTrigger>
+                      <DropdownMenuPortal>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuItem>Tiếng Việt</DropdownMenuItem>
+                          <DropdownMenuItem>Tiếng Anh</DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuPortal>
+                    </DropdownMenuSub>
+                    <DropdownMenuItem>Hỗ trợ</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="text-red-500"
+                    >
+                      Đăng xuất
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
                 <Button
                   variant="ghost"
-                  className={`sidebar-nav-button flex items-center justify-center`}
+                  className="flex items-center justify-center text-white hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white"
+                  onClick={item.action}
+                  title={item.label}
                 >
-                  <BsGear size={32} />
+                  <item.icon size={32} />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                className="w-56 ml-8"
-                side="top"
-                align="center"
-                sideOffset={5}
-                alignOffset={0}
-              >
-                <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
-                  Thông tin tài khoản
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
-                  Cài đặt
-                </DropdownMenuItem>
-                <DropdownMenuItem>Dữ liệu</DropdownMenuItem>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>Ngôn ngữ</DropdownMenuSubTrigger>
-                  <DropdownMenuPortal>
-                    <DropdownMenuSubContent>
-                      <DropdownMenuItem>Tiếng Việt</DropdownMenuItem>
-                      <DropdownMenuItem>Tiếng Anh</DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuPortal>
-                </DropdownMenuSub>
-                <DropdownMenuItem>Hỗ trợ</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={handleLogout}
-                  className="text-red-500"
-                >
-                  Đăng xuất
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          <div className={`relative group`}>
-            <Button
-              variant="ghost"
-              className={`sidebar-nav-button flex items-center justify-center text-red-400`}
-              onClick={handleLogout}
-            >
-              <BsDoorOpenFill size={32} />
-            </Button>
-          </div>
+              )}
+            </div>
+          ))}
         </div>
 
         <ProfileDialog

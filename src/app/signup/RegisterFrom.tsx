@@ -194,14 +194,15 @@ export default function RegisterForm() {
   return (
     <div className="mb-4">
       {step === 1 && (
-        <div className="items-center">
-          <div className="flex items-center gap-2 border-b border-gray-200 mb-6">
+        <div className="items-center w-fit mx-auto justify-center">
+          <div className="flex items-center justify-center gap-2 border-b border-gray-200 mb-6">
             <UsersRound className="w-5 h-5" />
             <Input
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder="Số điện thoại hoặc Email"
+              className="border-none shadow-none"
               required
             />
           </div>
