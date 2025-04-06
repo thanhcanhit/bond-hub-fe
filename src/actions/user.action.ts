@@ -208,7 +208,25 @@ export async function updateUserBasicInfo(userData: {
     const updatedUser = response.data;
 
     // Cập nhật lại thông tin trong store
-    useAuthStore.getState().updateUser(updatedUser);
+    // Đảm bảo cập nhật đầy đủ thông tin userInfo
+    if (currentUser.userInfo) {
+      const updatedUserInfo = {
+        ...currentUser.userInfo,
+        fullName: userData.fullName || currentUser.userInfo.fullName,
+        gender: userData.gender || currentUser.userInfo.gender,
+        dateOfBirth: userData.dateOfBirth || currentUser.userInfo.dateOfBirth,
+        bio: userData.bio || currentUser.userInfo.bio,
+      };
+
+      const userToUpdate = {
+        ...updatedUser,
+        userInfo: updatedUserInfo,
+      };
+
+      useAuthStore.getState().updateUser(userToUpdate);
+    } else {
+      useAuthStore.getState().updateUser(updatedUser);
+    }
 
     return { success: true, user: updatedUser };
   } catch (error) {

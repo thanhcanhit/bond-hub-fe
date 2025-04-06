@@ -3,11 +3,10 @@ import { useRouter } from "next/navigation";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Smartphone, Lock } from "lucide-react";
-import { DeviceType } from "@/types/base";
-import * as UAParser from "ua-parser-js";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import ForgotPasswordFlow from "./ForgotPasswordFlow";
+import { getDeviceInfo } from "@/utils/helpers";
 import Loading from "./Loading";
 import {
   Dialog,
@@ -16,37 +15,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-
-// Hàm để xác định deviceType dựa trên userAgent
-const getDeviceInfo = () => {
-  if (typeof window === "undefined") {
-    return { deviceType: DeviceType.OTHER, deviceName: "Dell Latitude 5290" };
-  }
-
-  const parser = new UAParser.UAParser();
-  const result = parser.getResult();
-
-  // Xác định deviceType
-  let deviceType: DeviceType;
-  const device = result.device.type?.toLowerCase();
-  const os = result.os.name?.toLowerCase();
-
-  if (device === "mobile" || /iphone|android/.test(result.ua.toLowerCase())) {
-    deviceType = DeviceType.MOBILE;
-  } else if (device === "tablet" || /ipad/.test(result.ua.toLowerCase())) {
-    deviceType = DeviceType.TABLET;
-  } else if (os && /mac|win|linux/.test(os)) {
-    deviceType = DeviceType.DESKTOP;
-  } else {
-    deviceType = DeviceType.OTHER;
-  }
-
-  // Lấy deviceName
-  const deviceName =
-    result.device.model || result.os.name || "Dell Latitude 5290";
-
-  return { deviceType, deviceName };
-};
 
 export default function LoginForm() {
   const [phoneNumber, setPhoneNumber] = useState("");

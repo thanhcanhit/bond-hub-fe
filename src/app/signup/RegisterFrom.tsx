@@ -35,51 +35,10 @@ import {
   initiateRegistration,
   verifyOtp,
 } from "@/actions/auth.action";
-import { DeviceType } from "@/types/base";
 import { useAuthStore } from "@/stores/authStore";
-import * as UAParser from "ua-parser-js";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-
-const getDeviceInfo = () => {
-  if (typeof window === "undefined") {
-    return { deviceType: DeviceType.OTHER, deviceName: "Unknown" };
-  }
-
-  const parser = new UAParser.UAParser();
-  const result = parser.getResult();
-
-  // Xác định deviceType
-  let deviceType: DeviceType;
-  const device = result.device.type?.toLowerCase();
-  const os = result.os.name?.toLowerCase();
-
-  if (device === "mobile" || /iphone|android/.test(result.ua.toLowerCase())) {
-    deviceType = DeviceType.MOBILE;
-  } else if (device === "tablet" || /ipad/.test(result.ua.toLowerCase())) {
-    deviceType = DeviceType.TABLET;
-  } else if (os && /mac|win|linux/.test(os)) {
-    deviceType = DeviceType.DESKTOP;
-  } else {
-    deviceType = DeviceType.OTHER;
-  }
-
-  // Lấy deviceName
-  const deviceName = result.device.model || result.os.name || "Unknown";
-
-  return { deviceType, deviceName };
-};
-
-// Hàm kiểm tra định dạng email hoặc số điện thoại
-const isEmail = (input: string): boolean => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(input);
-};
-
-const isPhoneNumber = (input: string): boolean => {
-  const phoneRegex = /^\d{10,11}$/; // Giả sử số điện thoại Việt Nam có 10-11 chữ số
-  return phoneRegex.test(input);
-};
+import { getDeviceInfo, isEmail, isPhoneNumber } from "@/utils/helpers";
 
 export default function RegisterForm() {
   const [date, setDate] = useState<Date | undefined>(undefined);

@@ -75,12 +75,23 @@ export default function ProfileDialog({
   const [gender, setGender] = useState<string>(
     currentUser?.userInfo?.gender || "MALE",
   );
+  const [bio, setBio] = useState<string>(currentUser?.userInfo?.bio || "");
 
   // Cập nhật form state khi user thay đổi
   useEffect(() => {
     if (currentUser) {
+      // Luôn cập nhật các trường thông tin cơ bản khi currentUser thay đổi
       setDisplayName(currentUser.userInfo?.fullName || "");
       setGender(currentUser.userInfo?.gender || "MALE");
+      setBio(currentUser.userInfo?.bio || "");
+
+      // Cập nhật ngày sinh
+      if (currentUser.userInfo?.dateOfBirth) {
+        const dob = new Date(currentUser.userInfo.dateOfBirth);
+        setDay(dob.getDate().toString().padStart(2, "0"));
+        setMonth((dob.getMonth() + 1).toString().padStart(2, "0"));
+        setYear(dob.getFullYear().toString());
+      }
 
       // Chỉ cập nhật URL hình ảnh nếu chưa được cập nhật trước đó
       if (!profileImageUrl) {
@@ -93,15 +104,28 @@ export default function ProfileDialog({
     }
   }, [currentUser, profileImageUrl, coverImageUrl]);
 
-  // Parse date of birth into day, month, year
-  const dob = currentUser?.userInfo?.dateOfBirth
-    ? new Date(currentUser.userInfo.dateOfBirth)
-    : new Date("2003-11-03");
-  const [day, setDay] = useState(dob.getDate().toString().padStart(2, "0"));
-  const [month, setMonth] = useState(
-    (dob.getMonth() + 1).toString().padStart(2, "0"),
+  // Initialize date of birth state
+  const defaultDob = new Date("2003-11-03");
+  const [day, setDay] = useState(
+    currentUser?.userInfo?.dateOfBirth
+      ? new Date(currentUser.userInfo.dateOfBirth)
+          .getDate()
+          .toString()
+          .padStart(2, "0")
+      : defaultDob.getDate().toString().padStart(2, "0"),
   );
-  const [year, setYear] = useState(dob.getFullYear().toString());
+  const [month, setMonth] = useState(
+    currentUser?.userInfo?.dateOfBirth
+      ? (new Date(currentUser.userInfo.dateOfBirth).getMonth() + 1)
+          .toString()
+          .padStart(2, "0")
+      : (defaultDob.getMonth() + 1).toString().padStart(2, "0"),
+  );
+  const [year, setYear] = useState(
+    currentUser?.userInfo?.dateOfBirth
+      ? new Date(currentUser.userInfo.dateOfBirth).getFullYear().toString()
+      : defaultDob.getFullYear().toString(),
+  );
 
   const handleProfilePictureUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -144,19 +168,15 @@ export default function ProfileDialog({
       fullName: displayName,
       gender: gender,
       dateOfBirth: dateOfBirth,
-      bio: currentUser?.userInfo?.bio || undefined,
+      bio: bio,
     });
 
     if (result.success) {
       toast.success("Thông tin cá nhân đã được cập nhật thành công");
       setIsEditing(false);
 
-      // Cập nhật lại user trong component
-      if (onOpenChange) {
-        // Đóng và mở lại dialog để refresh dữ liệu
-        onOpenChange(false);
-        setTimeout(() => onOpenChange(true), 100);
-      }
+      // Không cần đóng và mở lại dialog vì dữ liệu đã được cập nhật trong store
+      // và component sẽ tự động render lại với dữ liệu mới
     } else {
       toast.error(result.error || "Cập nhật thông tin cá nhân thất bại");
     }
@@ -213,6 +233,17 @@ export default function ProfileDialog({
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     className="h-10"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="bio">Giới thiệu</Label>
+                  <Input
+                    id="bio"
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    className="h-10"
+                    placeholder="Thêm giới thiệu về bạn"
                   />
                 </div>
 

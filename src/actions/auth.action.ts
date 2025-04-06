@@ -2,6 +2,7 @@
 import axiosInstance from "@/lib/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { DeviceType } from "@/types/base";
+import { isEmail } from "@/utils/helpers";
 
 export async function initiateRegistration(email: string) {
   try {
@@ -89,11 +90,6 @@ export async function login(
   }
 }
 
-function isEmail(input: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(input);
-}
-
 export async function logout() {
   try {
     const refreshToken = useAuthStore.getState().refreshToken;
@@ -169,10 +165,10 @@ export async function refreshToken() {
 export async function initiateForgotPassword(identifier: string) {
   try {
     // Kiểm tra xem identifier là email hay số điện thoại
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+    const isEmailFormat = isEmail(identifier);
 
     const response = await axiosInstance.post("/auth/forgot-password", {
-      [isEmail ? "email" : "phoneNumber"]: identifier,
+      [isEmailFormat ? "email" : "phoneNumber"]: identifier,
     });
     const { resetId } = response.data;
 
