@@ -1,6 +1,20 @@
-// Original source file: src/app/%28protected%29/dashboard/page.tsx
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Page() {
-  return redirect("/dashboard/chat");
+  const router = useRouter();
+
+  useEffect(() => {
+    // Sử dụng router.push thay vì redirect để tránh vòng lặp
+    router.push("/dashboard/chat");
+  }, [router]);
+
+  // Hiển thị màn hình loading trong khi chuyển hướng
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+    </div>
+  );
 }

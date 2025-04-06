@@ -50,9 +50,11 @@ export default function Sidebar() {
             <Avatar className="cursor-pointer">
               <AvatarImage
                 src={
-                  user?.userInfo?.profilePictureUrl ||
-                  ` https://i.ibb.co/XxXXczsK/480479681-599145336423941-8941882180530449347-n.jpg`
+                  user?.userInfo?.profilePictureUrl
+                    ? `${user.userInfo.profilePictureUrl}?t=${new Date().getTime()}`
+                    : `https://i.ibb.co/XxXXczsK/480479681-599145336423941-8941882180530449347-n.jpg`
                 }
+                key={user?.userInfo?.profilePictureUrl || "default-avatar"}
               />
               <AvatarFallback>NT</AvatarFallback>
             </Avatar>

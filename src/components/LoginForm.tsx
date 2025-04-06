@@ -7,11 +7,19 @@ import { DeviceType } from "@/types/base";
 import * as UAParser from "ua-parser-js";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
+import ForgotPasswordFlow from "./ForgotPasswordFlow";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 // Hàm để xác định deviceType dựa trên userAgent
 const getDeviceInfo = () => {
   if (typeof window === "undefined") {
-    return { deviceType: DeviceType.OTHER, deviceName: "Unknown" };
+    return { deviceType: DeviceType.OTHER, deviceName: "Dell Latitude 5290" };
   }
 
   const parser = new UAParser.UAParser();
@@ -33,7 +41,8 @@ const getDeviceInfo = () => {
   }
 
   // Lấy deviceName
-  const deviceName = result.device.model || result.os.name || "Unknown";
+  const deviceName =
+    result.device.model || result.os.name || "Dell Latitude 5290";
 
   return { deviceType, deviceName };
 };
@@ -41,7 +50,8 @@ const getDeviceInfo = () => {
 export default function LoginForm() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
-  const [showSetPasswordForm, setShowSetPasswordForm] = useState(false);
+  const [showForgotPasswordDialog, setShowForgotPasswordDialog] =
+    useState(false);
   const { login } = useAuthStore();
   const router = useRouter();
 
@@ -73,46 +83,20 @@ export default function LoginForm() {
     }
   };
 
-  const handleSelect = (currentValue: string) => {
-    if (currentValue === "forget-password") {
-      setShowSetPasswordForm(true);
-    } else {
-      setShowSetPasswordForm(false);
-    }
+  const handleForgotPassword = () => {
+    setShowForgotPasswordDialog(true);
+  };
+
+  const handleForgotPasswordComplete = () => {
+    setShowForgotPasswordDialog(false);
+    toast.success(
+      "Password has been reset. You can now log in with your new password.",
+    );
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full">
-      {showSetPasswordForm ? (
-        <div className="flex flex-col gap-2 justify-center items-center">
-          <p className="text-center mb-3 text-sm sm:text-base">
-            Nhập số điện thoại của bạn
-          </p>
-          <div className="flex items-center gap-2 border-b border-gray-200 mb-3 w-full max-w-[350px] mx-auto">
-            <Smartphone className="w-5 h-5w-4 h-4 sm:w-5 sm:h-5" />
-            <Input
-              className="w-full h-[40px] sm:h-[50px]"
-              type="text"
-              name="phoneNumber"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              placeholder="Số điện thoại"
-              required
-            />
-          </div>
-          <Button className="w-full max-w-[373px] h-[40px] sm:h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3">
-            Tiếp tục
-          </Button>
-
-          <a
-            className="cursor-pointer self-start hover:text-[#80c7f9] hover:underline hover:underline-offset-2 text-sm sm:text-base"
-            onClick={() => handleSelect("back")}
-          >
-            {" "}
-            &lt;&lt; Quay lại
-          </a>
-        </div>
-      ) : (
+    <>
+      <form onSubmit={handleSubmit} className="w-full">
         <div className="flex flex-col gap-2 justify-center items-center">
           <div className="flex items-center gap-2 border-b border-gray-200 mb-3 w-full max-w-[350px] mx-auto">
             <Smartphone className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -147,12 +131,29 @@ export default function LoginForm() {
 
           <a
             className="cursor-pointer text-sm sm:text-base hover:underline"
-            onClick={() => handleSelect("forget-password")}
+            onClick={handleForgotPassword}
           >
             Quên mật khẩu
           </a>
         </div>
-      )}
-    </form>
+      </form>
+
+      <Dialog
+        open={showForgotPasswordDialog}
+        onOpenChange={setShowForgotPasswordDialog}
+      >
+        <DialogContent className="sm:max-w-[500px] p-6">
+          <DialogHeader>
+            <DialogTitle className="text-center text-xl font-semibold mb-2">
+              Quên mật khẩu
+            </DialogTitle>
+            <DialogDescription className="text-center">
+              Làm theo các bước để đặt lại mật khẩu của bạn
+            </DialogDescription>
+          </DialogHeader>
+          <ForgotPasswordFlow onComplete={handleForgotPasswordComplete} />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

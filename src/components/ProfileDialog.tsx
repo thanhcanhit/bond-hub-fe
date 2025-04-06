@@ -28,10 +28,15 @@ import {
   UserMinus,
   Users,
 } from "lucide-react";
-import { User, Gender, UserInfo } from "@/types/base";
+import { User } from "@/types/base";
 import Image from "next/image";
-import { useState, useRef } from "react";
-import { updateProfilePicture } from "@/actions/user.action";
+import { useState, useRef, useEffect } from "react";
+import {
+  updateProfilePicture,
+  updateCoverImage,
+  updateUserBasicInfo,
+} from "@/actions/user.action";
+import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import styles from "./ProfileDialog.module.css";
 import { AnimatePresence, motion } from "framer-motion";
@@ -57,19 +62,44 @@ export default function ProfileDialog({
 
   const [isUploading, setIsUploading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const profilePictureInputRef = useRef<HTMLInputElement>(null);
+
+  // Lấy user từ store để luôn có dữ liệu mới nhất
+  const storeUser = useAuthStore((state) => state.user);
+
+  // Sử dụng user từ store nếu đang xem profile của chính mình
+  const currentUser = isOwnProfile && storeUser ? storeUser : user;
 
   // Form state for editing profile
   const [displayName, setDisplayName] = useState(
-    user?.userInfo?.fullName || "",
+    currentUser?.userInfo?.fullName || "",
   );
   const [gender, setGender] = useState<string>(
-    user?.userInfo?.gender || "MALE",
+    currentUser?.userInfo?.gender || "MALE",
   );
 
+  // Cập nhật form state khi user thay đổi
+  useEffect(() => {
+    if (currentUser) {
+      setDisplayName(currentUser.userInfo?.fullName || "");
+      setGender(currentUser.userInfo?.gender || "MALE");
+
+      // Chỉ cập nhật URL hình ảnh nếu chưa được cập nhật trước đó
+      if (!profileImageUrl) {
+        setProfileImageUrl(currentUser.userInfo?.profilePictureUrl || null);
+      }
+
+      if (!coverImageUrl) {
+        setCoverImageUrl(currentUser.userInfo?.coverImgUrl || null);
+      }
+    }
+  }, [currentUser, profileImageUrl, coverImageUrl]);
+
   // Parse date of birth into day, month, year
-  const dob = user?.userInfo?.dateOfBirth
-    ? new Date(user.userInfo.dateOfBirth)
+  const dob = currentUser?.userInfo?.dateOfBirth
+    ? new Date(currentUser.userInfo.dateOfBirth)
     : new Date("2003-11-03");
   const [day, setDay] = useState(dob.getDate().toString().padStart(2, "0"));
   const [month, setMonth] = useState(
@@ -89,8 +119,13 @@ export default function ProfileDialog({
 
     try {
       const result = await updateProfilePicture(file);
-      if (result.success) {
-        toast.success("Cập nhật ảnh đại diện thành công");
+      if (result.success && result.url) {
+        toast.success(result.message || "Cập nhật ảnh đại diện thành công");
+
+        // Cập nhật URL hình ảnh mới
+        setProfileImageUrl(result.url + "?t=" + new Date().getTime());
+
+        // Không cần đóng và mở lại dialog nữa vì đã cập nhật trực tiếp state
       } else {
         toast.error(result.error || "Cập nhật ảnh đại diện thất bại");
       }
@@ -102,27 +137,33 @@ export default function ProfileDialog({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Create date from day, month, year
     const dateOfBirth = new Date(`${year}-${month}-${day}`);
 
-    // Create updated user object
-    const updatedUser: Partial<User> = {
-      userInfo: {
-        ...user?.userInfo,
-        fullName: displayName,
-        gender: gender as Gender,
-        dateOfBirth,
-      } as UserInfo,
-    };
+    // Call API to update user basic info
+    const result = await updateUserBasicInfo({
+      fullName: displayName,
+      gender: gender,
+      dateOfBirth: dateOfBirth,
+      bio: currentUser?.userInfo?.bio || undefined,
+    });
 
-    // Here you would typically call an API to update the user
-    console.log("Updating user:", updatedUser);
+    if (result.success) {
+      toast.success("Profile updated successfully");
+      setIsEditing(false);
 
-    toast.success("Profile updated successfully");
-    setIsEditing(false);
+      // Cập nhật lại user trong component
+      if (onOpenChange) {
+        // Đóng và mở lại dialog để refresh dữ liệu
+        onOpenChange(false);
+        setTimeout(() => onOpenChange(true), 100);
+      }
+    } else {
+      toast.error(result.error || "Failed to update profile");
+    }
   };
 
   // Generate options for day, month, year selects
@@ -140,7 +181,7 @@ export default function ProfileDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
-        className={`sm:max-w-[425px] h-auto !p-0 mt-0 mb-16 max-h-[90vh] overflow-y-auto !rounded-none ${styles.dialogContent} ${styles.scrollHidden}`}
+        className={`sm:max-w-[425px] h-auto !p-0 mt-0 mb-16 max-h-[90vh] overflow-y-auto rounded-md ${styles.dialogContent} ${styles.scrollHidden}`}
       >
         <AnimatePresence mode="wait">
           {isEditing && isOwnProfile ? (
@@ -283,14 +324,72 @@ export default function ProfileDialog({
                   <div className="relative w-full h-[180px] bg-gray-200">
                     <Image
                       src={
-                        user?.userInfo?.coverImgUrl ||
-                        "https://i.ibb.co/yncCwjgj/default-cover.jpg"
+                        coverImageUrl ||
+                        (currentUser?.userInfo?.coverImgUrl
+                          ? `${currentUser.userInfo.coverImgUrl}?t=${new Date().getTime()}`
+                          : "https://i.ibb.co/yncCwjgj/default-cover.jpg")
                       }
                       alt="Cover Photo"
                       fill
                       className="object-cover h-full w-full"
                       priority={true}
+                      key={
+                        currentUser?.userInfo?.coverImgUrl || "default-cover"
+                      }
+                      unoptimized={true}
                     />
+                    {isOwnProfile && (
+                      <div className="absolute bottom-2 right-2">
+                        <input
+                          type="file"
+                          id="cover-image-upload"
+                          className="hidden"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            if (!e.target.files || e.target.files.length === 0)
+                              return;
+                            const file = e.target.files[0];
+                            try {
+                              const result = await updateCoverImage(file);
+                              if (result.success && result.url) {
+                                toast.success(
+                                  result.message ||
+                                    "Cover image updated successfully",
+                                );
+
+                                // Cập nhật URL hình ảnh mới
+                                setCoverImageUrl(
+                                  result.url + "?t=" + new Date().getTime(),
+                                );
+
+                                // Không cần đóng và mở lại dialog nữa vì đã cập nhật trực tiếp state
+                              } else {
+                                toast.error(
+                                  result.error ||
+                                    "Failed to update cover image",
+                                );
+                              }
+                            } catch {
+                              toast.error(
+                                "An error occurred while updating cover image",
+                              );
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="bg-white/80 hover:bg-white rounded-full p-2 h-8 w-8 flex items-center justify-center"
+                          onClick={() =>
+                            document
+                              .getElementById("cover-image-upload")
+                              ?.click()
+                          }
+                        >
+                          <Camera className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -300,12 +399,18 @@ export default function ProfileDialog({
                     <Avatar className="h-16 w-16 border-2 border-white">
                       <AvatarImage
                         src={
-                          user?.userInfo?.profilePictureUrl ||
-                          "https://i.ibb.co/XxXXczsK/480479681-599145336423941-8941882180530449347-n.jpg"
+                          profileImageUrl ||
+                          (currentUser?.userInfo?.profilePictureUrl
+                            ? `${currentUser.userInfo.profilePictureUrl}?t=${new Date().getTime()}`
+                            : "https://i.ibb.co/XxXXczsK/480479681-599145336423941-8941882180530449347-n.jpg")
+                        }
+                        key={
+                          currentUser?.userInfo?.profilePictureUrl ||
+                          "default-avatar"
                         }
                       />
                       <AvatarFallback>
-                        {user?.userInfo?.fullName?.charAt(0)}
+                        {currentUser?.userInfo?.fullName?.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
                     {isOwnProfile && (
@@ -334,7 +439,7 @@ export default function ProfileDialog({
                   </div>
                   <div className="flex items-center mt-2">
                     <h3 className="text-base font-semibold">
-                      {user?.userInfo?.fullName || "Như Tâm"}
+                      {currentUser?.userInfo?.fullName || "Như Tâm"}
                     </h3>
                     {isOwnProfile && (
                       <Button
@@ -365,15 +470,15 @@ export default function ProfileDialog({
                     <div className="grid grid-cols-[100px_1fr] gap-1">
                       <span className="text-xs text-gray-500">Bio</span>
                       <span className="text-xs text-left">
-                        {user?.userInfo?.bio || "Test bio"}
+                        {currentUser?.userInfo?.bio || "Test bio"}
                       </span>
                     </div>
                     <div className="grid grid-cols-[100px_1fr] gap-1">
                       <span className="text-xs text-gray-500">Gender</span>
                       <span className="text-xs text-left">
-                        {user?.userInfo?.gender === "FEMALE"
+                        {currentUser?.userInfo?.gender === "FEMALE"
                           ? "Nữ"
-                          : user?.userInfo?.gender === "MALE"
+                          : currentUser?.userInfo?.gender === "MALE"
                             ? "Nam"
                             : "Khác"}
                       </span>
@@ -381,9 +486,9 @@ export default function ProfileDialog({
                     <div className="grid grid-cols-[100px_1fr] gap-1">
                       <span className="text-xs text-gray-500">Birthday</span>
                       <span className="text-xs text-left">
-                        {user?.userInfo?.dateOfBirth
+                        {currentUser?.userInfo?.dateOfBirth
                           ? new Date(
-                              user.userInfo.dateOfBirth,
+                              currentUser.userInfo.dateOfBirth,
                             ).toLocaleDateString("vi-VN", {
                               day: "2-digit",
                               month: "2-digit",
@@ -397,7 +502,7 @@ export default function ProfileDialog({
                         Phone number
                       </span>
                       <span className="text-xs text-left">
-                        {user?.phoneNumber || "+84 336 551 833"}
+                        {currentUser?.phoneNumber || "+84 336 551 833"}
                       </span>
                     </div>
                     {isOwnProfile && (
@@ -413,28 +518,30 @@ export default function ProfileDialog({
                 </div>
 
                 {/* Photos/Videos - Only shown for other users' profiles */}
-                {!isOwnProfile && user?.posts && user.posts.length > 0 && (
-                  <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 mt-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <h4 className="font-medium text-base">Photos/Videos</h4>
-                      <Button variant="link" className="text-sm p-0 h-auto">
-                        View all
-                      </Button>
+                {!isOwnProfile &&
+                  currentUser?.posts &&
+                  currentUser.posts.length > 0 && (
+                    <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 mt-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <h4 className="font-medium text-base">Photos/Videos</h4>
+                        <Button variant="link" className="text-sm p-0 h-auto">
+                          View all
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1">
+                        {Array(8)
+                          .fill(0)
+                          .map((_, i) => (
+                            <div
+                              key={i}
+                              className="aspect-square bg-gray-200 rounded-md overflow-hidden"
+                            >
+                              <div className="w-full h-full bg-gray-300"></div>
+                            </div>
+                          ))}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-1">
-                      {Array(8)
-                        .fill(0)
-                        .map((_, i) => (
-                          <div
-                            key={i}
-                            className="aspect-square bg-gray-200 rounded-md overflow-hidden"
-                          >
-                            <div className="w-full h-full bg-gray-300"></div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
+                  )}
 
                 {/* Additional Options for Other User's Profile */}
                 {!isOwnProfile && (

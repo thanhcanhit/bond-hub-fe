@@ -126,11 +126,22 @@ export const useAuthStore = create<AuthState>()(
       },
       setLoading: (loading: boolean) => set({ isLoading: loading }),
       updateUser: (updatedUser) =>
-        set((state) => ({
-          user: state.user
-            ? { ...state.user, ...updatedUser, userInfo: state.user.userInfo }
-            : null,
-        })),
+        set((state) => {
+          if (!state.user) return { user: null };
+
+          // Merge userInfo properly if it exists in updatedUser
+          const mergedUserInfo = updatedUser.userInfo
+            ? { ...state.user.userInfo, ...updatedUser.userInfo }
+            : state.user.userInfo;
+
+          return {
+            user: {
+              ...state.user,
+              ...updatedUser,
+              userInfo: mergedUserInfo,
+            },
+          };
+        }),
       logout: async () => {
         const result = await logoutAction();
         if (result.success) {
@@ -166,7 +177,6 @@ export const useAuthStore = create<AuthState>()(
           state.setHasHydrated(true);
         }
       },
-      skipHydration: true,
     },
   ),
 );

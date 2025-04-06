@@ -103,8 +103,8 @@ export async function updateProfilePicture(file: File) {
     formData.append("file", file);
 
     // Change the content type to multipart/form-data
-    const response = await axiosInstance.post(
-      "/auth/profile-picture",
+    const response = await axiosInstance.put(
+      "/auth/update-profile-picture",
       formData,
       {
         headers: {
@@ -113,15 +113,23 @@ export async function updateProfilePicture(file: File) {
       },
     );
 
-    const updatedUser = response.data;
+    const { message, url } = response.data;
 
     // Update user in store
     const currentUser = useAuthStore.getState().user;
-    if (currentUser) {
+    if (currentUser && currentUser.userInfo) {
+      // Cập nhật URL ảnh đại diện mới trong store
+      const updatedUser = {
+        ...currentUser,
+        userInfo: {
+          ...currentUser.userInfo,
+          profilePictureUrl: url,
+        },
+      };
       useAuthStore.getState().updateUser(updatedUser);
     }
 
-    return { success: true, user: updatedUser };
+    return { success: true, message, url };
   } catch (error) {
     console.error("Update profile picture failed:", error);
     return {
@@ -143,23 +151,68 @@ export async function updateCoverImage(file: File) {
     formData.append("file", file);
 
     // Change the content type to multipart/form-data
-    const response = await axiosInstance.post("/auth/cover-image", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
+    const response = await axiosInstance.put(
+      "/auth/update-cover-image",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
       },
-    });
+    );
 
-    const updatedUser = response.data;
+    const { message, url } = response.data;
 
     // Update user in store
     const currentUser = useAuthStore.getState().user;
-    if (currentUser) {
+    if (currentUser && currentUser.userInfo) {
+      // Cập nhật URL ảnh bìa mới trong store
+      const updatedUser = {
+        ...currentUser,
+        userInfo: {
+          ...currentUser.userInfo,
+          coverImgUrl: url,
+        },
+      };
       useAuthStore.getState().updateUser(updatedUser);
     }
 
-    return { success: true, user: updatedUser };
+    return { success: true, message, url };
   } catch (error) {
     console.error("Update cover image failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// Cập nhật thông tin cơ bản của người dùng
+export async function updateUserBasicInfo(userData: {
+  fullName?: string;
+  phoneNumber?: string;
+  bio?: string;
+  gender?: string;
+  dateOfBirth?: Date;
+}) {
+  try {
+    const currentUser = useAuthStore.getState().user;
+    if (!currentUser || !currentUser.id) {
+      throw new Error("User not authenticated");
+    }
+
+    const response = await axiosInstance.put(
+      `/auth/update-basic-info`,
+      userData,
+    );
+    const updatedUser = response.data;
+
+    // Cập nhật lại thông tin trong store
+    useAuthStore.getState().updateUser(updatedUser);
+
+    return { success: true, user: updatedUser };
+  } catch (error) {
+    console.error("Update user basic info failed:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

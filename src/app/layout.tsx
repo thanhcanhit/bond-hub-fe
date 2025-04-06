@@ -1,5 +1,6 @@
 import { Toaster } from "sonner";
 import "./globals.css";
+import AuthProvider from "@/providers/AuthProvider";
 
 export default function RootLayout({
   children,
@@ -12,7 +13,7 @@ export default function RootLayout({
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Vodka</title>
-        <link rel="icon" href="/vodka.jpg" />
+        <link rel="icon" href="/favicon.ico" />
       </head>
       <body suppressHydrationWarning>
         <Toaster
@@ -25,7 +26,9 @@ export default function RootLayout({
             },
           }}
         />
-        <main className="min-h-screen">{children}</main>
+        <AuthProvider>
+          <main className="min-h-screen">{children}</main>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -161,10 +161,13 @@ export async function refreshToken() {
   }
 }
 
-export async function initiateForgotPassword(phoneNumber: string) {
+export async function initiateForgotPassword(identifier: string) {
   try {
+    // Kiểm tra xem identifier là email hay số điện thoại
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+
     const response = await axiosInstance.post("/auth/forgot-password", {
-      phoneNumber,
+      [isEmail ? "email" : "phoneNumber"]: identifier,
     });
     const { resetId } = response.data;
 
@@ -203,6 +206,50 @@ export async function resetPassword(resetId: string, newPassword: string) {
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Reset password failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// Thay đổi mật khẩu (khi đã đăng nhập)
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+) {
+  try {
+    const response = await axiosInstance.post("/auth/change-password", {
+      currentPassword,
+      newPassword,
+    });
+
+    return {
+      success: true,
+      message: response.data.message || "Password changed successfully",
+    };
+  } catch (error) {
+    console.error("Change password failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// Xác nhận đặt lại mật khẩu với token (qua email)
+export async function confirmResetPassword(token: string, newPassword: string) {
+  try {
+    const response = await axiosInstance.post("/auth/reset-password/confirm", {
+      token,
+      newPassword,
+    });
+    return {
+      success: true,
+      message: response.data.message || "Password has been reset successfully",
+    };
+  } catch (error) {
+    console.error("Confirm reset password failed:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
