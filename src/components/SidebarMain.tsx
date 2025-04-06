@@ -8,18 +8,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+// Sử dụng react-icons thay vì lucide-react
 import {
-  Compass,
-  HelpCircle,
-  LogOut,
-  LucideContactRound,
-  MessageCircleMore,
-  Settings,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
+  BsChatDotsFill,
+  BsCompass,
+  BsGear,
+  BsDoorOpenFill,
+} from "react-icons/bs";
+import { RiContactsLine } from "react-icons/ri";
+import { useRouter, usePathname } from "next/navigation";
 import SettingsDialog from "./SettingDialog";
 
 import { useState } from "react";
@@ -27,11 +31,11 @@ import ProfileDialog from "./ProfileDialog";
 
 export default function Sidebar() {
   const { logout: logoutFromStore, user } = useAuthStore();
-  console.log("user", user);
-  // const user = useAuthStore((state) => state.user);
   const router = useRouter();
+  const pathname = usePathname();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     const result = await logoutFromStore();
@@ -42,12 +46,17 @@ export default function Sidebar() {
     }
   };
 
+  // Hàm kiểm tra đường dẫn hiện tại để xác định mục đang được chọn
+  const isActive = (path: string) => {
+    return pathname.startsWith(path);
+  };
+
   return (
-    <div className="w-16 bg-[#005ae0] text-white flex flex-col items-center space-y-6">
-      <div className="mt-5">
+    <div className="w-16 bg-[#005ae0] text-white flex flex-col items-center py-0 space-y-0 shadow-lg">
+      <div className="mt-8 mb-6">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Avatar className="cursor-pointer">
+            <Avatar className="cursor-pointer h-12 w-12 border-2 border-white hover:border-blue-300 transition-all">
               <AvatarImage
                 src={
                   user?.userInfo?.profilePictureUrl
@@ -91,52 +100,105 @@ export default function Sidebar() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <Button
-        variant="ghost"
-        className="text-white focus:bg-[#005ae0]"
-        onClick={() => router.push("/dashboard/chat")}
-      >
-        <MessageCircleMore className="h-20 w-20" />
-      </Button>
-      <Button
-        variant="ghost"
-        className="text-white focus:bg-[#005ae0]"
-        onClick={() => router.push("/dashboard/contact")}
-      >
-        <LucideContactRound className="h-20 w-20" />
-      </Button>
-      <Button
-        variant="ghost"
-        className="text-white focus:bg-[#005ae0]"
-        onClick={() => router.push("/dashboard/post")}
-      >
-        <Compass className="h-20 w-20" />
-      </Button>
+
+      {/* Main navigation buttons */}
+      <div className="flex flex-col items-center w-full space-y-2">
+        <div
+          className={`relative group ${isActive("/dashboard/chat") ? "active-nav-item" : ""}`}
+        >
+          <Button
+            variant="ghost"
+            className={`sidebar-nav-button flex items-center justify-center ${isActive("/dashboard/chat") ? "bg-[#0045b8]" : ""}`}
+            onClick={() => router.push("/dashboard/chat")}
+          >
+            <BsChatDotsFill size={32} />
+          </Button>
+        </div>
+
+        <div
+          className={`relative group ${isActive("/dashboard/contact") ? "active-nav-item" : ""}`}
+        >
+          <Button
+            variant="ghost"
+            className={`sidebar-nav-button flex items-center justify-center ${isActive("/dashboard/contact") ? "bg-[#0045b8]" : ""}`}
+            onClick={() => router.push("/dashboard/contact")}
+          >
+            <RiContactsLine size={32} />
+          </Button>
+        </div>
+
+        <div
+          className={`relative group ${isActive("/dashboard/post") ? "active-nav-item" : ""}`}
+        >
+          <Button
+            variant="ghost"
+            className={`sidebar-nav-button flex items-center justify-center ${isActive("/dashboard/post") ? "bg-[#0045b8]" : ""}`}
+            onClick={() => router.push("/dashboard/post")}
+          >
+            <BsCompass size={32} />
+          </Button>
+        </div>
+      </div>
 
       <div className="flex-1" />
 
-      <div className="mb-5 flex flex-col items-center space-y-4">
-        <Button
-          variant="ghost"
-          className="text-red-400 hover:bg-[#0045b8] focus:bg-[#0045b8]"
-          onClick={handleLogout}
+      <div className="flex flex-col items-center w-full space-y-0">
+        <div
+          className={`relative group ${isSettingsMenuOpen ? "active-nav-item" : ""}`}
         >
-          <LogOut className="h-6 w-6" />
-        </Button>
-        <Button
-          variant="ghost"
-          className="text-white hover:bg-[#0045b8] focus:bg-[#0045b8]"
-          onClick={() => setIsSettingsOpen(true)}
-        >
-          <Settings className="h-6 w-6" />
-        </Button>
-        <Button
-          variant="ghost"
-          className="text-white hover:bg-[#0045b8] focus:bg-[#0045b8]"
-          onClick={() => router.push("/dashboard/help")}
-        >
-          <HelpCircle className="h-6 w-6" />
-        </Button>
+          <DropdownMenu
+            open={isSettingsMenuOpen}
+            onOpenChange={setIsSettingsMenuOpen}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className={`sidebar-nav-button flex items-center justify-center`}
+              >
+                <BsGear size={32} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              className="w-56 ml-8"
+              side="top"
+              align="center"
+              sideOffset={5}
+              alignOffset={0}
+            >
+              <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
+                Thông tin tài khoản
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+                Cài đặt
+              </DropdownMenuItem>
+              <DropdownMenuItem>Dữ liệu</DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Ngôn ngữ</DropdownMenuSubTrigger>
+                <DropdownMenuPortal>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem>Tiếng Việt</DropdownMenuItem>
+                    <DropdownMenuItem>Tiếng Anh</DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+              </DropdownMenuSub>
+              <DropdownMenuItem>Hỗ trợ</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="text-red-500">
+                Đăng xuất
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <div className={`relative group`}>
+          <Button
+            variant="ghost"
+            className={`sidebar-nav-button flex items-center justify-center text-red-400`}
+            onClick={handleLogout}
+          >
+            <BsDoorOpenFill size={32} />
+          </Button>
+        </div>
       </div>
 
       <ProfileDialog

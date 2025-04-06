@@ -130,3 +130,31 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Sidebar styles */
+.active-nav-item button {
+  background-color: #0841a3;
+}
+
+/* Sidebar animation effects */
+.sidebar-nav-button {
+  transition: all 0.15s ease-in-out;
+}
+
+.sidebar-nav-button:hover {
+  background-color: #0841a3;
+}
+
+/* Sidebar icon styles */
+.sidebar-nav-button svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+/* Zalo-like sidebar styles */
+.sidebar-nav-button {
+  width: 100% !important;
+  height: auto !important;
+  padding: 12px !important;
+  border-radius: 6 !important;
+}
