@@ -1,46 +1,74 @@
-// Code: src/app/%28protected%29/dashboard/chat/page.tsx
 "use client";
 import { useEffect, useState } from "react";
-import { Search, UserPlus, Users } from "lucide-react";
+import ContactList from "@/components/chat/ContactList";
+import ChatArea from "@/components/chat/ChatArea";
+import ContactInfo from "@/components/chat/ContactInfo";
+import { currentUser, mockContacts } from "@/data/mockData";
+import { User, UserInfo } from "@/types/base";
 
-import { Input } from "@/components/ui/input";
-// import { Contact } from "@/types/auth";
-export default function CoreUI() {
-  const [isRightSidebarCollapsed] = useState(false);
+export default function ChatPage() {
   const [isTabContentVisible, setIsTabContentVisible] = useState(true);
-  // const [activeFilter, setActiveFilter] = useState("friends");
-  // const currentUserId = user?.id || null;
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(
+    null,
+  );
+  const [showContactInfo, setShowContactInfo] = useState(false);
+
+  // Handle window resize for responsive layout
   useEffect(() => {
     const handleResize = () => {
-      setIsTabContentVisible(window.innerWidth >= 1024);
+      setIsTabContentVisible(window.innerWidth >= 768);
+      if (window.innerWidth < 1024) {
+        setShowContactInfo(false);
+      }
     };
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Find the selected contact
+  const selectedContact = selectedContactId
+    ? mockContacts.find(
+        (contact) => contact.contactUser.id === selectedContactId,
+      )?.contactUser
+    : null;
+
+  // Toggle contact info sidebar
+  const toggleContactInfo = () => {
+    setShowContactInfo((prev) => !prev);
+  };
+
   return (
-    <div className="flex h-full bg-gray-100">
-      {/* Left Sidebar - Chat List */}
+    <div className="flex h-full w-full bg-gray-100 overflow-hidden">
+      {/* Left Sidebar - Contact List */}
       <div
-        className={`w-[340px] bg-white border-r flex flex-col ${isTabContentVisible ? "flex" : "hidden"}`}
+        className={`w-[340px] bg-white border-r flex flex-col overflow-hidden ${isTabContentVisible ? "flex" : "hidden"}`}
       >
-        <div className="p-4 border-b flex items-center justify-between">
-          <div className="flex items-center space-x-2 border bg-gray-200 rounded-md pl-2 h-8">
-            <Search className="h-4 w-4" />
-            <Input placeholder="Tìm kiếm" />
-          </div>
-          <UserPlus className="h-4 w-4" />
-          <Users className="h-4 w-4" />
-        </div>
-        <div className="flex-1 overflow-y-scroll scroll-container custom-scrollbar"></div>
+        <ContactList
+          onSelectContact={setSelectedContactId}
+          selectedContactId={selectedContactId}
+        />
       </div>
 
       {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <ChatArea
+          currentUser={currentUser}
+          selectedContact={
+            selectedContact as (User & { userInfo: UserInfo }) | null
+          }
+          onToggleInfo={toggleContactInfo}
+        />
+      </div>
+
+      {/* Right Sidebar - Contact Info */}
       <div
-        className={`flex-1 flex flex-col ${isRightSidebarCollapsed ? "w-full" : "w-[calc(100%-344px)]"} transition-all duration-300 ${isTabContentVisible ? "md:w-[calc(100%-408px)]" : "w-full"}`}
+        className={`w-[340px] bg-white border-l flex flex-col overflow-hidden transition-all duration-300 ${showContactInfo ? "flex" : "hidden"}`}
       >
-        <div className="flex-1 bg-[#ebecf0] overflow-y-auto"></div>
+        <ContactInfo
+          contact={selectedContact as (User & { userInfo: UserInfo }) | null}
+          onClose={() => setShowContactInfo(false)}
+        />
       </div>
     </div>
   );
