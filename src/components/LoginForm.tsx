@@ -8,6 +8,7 @@ import * as UAParser from "ua-parser-js";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import ForgotPasswordFlow from "./ForgotPasswordFlow";
+import Loading from "./Loading";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,7 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
   const [showForgotPasswordDialog, setShowForgotPasswordDialog] =
     useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuthStore();
   const router = useRouter();
 
@@ -62,6 +64,7 @@ export default function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
     try {
       const { deviceType, deviceName } = getDeviceInfo();
       const isSuccess = await login(
@@ -74,10 +77,12 @@ export default function LoginForm() {
         toast.success("Đăng nhập thành công!");
         router.push("/dashboard");
       } else {
+        setIsLoading(false);
         toast.error("Đăng nhập thất bại! Vui lòng kiểm tra lại thông tin!");
         console.error("Login failed: No response data");
       }
     } catch (error) {
+      setIsLoading(false);
       toast.error("Đăng nhập thất bại! ");
       console.error("Login error:", error);
     }
@@ -96,6 +101,7 @@ export default function LoginForm() {
 
   return (
     <>
+      {isLoading && <Loading />}
       <form onSubmit={handleSubmit} className="w-full">
         <div className="flex flex-col gap-2 justify-center items-center">
           <div className="flex items-center gap-2 border-b border-gray-200 mb-3 w-full max-w-[350px] mx-auto">

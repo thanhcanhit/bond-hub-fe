@@ -4,6 +4,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import SocketProvider from "@/components/SocketProvider";
+import { LoadingWithMessage } from "@/components/Loading";
 
 // Các đường dẫn công khai (không cần đăng nhập)
 const publicPaths = ["/login", "/register", "/"];
@@ -59,11 +60,7 @@ export default function AuthProvider({
 
   // Hiển thị loading trong khi kiểm tra trạng thái xác thực
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <LoadingWithMessage message="Đang chuẩn bị..." />;
   }
 
   return <SocketProvider>{children}</SocketProvider>;
