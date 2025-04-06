@@ -8,7 +8,7 @@ WORKDIR /app
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 COPY package.json package-lock.json* ./
-RUN npm install --frozen-lockfile 
+RUN npm install --frozen-lockfile --legacy-peer-deps
 
 # Xây dựng ứng dụng
 FROM base AS builder
