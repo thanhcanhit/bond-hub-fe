@@ -33,6 +33,7 @@ interface AuthState {
   refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  deviceId: string | null;
   _hasHydrated: boolean;
   setAuth: (user: User, accessToken: string) => void;
   login: (
@@ -57,6 +58,8 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       socket: null,
+      socketId: null,
+      deviceId: null,
       _hasHydrated: false,
       setHasHydrated: (state) => set({ _hasHydrated: state }),
       setAuth: (user: User, accessToken: string) =>
@@ -81,11 +84,13 @@ export const useAuthStore = create<AuthState>()(
             deviceType,
           );
 
+          console.log(result);
           if (result.success) {
             // First set the tokens and basic user data
             set({
               accessToken: result.accessToken,
               refreshToken: result.refreshToken,
+              deviceId: result.deviceId,
               isAuthenticated: true,
               isLoading: false,
             });
@@ -149,6 +154,7 @@ export const useAuthStore = create<AuthState>()(
             user: null,
             accessToken: null,
             refreshToken: null,
+            deviceId: null,
             isAuthenticated: false,
             isLoading: false,
           });
@@ -162,6 +168,7 @@ export const useAuthStore = create<AuthState>()(
             user: null,
             accessToken: null,
             refreshToken: null,
+            deviceId: null,
             isAuthenticated: false,
             isLoading: false,
           });
@@ -174,6 +181,7 @@ export const useAuthStore = create<AuthState>()(
           accessToken,
           refreshToken,
           isAuthenticated: true,
+          // Keep existing deviceId
         });
         // Socket sẽ được cập nhật tự động bởi SocketProvider khi accessToken thay đổi
       },
@@ -187,6 +195,7 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
         user: state.user,
+        deviceId: state.deviceId,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {

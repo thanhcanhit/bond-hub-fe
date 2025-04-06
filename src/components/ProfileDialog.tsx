@@ -4,7 +4,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,8 +56,6 @@ export default function ProfileDialog({
   onChat,
   onCall,
 }: ProfileDialogProps) {
-  console.log("user", user);
-
   const [isUploading, setIsUploading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
@@ -314,7 +311,7 @@ export default function ProfileDialog({
                 <DialogTitle className="text-base font-semibold flex items-center h-10">
                   Thông tin cá nhân
                 </DialogTitle>
-                <DialogClose className="opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"></DialogClose>
+
                 <DialogDescription className="sr-only">
                   Xem và chỉnh sửa thông tin tài khoản của bạn
                 </DialogDescription>
@@ -423,7 +420,7 @@ export default function ProfileDialog({
                   </div>
                   <div className="flex items-center mt-2">
                     <h3 className="text-base font-semibold">
-                      {currentUser?.userInfo?.fullName || "Như Tâm"}
+                      {currentUser?.userInfo?.fullName || ""}
                     </h3>
                   </div>
                 </div>

@@ -77,9 +77,9 @@ export async function login(
     });
     console.log("Login response:", response.data);
 
-    const { user, accessToken, refreshToken } = response.data;
+    const { user, accessToken, refreshToken, deviceId } = response.data;
 
-    return { success: true, user, accessToken, refreshToken };
+    return { success: true, user, accessToken, refreshToken, deviceId };
   } catch (error) {
     console.error("Login failed:", error);
     return {
@@ -120,23 +120,28 @@ export async function logout() {
 export async function refreshToken() {
   try {
     const refreshToken = useAuthStore.getState().refreshToken;
+    const deviceId = useAuthStore.getState().deviceId;
+
     if (!refreshToken) {
       throw new Error("No refresh token available");
     }
 
-    const response = await axiosInstance.post(
-      "/auth/refresh",
-      {},
-      {
-        headers: { "refresh-token": refreshToken },
-      },
-    );
-    const { accessToken, refreshToken: newRefreshToken } = response.data;
+    if (!deviceId) {
+      throw new Error("No device ID available");
+    }
+
+    // Send both refreshToken and deviceId in the request body as required by backend
+    const response = await axiosInstance.post("/auth/refresh", {
+      refreshToken,
+      deviceId,
+    });
+
+    const { accessToken } = response.data;
+    const device = response.data.device;
 
     if (typeof window !== "undefined") {
-      useAuthStore
-        .getState()
-        .setTokens(accessToken, newRefreshToken || refreshToken);
+      // Keep the same refreshToken since backend doesn't return a new one
+      useAuthStore.getState().setTokens(accessToken, refreshToken);
     }
 
     // Cập nhật cookie
@@ -148,7 +153,7 @@ export async function refreshToken() {
       path: "/",
     });
 
-    return { success: true };
+    return { success: true, accessToken, device };
   } catch (error) {
     console.error("Token refresh failed:", error);
     if (typeof window !== "undefined") {
