@@ -1,34 +1,49 @@
-# Sử dụng hình ảnh Node.js chính thức làm cơ sở
-FROM node:18-alpine AS base
+# Sử dụng hình ảnh Node.js làm cơ sở cho quá trình build
+FROM node:20-alpine AS builder
 
 # Thiết lập thư mục làm việc
 WORKDIR /app
 
-# Cài đặt các gói phụ thuộc chỉ khi cần thiết
-FROM base AS deps
-RUN apk add --no-cache libc6-compat python3 make g++
-COPY package.json package-lock.json* ./
-RUN npm install --platform=linux --arch=x64 --frozen-lockfile --legacy-peer-deps
+# Sao chép các tệp package
+COPY package.json package-lock.json ./
 
-# Xây dựng ứng dụng
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
+# Cài đặt các phụ thuộc
+RUN npm ci --legacy-peer-deps --ignore-scripts
+
+# Sao chép mã nguồn
 COPY . .
+
+# Build ứng dụng Next.js
 RUN npm run build
 
-# Chuẩn bị hình ảnh sản phẩm cuối cùng
-FROM base AS runner
+# Hình ảnh cho môi trường production
+FROM node:20-alpine AS runner
+
+# Thiết lập thư mục làm việc
 WORKDIR /app
-ENV NODE_ENV production
 
-# Sao chép các tệp cần thiết từ giai đoạn xây dựng
-COPY --from=builder /app/next.config.js ./
+# Thiết lập biến môi trường cho production
+ENV NODE_ENV=production
+# Thiết lập runtime cho Next.js
+ENV NEXT_RUNTIME=nodejs
+# Thiết lập timeout cho server
+ENV NEXT_SERVER_RESPONSE_TIMEOUT=180000
+
+# Sao chép các tệp cần thiết từ builder
+COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/package-lock.json ./package-lock.json
+COPY --from=builder /app/next.config.ts ./next.config.ts
+COPY --from=builder /app/src ./src
+# Bao gồm tệp .env nếu tồn tại
+COPY --from=builder /app/.env ./.env
 
-# Mở cổng 3000
+# Cài đặt chỉ các phụ thuộc cần thiết cho production
+RUN npm ci  --legacy-peer-deps --ignore-scripts
+
+# Mở cổng mà ứng dụng sẽ chạy
 EXPOSE 3000
 
-# Khởi động ứng dụng
-CMD ["node", "server.js"]
+# Lệnh để khởi động ứng dụng Next.js
+CMD ["npm", "start"]

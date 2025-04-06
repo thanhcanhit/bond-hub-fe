@@ -18,8 +18,6 @@ const nextConfig: NextConfig = {
     ],
   },
   output: "standalone",
-  // Ensure SWC is properly configured
-  swcMinify: true,
   experimental: {
     // Ensure proper SWC compilation
     forceSwcTransforms: true,
