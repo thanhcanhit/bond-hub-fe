@@ -6,9 +6,9 @@ WORKDIR /app
 
 # Cài đặt các gói phụ thuộc chỉ khi cần thiết
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat python3 make g++
 COPY package.json package-lock.json* ./
-RUN npm install --frozen-lockfile --legacy-peer-deps
+RUN npm install --platform=linux --arch=x64 --frozen-lockfile --legacy-peer-deps
 
 # Xây dựng ứng dụng
 FROM base AS builder
