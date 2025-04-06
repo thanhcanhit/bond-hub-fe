@@ -44,6 +44,8 @@ export default function ChangePasswordForm() {
         toast.error(result.error || "Failed to change password");
       }
     } catch (error) {
+      console.log(error);
+
       toast.error("An error occurred while changing password");
     } finally {
       setIsLoading(false);
