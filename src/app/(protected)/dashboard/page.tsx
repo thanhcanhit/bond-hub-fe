@@ -8,7 +8,7 @@ export default function Page() {
 
   useEffect(() => {
     // Sử dụng router.push thay vì redirect để tránh vòng lặp
-    router.push("/dashboard/chat");
+    router.push("/dashboard/chat", { scroll: false });
   }, [router]);
 
   // Hiển thị màn hình loading trong khi chuyển hướng

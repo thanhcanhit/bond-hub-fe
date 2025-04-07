@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 // Sử dụng react-icons thay vì lucide-react
 import { BsChatDotsFill, BsGear, BsDoorOpenFill } from "react-icons/bs";
 import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import SettingsDialog from "./SettingDialog";
 
 import { useState } from "react";
@@ -138,14 +139,15 @@ export default function Sidebar() {
         <div className="flex flex-col items-center w-full space-y-2">
           {navItems.map((item) => (
             <div key={item.path} className="relative group">
-              <Button
-                variant="ghost"
-                className={`flex items-center justify-center text-white p-3 hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white ${isActive(item.path) ? "bg-[#0045b8]" : ""} [&_svg]:!size-7 !h-12 !w-12 !rounded-2sm`}
-                onClick={() => router.push(item.path)}
-                title={item.label}
-              >
-                <item.icon size={40} />
-              </Button>
+              <Link href={item.path} scroll={false}>
+                <Button
+                  variant="ghost"
+                  className={`flex items-center justify-center text-white p-3 hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white ${isActive(item.path) ? "bg-[#0045b8]" : ""} [&_svg]:!size-7 !h-12 !w-12 !rounded-2sm`}
+                  title={item.label}
+                >
+                  <item.icon size={40} />
+                </Button>
+              </Link>
             </div>
           ))}
         </div>

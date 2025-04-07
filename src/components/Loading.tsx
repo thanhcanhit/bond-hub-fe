@@ -1,8 +1,9 @@
 // components/Loading.tsx
-import React from "react";
+import React, { memo } from "react";
 import Image from "next/image";
 
-export default function Loading() {
+// Sử dụng memo để tránh render lại khi không cần thiết
+const Loading = memo(function Loading() {
   return (
     <div className="fixed inset-0 flex flex-col items-center justify-center bg-white z-50">
       <div className="flex flex-col items-center gap-8">
@@ -14,6 +15,8 @@ export default function Loading() {
             height={80}
             alt="Vodka Logo"
             className="w-[200px] h-auto"
+            priority
+            loading="eager"
           />
         </div>
 
@@ -27,10 +30,12 @@ export default function Loading() {
       </div>
     </div>
   );
-}
+});
+
+export default Loading;
 
 // Variant with custom message
-export function LoadingWithMessage({
+export const LoadingWithMessage = memo(function LoadingWithMessage({
   message = "Đang tải...",
 }: {
   message?: string;
@@ -46,6 +51,8 @@ export function LoadingWithMessage({
             height={80}
             alt="Vodka Logo"
             className="w-[200px] h-auto"
+            priority
+            loading="eager"
           />
         </div>
 
@@ -59,4 +66,4 @@ export function LoadingWithMessage({
       </div>
     </div>
   );
-}
+});

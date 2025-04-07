@@ -16,8 +16,20 @@ const nextConfig: NextConfig = {
         pathname: "/**",
       },
     ],
+    // Tối ưu hóa hình ảnh
+    formats: ["image/avif", "image/webp"],
   },
+  // Tối ưu hóa hiệu suất
+  compiler: {
+    removeConsole: process.env.NODE_ENV === "production",
+  },
+  // Tối ưu hóa cho production
   output: "standalone",
+  // Tăng tốc độ chuyển trang
+  experimental: {
+    optimizeCss: true,
+    scrollRestoration: true,
+  },
 };
 
 export default nextConfig;

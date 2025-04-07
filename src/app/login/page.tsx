@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import QrLogin from "@/components/QrLogin/QrLogin";
+import { useSearchParams } from "next/navigation";
 
 import LoginForm from "@/components/LoginForm";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,16 @@ export default function LoginPage() {
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [showRegisterForm, setShowRegisterForm] = useState(false);
   const [open, setOpen] = React.useState(false);
+  const searchParams = useSearchParams();
+
+  // Kiểm tra xem có tham số showRegister trong URL không
+  useEffect(() => {
+    const showRegister = searchParams.get("showRegister");
+    if (showRegister === "true") {
+      setShowLoginForm(true);
+      setShowRegisterForm(true);
+    }
+  }, [searchParams]);
 
   const handleSelect = (currentValue: string) => {
     if (currentValue === "password-login") {
@@ -45,6 +56,8 @@ export default function LoginPage() {
             height={100}
             alt="Vodka Logo"
             className="w-[200px] sm:w-[250px] md:w-[300px] h-auto"
+            priority
+            loading="eager"
           />
           <h2 className="text-center text-sm sm:text-base md:text-lg text-gray-600 whitespace-normal mt-2 max-w-[300px] mx-auto">
             Đăng nhập tài khoản Vodka để kết nối với ứng dụng Vodka Web

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { useAuthStore } from "@/stores/authStore";
 import { useRouter } from "next/navigation";
@@ -9,10 +9,20 @@ export const useSocketConnection = () => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const { accessToken, logout } = useAuthStore();
   const router = useRouter();
+  const socketInitialized = useRef(false);
 
   useEffect(() => {
     // Chỉ kết nối khi có accessToken
     if (!accessToken) {
+      return;
+    }
+
+    // Tránh khởi tạo lại socket nếu đã có và token không thay đổi
+    if (
+      socketInstance &&
+      socketInstance.connected &&
+      socketInitialized.current
+    ) {
       return;
     }
 
@@ -31,13 +41,14 @@ export const useSocketConnection = () => {
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
-        transports: ["websocket", "polling"],
+        transports: ["websocket"], // Chỉ sử dụng websocket để tăng hiệu suất
       },
     );
 
     // Lưu socket instance vào biến global
     socketInstance = newSocket;
     setSocket(newSocket);
+    socketInitialized.current = true;
 
     // Xử lý các sự kiện socket
     newSocket.on("connect", () => {
@@ -63,12 +74,12 @@ export const useSocketConnection = () => {
       logout()
         .then(() => {
           console.log("Logout successful after forceLogout event");
-          router.push("/login");
+          router.push("/login", { scroll: false });
         })
         .catch((error) => {
           console.error("Error during logout after forceLogout event:", error);
           // Chuyển hướng ngay cả khi đăng xuất thất bại
-          router.push("/login");
+          router.push("/login", { scroll: false });
         });
     });
 
@@ -78,6 +89,7 @@ export const useSocketConnection = () => {
       newSocket.disconnect();
       if (socketInstance === newSocket) {
         socketInstance = null;
+        socketInitialized.current = false;
       }
     };
   }, [accessToken, logout, router]);
