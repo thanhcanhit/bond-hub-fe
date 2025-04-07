@@ -10,6 +10,8 @@ import {
   CalendarIcon,
   UserRound,
   Venus,
+  Mars,
+  VenusAndMars,
   //CircleUserRound
 } from "lucide-react";
 import {
@@ -274,7 +276,7 @@ export default function RegisterForm() {
                       }
                     }
                   }}
-                  className="h-12 pr-10 border-gray-300"
+                  className="h-12 pr-10 border-gray-300 focus:border-none focus:outline-none focus:ring-0 focus-visible:ring-0"
                 />
                 <Popover>
                   <PopoverTrigger asChild>
@@ -438,8 +440,16 @@ export default function RegisterForm() {
               </div>
             </div>
             <Select value={gender} onValueChange={setGender}>
-              <SelectTrigger className="w-full h-12 font-normal text-left justify-start gap-1">
-                <Venus className="w-5 h-5 flex-shrink-0" />
+              <SelectTrigger className="w-full h-12 font-normal text-left justify-start gap-1 focus:border-none focus:outline-none focus:ring-0 focus-visible:ring-0">
+                {gender === "MALE" && (
+                  <Mars className="w-5 h-5 flex-shrink-0" />
+                )}
+                {gender === "FEMALE" && (
+                  <Venus className="w-5 h-5 flex-shrink-0" />
+                )}
+                {gender === "OTHER" && (
+                  <VenusAndMars className="w-5 h-5 flex-shrink-0" />
+                )}
                 <SelectValue placeholder="Chọn giới tính" />
               </SelectTrigger>
               <SelectContent>
