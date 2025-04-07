@@ -145,11 +145,11 @@ export default function Sidebar() {
             <div key={item.path} className="relative group">
               <Button
                 variant="ghost"
-                className={`flex items-center justify-center text-white hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white ${isActive(item.path) ? "bg-[#0045b8]" : ""}`}
+                className={`flex items-center justify-center text-white p-3 hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white ${isActive(item.path) ? "bg-[#0045b8]" : ""} [&_svg]:!size-7 !h-12 !w-12 !rounded-2sm`}
                 onClick={() => router.push(item.path)}
                 title={item.label}
               >
-                <item.icon size={32} />
+                <item.icon size={40} />
               </Button>
             </div>
           ))}
@@ -157,7 +157,7 @@ export default function Sidebar() {
 
         <div className="flex-1" />
 
-        <div className="flex flex-col items-center w-full space-y-2">
+        <div className="flex flex-col items-center w-full space-y-2 pb-8 px-2">
           {bottomNavItems.map((item, index) => (
             <div key={index} className="relative group">
               {item.isDropdown ? (
@@ -168,10 +168,10 @@ export default function Sidebar() {
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className={`flex items-center justify-center text-white hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white ${item.isActive ? "bg-[#0045b8]" : ""}`}
+                      className={`flex items-center justify-center text-white hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white ${item.isActive ? "bg-[#0045b8]" : ""} [&_svg]:!size-7 !h-12 !w-12 !rounded-2sm !p-0`}
                       title={item.label}
                     >
-                      <item.icon size={32} />
+                      <item.icon size={40} className="!w-8 !h-8" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
@@ -210,11 +210,11 @@ export default function Sidebar() {
               ) : (
                 <Button
                   variant="ghost"
-                  className="flex items-center justify-center text-white hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white"
+                  className="flex items-center justify-center text-white hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white [&_svg]:!size-7 !h-12 !w-12 !rounded-2sm !p-0"
                   onClick={item.action}
                   title={item.label}
                 >
-                  <item.icon size={32} />
+                  <item.icon size={40} className="!w-8 !h-8" />
                 </Button>
               )}
             </div>
