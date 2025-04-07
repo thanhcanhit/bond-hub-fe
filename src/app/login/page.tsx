@@ -50,7 +50,7 @@ export default function LoginPage() {
             Đăng nhập tài khoản Vodka để kết nối với ứng dụng Vodka Web
           </h2>
         </div>
-        <div className="bg-white shadow-lg rounded-[30px] flex flex-col items-center gap-4 relative w-full h-auto min-h-[400px] sm:min-h-[523px]">
+        <div className="bg-white shadow-lg rounded-[30px] flex flex-col items-center gap-4 relative w-full h-auto min-h-[400px] sm:min-h-[523px] overflow-auto no-scrollbar">
           <div className="flex flex-row border-b border-gray-200 w-full h-[60px] justify-center items-center font-semibold text-sm sm:text-base">
             <p>
               {showLoginForm

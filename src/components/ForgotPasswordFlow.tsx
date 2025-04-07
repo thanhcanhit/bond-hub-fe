@@ -125,6 +125,7 @@ export default function ForgotPasswordFlow({
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 placeholder="Enter your email or phone number"
+                className="focus:outline-none focus:ring-0 focus-visible:ring-0"
                 required
               />
             </div>
@@ -146,6 +147,7 @@ export default function ForgotPasswordFlow({
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
                 placeholder="Enter the OTP sent to your email"
+                className="focus:outline-none focus:ring-0 focus-visible:ring-0"
                 required
               />
             </div>
@@ -178,7 +180,7 @@ export default function ForgotPasswordFlow({
                   type={showNewPassword ? "text" : "password"}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="pr-10"
+                  className="pr-10 focus:outline-none focus:ring-0 focus-visible:ring-0"
                   required
                 />
                 <button
@@ -199,7 +201,7 @@ export default function ForgotPasswordFlow({
                   type={showConfirmPassword ? "text" : "password"}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="pr-10"
+                  className="pr-10 focus:outline-none focus:ring-0 focus-visible:ring-0"
                   required
                 />
                 <button

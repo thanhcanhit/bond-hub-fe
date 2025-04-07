@@ -16,13 +16,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 // Sử dụng react-icons thay vì lucide-react
-import {
-  BsChatDotsFill,
-  BsCompass,
-  BsGear,
-  BsDoorOpenFill,
-} from "react-icons/bs";
-import { RiContactsLine } from "react-icons/ri";
+import { BsChatDotsFill, BsGear, BsDoorOpenFill } from "react-icons/bs";
 import { useRouter, usePathname } from "next/navigation";
 import SettingsDialog from "./SettingDialog";
 
@@ -30,6 +24,7 @@ import { useState } from "react";
 import ProfileDialog from "./ProfileDialog";
 import { LoadingWithMessage } from "./Loading";
 import { IconType } from "react-icons";
+import { LucideBookUser, LucideCircuitBoard } from "lucide-react";
 
 export default function Sidebar() {
   const { logout: logoutFromStore, user } = useAuthStore();
@@ -59,8 +54,8 @@ export default function Sidebar() {
   // Navigation items configuration
   const navItems: { path: string; icon: IconType; label: string }[] = [
     { path: "/dashboard/chat", icon: BsChatDotsFill, label: "Chat" },
-    { path: "/dashboard/contact", icon: RiContactsLine, label: "Contacts" },
-    { path: "/dashboard/post", icon: BsCompass, label: "Posts" },
+    { path: "/dashboard/contact", icon: LucideBookUser, label: "Contacts" },
+    { path: "/dashboard/post", icon: LucideCircuitBoard, label: "Posts" },
   ];
 
   // Bottom navigation items

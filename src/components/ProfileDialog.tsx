@@ -197,7 +197,7 @@ export default function ProfileDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
-        className={`sm:max-w-[425px] h-auto !p-0 mt-0 mb-16 max-h-[90vh] overflow-y-auto `}
+        className={`sm:max-w-[425px] h-auto !p-0 mt-0 mb-16 max-h-[90vh] overflow-y-auto no-scrollbar`}
       >
         <AnimatePresence mode="wait">
           {isEditing && isOwnProfile ? (
@@ -225,7 +225,10 @@ export default function ProfileDialog({
                 </DialogHeader>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              <form
+                onSubmit={handleSubmit}
+                className="p-6 space-y-6 overflow-auto no-scrollbar"
+              >
                 <div className="space-y-2">
                   <Label htmlFor="displayName">Tên hiển thị</Label>
                   <Input
@@ -347,7 +350,7 @@ export default function ProfileDialog({
                   Xem và chỉnh sửa thông tin tài khoản của bạn
                 </DialogDescription>
               </DialogHeader>
-              <div className="flex flex-col">
+              <div className="flex flex-col overflow-auto no-scrollbar">
                 {/* Cover Image */}
                 <div className="relative">
                   <div className="relative w-full h-[180px] bg-gray-200">
@@ -420,7 +423,7 @@ export default function ProfileDialog({
                 </div>
 
                 {/* Profile Picture and Name */}
-                <div className="flex flex-col items-center -mt-12 mb-4">
+                <div className="flex flex-col items-center -mt-12 mb-1.5">
                   <div className="relative">
                     {currentUser && (
                       <UserAvatar user={currentUser} className="h-24 w-24" />
@@ -465,7 +468,7 @@ export default function ProfileDialog({
                 )}
 
                 {/* Personal Information */}
-                <div className="mt-4 px-6 py-4 border-t border-gray-200 bg-white">
+                <div className="px-6 py-4 border-t-4 border-gray-200 bg-white overflow-auto no-scrollbar">
                   <h4 className="font-semibold text-sm mb-3">
                     Thông tin cá nhân
                   </h4>
@@ -524,7 +527,7 @@ export default function ProfileDialog({
                 {!isOwnProfile &&
                   currentUser?.posts &&
                   currentUser.posts.length > 0 && (
-                    <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 mt-4">
+                    <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 mt-4 overflow-auto no-scrollbar">
                       <div className="flex justify-between items-center mb-2">
                         <h4 className="font-medium text-base">
                           Hình ảnh/Video
@@ -550,7 +553,7 @@ export default function ProfileDialog({
 
                 {/* Additional Options for Other User's Profile */}
                 {!isOwnProfile && (
-                  <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 mt-4 space-y-4">
+                  <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 mt-4 space-y-4 overflow-auto no-scrollbar">
                     <div className="flex items-center gap-2">
                       <Users className="h-5 w-5 text-gray-500" />
                       <span className="text-sm">4 nhóm chung</span>

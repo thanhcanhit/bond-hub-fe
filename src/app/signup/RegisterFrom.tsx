@@ -151,9 +151,9 @@ export default function RegisterForm() {
   };
 
   return (
-    <div className="mb-4">
+    <div className="mb-4 overflow-auto no-scrollbar">
       {step === 1 && (
-        <div className="items-center w-fit mx-auto justify-center">
+        <div className="items-center w-full max-w-[373px] mx-auto justify-center overflow-auto no-scrollbar">
           <div className="flex items-center justify-center gap-2 border-b border-gray-200 mb-6">
             <UsersRound className="w-5 h-5" />
             <Input
@@ -161,12 +161,12 @@ export default function RegisterForm() {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder="Số điện thoại hoặc Email"
-              className="border-none shadow-none"
+              className="border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0"
               required
             />
           </div>
           <Button
-            className="w-[373px] h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
+            className="w-full h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
             onClick={handleRequestOTP}
             disabled={loading || !inputValue}
           >
@@ -176,27 +176,29 @@ export default function RegisterForm() {
       )}
 
       {step === 2 && (
-        <div className="items-center flex flex-col gap-4">
-          <p>Nhập mã OTP</p>
+        <div className="items-center flex flex-col gap-4 w-full max-w-[373px] mx-auto overflow-auto no-scrollbar">
+          <p className="text-center">Nhập mã OTP</p>
           <InputOTP
             maxLength={6}
             value={otp}
             onChange={setOtp}
-            className="mb-4 flex gap-x-4"
+            className="mb-4 flex gap-x-2 sm:gap-x-4 justify-center"
           >
             <InputOTPGroup>
               {[...Array(6)].map((_, i) => (
                 <InputOTPSlot
-                  className="w-12 h-12 text-xl text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-8 h-10 sm:w-12 sm:h-12 text-lg sm:text-xl text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   key={i}
                   index={i}
                 />
               ))}
             </InputOTPGroup>
           </InputOTP>
-          {error && <p className="text-red-500 mb-3">{error}</p>}
+          {error && (
+            <p className="text-red-500 mb-3 text-center text-sm">{error}</p>
+          )}
           <Button
-            className="w-[373px] h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
+            className="w-full h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
             onClick={handleVerifyOTP}
           >
             Xác nhận
@@ -205,32 +207,36 @@ export default function RegisterForm() {
       )}
 
       {step === 3 && (
-        <form onSubmit={handleSubmit} className="flex flex-col">
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col w-full max-w-[373px] mx-auto overflow-auto no-scrollbar"
+        >
           <div className="flex items-center justify-center mb-3 text-muted-foreground">
-            <p>Nhập thông tin cá nhân</p>
+            <p className="text-center">Nhập thông tin cá nhân</p>
           </div>
-          <div className="flex items-center gap-2 border-b border-gray-200 pl-4 mb-8">
-            <UserRound className="w-5 h-5" />
+          <div className="flex items-center gap-2 border-b border-gray-200 pl-4 mb-6">
+            <UserRound className="w-5 h-5 flex-shrink-0" />
             <Input
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="Họ và tên"
+              className="border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0"
               required
             />
           </div>
-          <div className="flex flex-row gap-2 mb-4">
+          <div className="flex flex-col sm:flex-row gap-2 mb-4">
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant={"outline"}
                   className={cn(
-                    "w-full h-12 justify-start text-left font-normal",
+                    "w-full h-12 justify-start text-left font-normal mb-2 sm:mb-0",
                     !date && "text-muted-foreground",
                   )}
                 >
-                  <CalendarIcon className="w-5 h-5" />
-                  {date ? format(date, "PPP") : <span>Pick a date</span>}
+                  <CalendarIcon className="w-5 h-5 mr-2 flex-shrink-0" />
+                  {date ? format(date, "PPP") : <span>Chọn ngày sinh</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
@@ -244,7 +250,7 @@ export default function RegisterForm() {
             </Popover>
             <Select value={gender} onValueChange={setGender}>
               <SelectTrigger className="w-full h-12 font-normal text-left justify-start gap-1">
-                <Venus className="w-5 h-5" />
+                <Venus className="w-5 h-5 flex-shrink-0" />
                 <SelectValue placeholder="Chọn giới tính" />
               </SelectTrigger>
               <SelectContent>
@@ -254,10 +260,10 @@ export default function RegisterForm() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-center gap-2 border-b border-gray-200 pl-4 mb-8">
-            <Lock className="w-5 h-5" />
+          <div className="flex items-center gap-2 border-b border-gray-200 pl-4 mb-6">
+            <Lock className="w-5 h-5 flex-shrink-0" />
             <Input
-              className="w-[350px] h-[50px]"
+              className="border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -267,7 +273,7 @@ export default function RegisterForm() {
           </div>
 
           <Button
-            className="w-[373px] h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
+            className="w-full h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
             type="submit"
             disabled={loading || !fullName || !password}
           >
