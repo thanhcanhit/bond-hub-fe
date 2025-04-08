@@ -77,24 +77,19 @@ export default function RegisterForm() {
       return;
     }
 
-    // Hiện tại chỉ hỗ trợ gửi OTP qua email
-    if (inputIsEmail) {
-      const result = await initiateRegistration(inputValue); // Gửi email thay vì phoneNumber
-      setLoading(false);
+    // Gửi OTP qua email hoặc số điện thoại
+    const result = await initiateRegistration(inputValue);
+    setLoading(false);
 
-      if (result.success && result.registrationId) {
-        setRegistrationId(result.registrationId);
-        setStep(2);
-      } else {
-        toast.error("Không thể gửi OTP. Vui lòng thử lại.");
-        setError(result.error || "Không thể gửi OTP. Vui lòng thử lại.");
-      }
-    } else if (inputIsPhone) {
-      toast.info("Hiện tại chúng tôi chỉ hỗ trợ gửi OTP qua email");
-      setError(
-        "Hiện tại chúng tôi chỉ hỗ trợ gửi OTP qua email. Vui lòng dùng email để đăng ký.",
+    if (result.success && result.registrationId) {
+      setRegistrationId(result.registrationId);
+      setStep(2);
+      toast.success(
+        `Đã gửi mã OTP đến ${inputIsEmail ? "email" : "số điện thoại"} của bạn!`,
       );
-      setLoading(false);
+    } else {
+      toast.error("Không thể gửi OTP. Vui lòng thử lại.");
+      setError(result.error || "Không thể gửi OTP. Vui lòng thử lại.");
     }
   };
 

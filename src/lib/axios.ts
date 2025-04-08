@@ -10,13 +10,17 @@ const axiosInstance = axios.create({
 
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const accessToken = useAuthStore.getState().accessToken;
-    console.log("time left", accessToken);
-    if (accessToken) {
-      config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${accessToken}`;
+    try {
+      const accessToken = useAuthStore.getState().accessToken;
+      if (accessToken) {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${accessToken}`;
+      }
+      return config;
+    } catch (error) {
+      console.error("Error in axios interceptor:", error);
+      return config;
     }
-    return config;
   },
   (error) => Promise.reject(error),
 );

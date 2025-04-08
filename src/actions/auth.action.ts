@@ -4,10 +4,13 @@ import { useAuthStore } from "@/stores/authStore";
 import { DeviceType } from "@/types/base";
 import { isEmail } from "@/utils/helpers";
 
-export async function initiateRegistration(email: string) {
+export async function initiateRegistration(identifier: string) {
   try {
+    // Determine if the identifier is an email or phone number
+    const isEmailFormat = isEmail(identifier);
+
     const response = await axiosInstance.post("/auth/register/initiate", {
-      email,
+      [isEmailFormat ? "email" : "phoneNumber"]: identifier,
     });
     const { registrationId } = response.data;
 

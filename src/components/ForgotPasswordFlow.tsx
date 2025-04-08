@@ -44,7 +44,9 @@ export default function ForgotPasswordFlow({
       if (result.success) {
         setResetId(result.resetId);
         setStep(ForgotPasswordStep.ENTER_OTP);
-        toast.success("OTP sent to your email");
+        toast.success(
+          `OTP sent to your ${identifier.includes("@") ? "email" : "phone number"}`,
+        );
       } else {
         toast.error(result.error || "Failed to send OTP");
       }
@@ -146,7 +148,7 @@ export default function ForgotPasswordFlow({
                 type="text"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
-                placeholder="Enter the OTP sent to your email"
+                placeholder="Enter the OTP sent to your email or phone number"
                 className="focus:outline-none focus:ring-0 focus-visible:ring-0"
                 required
               />
@@ -281,7 +283,7 @@ export default function ForgotPasswordFlow({
             {step === ForgotPasswordStep.ENTER_EMAIL &&
               "Enter your email or phone number to receive a verification code"}
             {step === ForgotPasswordStep.ENTER_OTP &&
-              "Enter the verification code sent to your email"}
+              "Enter the verification code sent to your email or phone number"}
             {step === ForgotPasswordStep.ENTER_NEW_PASSWORD &&
               "Create a new password for your account"}
           </p>

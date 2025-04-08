@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+// import { useRouter } from "next/navigation";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Smartphone, Lock } from "lucide-react";
@@ -17,13 +17,13 @@ import {
 } from "@/components/ui/dialog";
 
 export default function LoginForm() {
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showForgotPasswordDialog, setShowForgotPasswordDialog] =
     useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuthStore();
-  const router = useRouter();
+  // const router = useRouter();
 
   // Handle hydration
   useEffect(() => {
@@ -35,15 +35,30 @@ export default function LoginForm() {
     setIsLoading(true);
     try {
       const { deviceType, deviceName } = getDeviceInfo();
+      console.log("Attempting login with:", {
+        identifier,
+        deviceName,
+        deviceType,
+      });
+
       const isSuccess = await login(
-        phoneNumber,
+        identifier,
         password,
         deviceName,
         deviceType,
       );
+
+      console.log("Login result:", isSuccess);
+
       if (isSuccess) {
         toast.success("Đăng nhập thành công!");
-        router.push("/dashboard");
+        // Không cần chuyển hướng tại đây, AuthProvider sẽ tự động chuyển hướng
+        // router.push("/dashboard");
+
+        // Chỉ ẩn loading sau 1 giây để tránh nháy màn hình
+        setTimeout(() => {
+          setIsLoading(false);
+        }, 1000);
       } else {
         setIsLoading(false);
         toast.error("Đăng nhập thất bại! Vui lòng kiểm tra lại thông tin!");
@@ -76,10 +91,10 @@ export default function LoginForm() {
             <Smartphone className="w-4 h-4 sm:w-5 sm:h-5" />
             <Input
               className="w-full h-[40px] pl-8 sm:h-[50px] border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0"
-              type="phoneNumber"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              placeholder="Số điện thoại"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="Số điện thoại hoặc Email"
               required
             />
           </div>
