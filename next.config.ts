@@ -27,7 +27,8 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // Tăng tốc độ chuyển trang
   experimental: {
-    optimizeCss: true,
+    // Tạm thời vô hiệu hóa optimizeCss do gây lỗi build
+    // optimizeCss: true,
     scrollRestoration: true,
   },
 };
