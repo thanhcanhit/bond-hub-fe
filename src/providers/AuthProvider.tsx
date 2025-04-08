@@ -40,18 +40,29 @@ export default function AuthProvider({
     // Kiểm tra xem đường dẫn hiện tại có phải là đường dẫn được bảo vệ không
     const isProtectedPath = pathname.startsWith("/dashboard");
 
+    console.log("Auth state:", {
+      isAuthenticated,
+      pathname,
+      isPublicPath,
+      isProtectedPath,
+    });
+
     // Nếu đã đăng nhập và đang ở trang chủ, login hoặc register
     if (isAuthenticated && isPublicPath) {
+      console.log("Redirecting to dashboard from public path");
       redirectingRef.current = true;
-      router.replace("/dashboard");
+      // Sử dụng push thay vì replace để tránh vấn đề với lịch sử trình duyệt
+      router.push("/dashboard");
       setTimeout(() => {
         redirectingRef.current = false;
       }, 1000);
     }
     // Nếu chưa đăng nhập và đang ở trang dashboard
     else if (!isAuthenticated && isProtectedPath) {
+      console.log("Redirecting to login from protected path");
       redirectingRef.current = true;
-      router.replace("/login");
+      // Sử dụng push thay vì replace để tránh vấn đề với lịch sử trình duyệt
+      router.push("/login");
       setTimeout(() => {
         redirectingRef.current = false;
       }, 1000);

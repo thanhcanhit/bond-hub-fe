@@ -37,7 +37,7 @@ interface AuthState {
   _hasHydrated: boolean;
   setAuth: (user: User, accessToken: string) => void;
   login: (
-    phoneNumber: string,
+    identifier: string,
     password: string,
     deviceName: string,
     deviceType: DeviceType,
@@ -70,7 +70,7 @@ export const useAuthStore = create<AuthState>()(
           isLoading: false,
         }),
       login: async (
-        phoneNumber: string,
+        identifier: string,
         password: string,
         deviceName: string,
         deviceType: DeviceType,
@@ -78,7 +78,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           set({ isLoading: true });
           const result = await loginAction(
-            phoneNumber,
+            identifier,
             password,
             deviceName,
             deviceType,
