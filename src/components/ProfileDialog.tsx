@@ -347,12 +347,17 @@ export default function ProfileDialog({
                   Thông tin cá nhân
                 </h4>
                 <div className="space-y-1.5">
-                  <div className="grid grid-cols-[100px_1fr] gap-1">
-                    <span className="text-xs text-gray-500">Giới thiệu</span>
-                    <span className="text-xs text-left">
-                      {currentUser?.userInfo?.bio || "Giới thiệu"}
-                    </span>
-                  </div>
+                  {/* Chỉ hiển thị bio khi có dữ liệu */}
+                  {currentUser?.userInfo?.bio && (
+                    <div className="grid grid-cols-[100px_1fr] gap-1">
+                      <span className="text-xs text-gray-500">Giới thiệu</span>
+                      <span className="text-xs text-left">
+                        {currentUser.userInfo.bio}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Giới tính luôn hiển thị vì luôn có giá trị mặc định */}
                   <div className="grid grid-cols-[100px_1fr] gap-1">
                     <span className="text-xs text-gray-500">Giới tính</span>
                     <span className="text-xs text-left">
@@ -363,27 +368,47 @@ export default function ProfileDialog({
                           : "Khác"}
                     </span>
                   </div>
-                  <div className="grid grid-cols-[100px_1fr] gap-1">
-                    <span className="text-xs text-gray-500">Ngày sinh</span>
-                    <span className="text-xs text-left">
-                      {currentUser?.userInfo?.dateOfBirth
-                        ? new Date(
-                            currentUser.userInfo.dateOfBirth,
-                          ).toLocaleDateString("vi-VN", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                          })
-                        : "03/11/2003"}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-[100px_1fr] gap-1">
-                    <span className="text-xs text-gray-500">Số điện thoại</span>
-                    <span className="text-xs text-left">
-                      {currentUser?.phoneNumber || "+84 336 551 833"}
-                    </span>
-                  </div>
-                  {isOwnProfile && (
+
+                  {/* Chỉ hiển thị ngày sinh khi có dữ liệu */}
+                  {currentUser?.userInfo?.dateOfBirth && (
+                    <div className="grid grid-cols-[100px_1fr] gap-1">
+                      <span className="text-xs text-gray-500">Ngày sinh</span>
+                      <span className="text-xs text-left">
+                        {new Date(
+                          currentUser.userInfo.dateOfBirth,
+                        ).toLocaleDateString("vi-VN", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Chỉ hiển thị số điện thoại khi có dữ liệu */}
+                  {currentUser?.phoneNumber && (
+                    <div className="grid grid-cols-[100px_1fr] gap-1">
+                      <span className="text-xs text-gray-500">
+                        Số điện thoại
+                      </span>
+                      <span className="text-xs text-left">
+                        {currentUser.phoneNumber}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Chỉ hiển thị email khi có dữ liệu */}
+                  {currentUser?.email && (
+                    <div className="grid grid-cols-[100px_1fr] gap-1">
+                      <span className="text-xs text-gray-500">Email</span>
+                      <span className="text-xs text-left">
+                        {currentUser.email}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Thông báo về quyền riêng tư số điện thoại */}
+                  {isOwnProfile && currentUser?.phoneNumber && (
                     <>
                       <div className="h-1"></div>
                       <p className="text-xs text-gray-500">
