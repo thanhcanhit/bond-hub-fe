@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { useAuthStore } from "@/stores/authStore";
 import { useRouter } from "next/navigation";
+import { SocketMessage, isUserDataUpdateMessage } from "@/types/socket";
 
 let socketInstance: Socket | null = null;
 
@@ -87,6 +88,25 @@ export const useSocketConnection = (isAuthenticated: boolean = false) => {
             // Chuyển hướng ngay cả khi đăng xuất thất bại
             router.push("/login", { scroll: false });
           });
+      });
+
+      // Xử lý sự kiện cập nhật dữ liệu người dùng
+      newSocket.on("userDataUpdate", (message: SocketMessage) => {
+        console.log("📱 User data update received:", message);
+
+        // Sử dụng type guard để kiểm tra loại message
+        if (isUserDataUpdateMessage(message)) {
+          const { updateUser } = useAuthStore.getState();
+          updateUser(message.data.user);
+          console.log(
+            "✅ User data updated in store with type:",
+            message.data.updateType,
+          );
+        } else {
+          console.warn(
+            "⚠️ Received userDataUpdate event with invalid data format",
+          );
+        }
       });
 
       // Cleanup khi component unmount hoặc accessToken thay đổi

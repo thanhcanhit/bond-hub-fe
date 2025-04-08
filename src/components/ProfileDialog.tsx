@@ -16,6 +16,7 @@ import {
   UserMinus,
   Users,
 } from "lucide-react";
+import RefreshUserDataButton from "./RefreshUserDataButton";
 import { User } from "@/types/base";
 import Image from "next/image";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
@@ -49,7 +50,6 @@ export default function ProfileDialog({
 }: ProfileDialogProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const profilePictureInputRef = useRef<HTMLInputElement>(null);
 
@@ -90,19 +90,13 @@ export default function ProfileDialog({
     [getInitialFormValues],
   );
 
-  // Update image URLs when user changes
+  // Update cover image URL when user changes
   useEffect(() => {
     if (currentUser) {
-      // Update image URLs only if not already set
-      if (!profileImageUrl) {
-        setProfileImageUrl(currentUser.userInfo?.profilePictureUrl || null);
-      }
-
-      if (!coverImageUrl) {
-        setCoverImageUrl(currentUser.userInfo?.coverImgUrl || null);
-      }
+      // Always update cover image URL when currentUser changes to ensure real-time updates
+      setCoverImageUrl(currentUser.userInfo?.coverImgUrl || null);
     }
-  }, [currentUser, profileImageUrl, coverImageUrl]);
+  }, [currentUser]);
 
   const handleProfilePictureUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -118,11 +112,8 @@ export default function ProfileDialog({
       const result = await updateProfilePicture(file);
       if (result.success && result.url) {
         toast.success(result.message || "Cập nhật ảnh đại diện thành công");
-
-        // Cập nhật URL hình ảnh mới
-        setProfileImageUrl(result.url + "?t=" + new Date().getTime());
-
-        // Không cần đóng và mở lại dialog nữa vì đã cập nhật trực tiếp state
+        // Store đã được cập nhật trong hàm updateProfilePicture
+        // và UserAvatar component sẽ tự động cập nhật UI khi currentUser thay đổi
       } else {
         toast.error(result.error || "Cập nhật ảnh đại diện thất bại");
       }
@@ -226,6 +217,16 @@ export default function ProfileDialog({
                 Thông tin cá nhân
               </DialogTitle>
 
+              <div className="flex items-center space-x-1">
+                {isOwnProfile && (
+                  <RefreshUserDataButton
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                  />
+                )}
+              </div>
+
               <DialogDescription className="sr-only">
                 Xem và chỉnh sửa thông tin tài khoản của bạn
               </DialogDescription>
@@ -265,19 +266,19 @@ export default function ProfileDialog({
                               toast.success(
                                 result.message || "Cập nhật ảnh bìa thành công",
                               );
-
-                              // Cập nhật URL hình ảnh mới
+                              // Store đã được cập nhật trong hàm updateCoverImage
+                              // và useEffect sẽ tự động cập nhật UI khi currentUser thay đổi
+                              // Tuy nhiên, vẫn cập nhật state để đảm bảo UI cập nhật ngay lập tức
                               setCoverImageUrl(
                                 result.url + "?t=" + new Date().getTime(),
                               );
-
-                              // Không cần đóng và mở lại dialog nữa vì đã cập nhật trực tiếp state
                             } else {
                               toast.error(
                                 result.error || "Cập nhật ảnh bìa thất bại",
                               );
                             }
-                          } catch {
+                          } catch (error) {
+                            console.error("Lỗi khi cập nhật ảnh bìa:", error);
                             toast.error("Đã xảy ra lỗi khi cập nhật ảnh bìa");
                           }
                         }}
