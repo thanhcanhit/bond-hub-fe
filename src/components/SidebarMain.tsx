@@ -21,13 +21,20 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import SettingsDialog from "./SettingDialog";
 
-import { useState } from "react";
+import { useState, useCallback, useMemo, memo } from "react";
 import ProfileDialog from "./ProfileDialog";
 import { LoadingWithMessage } from "./Loading";
 import { IconType } from "react-icons";
 import { LucideBookUser, LucideCircuitBoard } from "lucide-react";
 
-export default function Sidebar() {
+// Định nghĩa các mục điều hướng bên ngoài component để tránh tạo lại mỗi lần render
+const NAV_ITEMS: { path: string; icon: IconType; label: string }[] = [
+  { path: "/dashboard/chat", icon: BsChatDotsFill, label: "Chat" },
+  { path: "/dashboard/contact", icon: LucideBookUser, label: "Contacts" },
+  { path: "/dashboard/post", icon: LucideCircuitBoard, label: "Posts" },
+];
+
+function Sidebar() {
   const { logout: logoutFromStore, user } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
@@ -36,7 +43,8 @@ export default function Sidebar() {
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handleLogout = async () => {
+  // Sử dụng useCallback để tránh tạo lại hàm mỗi lần render
+  const handleLogout = useCallback(async () => {
     setIsLoggingOut(true);
     try {
       const result = await logoutFromStore();
@@ -44,46 +52,55 @@ export default function Sidebar() {
         router.push("/login");
       } else {
         setIsLoggingOut(false);
-        console.log("Logout failed:");
       }
-    } catch (error) {
+    } catch {
       setIsLoggingOut(false);
-      console.error("Logout error:", error);
     }
-  };
+  }, [logoutFromStore, router]);
 
-  // Navigation items configuration
-  const navItems: { path: string; icon: IconType; label: string }[] = [
-    { path: "/dashboard/chat", icon: BsChatDotsFill, label: "Chat" },
-    { path: "/dashboard/contact", icon: LucideBookUser, label: "Contacts" },
-    { path: "/dashboard/post", icon: LucideCircuitBoard, label: "Posts" },
-  ];
+  // Sử dụng useCallback cho các hàm xử lý sự kiện
+  const handleProfileOpen = useCallback(() => setIsProfileOpen(true), []);
+  const handleSettingsOpen = useCallback(() => setIsSettingsOpen(true), []);
 
-  // Bottom navigation items
-  const bottomNavItems: {
-    icon: IconType;
-    label: string;
-    action?: () => void;
-    isActive?: boolean;
-    isDropdown?: boolean;
-  }[] = [
-    {
-      icon: BsGear,
-      label: "Settings",
-      isActive: isSettingsMenuOpen,
-      isDropdown: true,
-    },
-    {
-      icon: BsDoorOpenFill,
-      label: "Logout",
-      action: handleLogout,
-    },
-  ];
+  // Sử dụng useMemo để tránh tính toán lại mỗi lần render
+  const bottomNavItems = useMemo(
+    () => [
+      {
+        icon: BsGear,
+        label: "Settings",
+        isActive: isSettingsMenuOpen,
+        isDropdown: true,
+      },
+      {
+        icon: BsDoorOpenFill,
+        label: "Logout",
+        action: handleLogout,
+      },
+    ],
+    [isSettingsMenuOpen, handleLogout],
+  );
 
   // Hàm kiểm tra đường dẫn hiện tại để xác định mục đang được chọn
-  const isActive = (path: string) => {
-    return pathname === path || pathname.startsWith(`${path}/`);
-  };
+  const isActive = useCallback(
+    (path: string) => {
+      return pathname === path || pathname.startsWith(`${path}/`);
+    },
+    [pathname],
+  );
+
+  // Tạo avatar fallback text một lần duy nhất khi user thay đổi
+  const avatarFallback = useMemo(() => {
+    if (!user?.userInfo?.fullName) return "";
+    return user.userInfo.fullName
+      .split(" ")
+      .map((w) => w[0])
+      .join("");
+  }, [user?.userInfo?.fullName]);
+
+  // Tạo display name một lần duy nhất khi user thay đổi
+  const displayName = useMemo(() => {
+    return user?.userInfo?.fullName || "Guest";
+  }, [user?.userInfo?.fullName]);
 
   return (
     <>
@@ -98,7 +115,7 @@ export default function Sidebar() {
                   src={user?.userInfo?.profilePictureUrl || ""}
                 />
                 <AvatarFallback className="text-gray">
-                  {user?.userInfo?.fullName?.split(" ")?.map((w) => w[0])}
+                  {avatarFallback}
                 </AvatarFallback>
               </Avatar>
             </DropdownMenuTrigger>
@@ -109,19 +126,17 @@ export default function Sidebar() {
               sideOffset={5}
               alignOffset={5}
             >
-              <DropdownMenuLabel>
-                {user?.userInfo.fullName || "Guest"}
-              </DropdownMenuLabel>
+              <DropdownMenuLabel>{displayName}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem>
                   Nâng cấp tài khoản
                   <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
+                <DropdownMenuItem onClick={handleProfileOpen}>
                   Hồ sơ của bạn
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+                <DropdownMenuItem onClick={handleSettingsOpen}>
                   Cài đặt
                 </DropdownMenuItem>
               </DropdownMenuGroup>
@@ -137,7 +152,7 @@ export default function Sidebar() {
 
         {/* Main navigation buttons */}
         <div className="flex flex-col items-center w-full space-y-2">
-          {navItems.map((item) => (
+          {NAV_ITEMS.map((item) => (
             <div key={item.path} className="relative group">
               <Link href={item.path} scroll={false}>
                 <Button
@@ -178,10 +193,10 @@ export default function Sidebar() {
                     sideOffset={5}
                     alignOffset={0}
                   >
-                    <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
+                    <DropdownMenuItem onClick={handleProfileOpen}>
                       Thông tin tài khoản
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+                    <DropdownMenuItem onClick={handleSettingsOpen}>
                       Cài đặt
                     </DropdownMenuItem>
                     <DropdownMenuItem>Dữ liệu</DropdownMenuItem>
@@ -218,18 +233,26 @@ export default function Sidebar() {
           ))}
         </div>
 
-        <ProfileDialog
-          user={user}
-          isOpen={isProfileOpen}
-          onOpenChange={setIsProfileOpen}
-          isOwnProfile={true}
-        />
+        {/* Sử dụng lazy loading cho các dialog để giảm tải ban đầu */}
+        {isProfileOpen && (
+          <ProfileDialog
+            user={user}
+            isOpen={isProfileOpen}
+            onOpenChange={setIsProfileOpen}
+            isOwnProfile={true}
+          />
+        )}
 
-        <SettingsDialog
-          isOpen={isSettingsOpen}
-          onOpenChange={setIsSettingsOpen}
-        />
+        {isSettingsOpen && (
+          <SettingsDialog
+            isOpen={isSettingsOpen}
+            onOpenChange={setIsSettingsOpen}
+          />
+        )}
       </div>
     </>
   );
 }
+
+// Sử dụng memo để tránh re-render không cần thiết
+export default memo(Sidebar);
