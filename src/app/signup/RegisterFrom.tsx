@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { format, subYears } from "date-fns";
+import { format } from "date-fns";
 import {
   // Smartphone,
   UsersRound,
@@ -39,7 +39,12 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { getDeviceInfo, isEmail, isPhoneNumber } from "@/utils/helpers";
+import {
+  getDeviceInfo,
+  isEmail,
+  isPhoneNumber,
+  isVietnameseName,
+} from "@/utils/helpers";
 
 export default function RegisterForm() {
   // Đặt ngày mặc định là ngày hiện tại
@@ -114,6 +119,16 @@ export default function RegisterForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    // Kiểm tra họ tên
+    if (!isVietnameseName(fullName)) {
+      toast.warning("Vui lòng nhập đúng định dạng họ tên tiếng Việt.");
+      setError("Vui lòng nhập đúng định dạng họ tên tiếng Việt.");
+      setLoading(false);
+      return;
+    }
+
+    // Kiểm tra ngày sinh
     if (!date) {
       toast.warning("Vui lòng chọn ngày sinh.");
       setError("Vui lòng chọn ngày sinh.");
@@ -121,11 +136,19 @@ export default function RegisterForm() {
       return;
     }
 
-    // Kiểm tra tuổi tối thiểu (13 tuổi)
-    const minAgeDate = subYears(new Date(), 13);
-    if (date > minAgeDate) {
-      toast.warning("Bạn phải ít nhất 13 tuổi để đăng ký.");
-      setError("Bạn phải ít nhất 13 tuổi để đăng ký.");
+    // Kiểm tra ngày sinh không được là ngày tương lai
+    const today = new Date();
+    if (date > today) {
+      toast.warning("Ngày sinh không thể là ngày trong tương lai.");
+      setError("Ngày sinh không thể là ngày trong tương lai.");
+      setLoading(false);
+      return;
+    }
+
+    // Kiểm tra mật khẩu
+    if (password.length < 6) {
+      toast.warning("Mật khẩu phải có ít nhất 6 ký tự.");
+      setError("Mật khẩu phải có ít nhất 6 ký tự.");
       setLoading(false);
       return;
     }
@@ -262,9 +285,9 @@ export default function RegisterForm() {
                           newDate.getMonth() === month &&
                           newDate.getFullYear() === year
                         ) {
-                          // Kiểm tra tuổi tối thiểu
-                          const minAgeDate = subYears(new Date(), 13);
-                          if (newDate <= minAgeDate) {
+                          // Kiểm tra không phải ngày tương lai
+                          const today = new Date();
+                          if (newDate <= today) {
                             setDate(newDate);
                           }
                         }
@@ -371,8 +394,8 @@ export default function RegisterForm() {
                           <PopoverContent className="p-0 w-auto" align="end">
                             <div className="grid grid-cols-4 gap-1 p-2 max-h-[200px] overflow-y-auto">
                               {Array.from(
-                                { length: 73 },
-                                (_, i) => new Date().getFullYear() - 13 - i,
+                                { length: 100 },
+                                (_, i) => new Date().getFullYear() - i,
                               ).map((year) => (
                                 <Button
                                   key={year}
@@ -420,11 +443,11 @@ export default function RegisterForm() {
                         }}
                         initialFocus
                         fromYear={1950}
-                        toYear={new Date().getFullYear() - 13}
+                        toYear={new Date().getFullYear()}
                         captionLayout="buttons"
                         month={date} // Sử dụng month thay vì defaultMonth để cập nhật khi thay đổi tháng/năm
                         disabled={{
-                          after: subYears(new Date(), 13),
+                          after: new Date(),
                         }}
                         showOutsideDays={true}
                         className="rounded-md border-0"

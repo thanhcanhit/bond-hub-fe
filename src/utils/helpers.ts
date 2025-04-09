@@ -99,3 +99,17 @@ export const translateGender = (gender: string): string => {
   if (gender.toLowerCase() === "female") return "Nữ";
   return gender;
 };
+
+/**
+ * Kiểm tra xem một chuỗi có phải là họ tên tiếng Việt hợp lệ hay không
+ * @param input Chuỗi cần kiểm tra
+ * @returns true nếu là họ tên tiếng Việt hợp lệ, false nếu không phải
+ */
+export const isVietnameseName = (input: string): boolean => {
+  // Regex cho tên tiếng Việt có dấu hoặc không dấu
+  // Cho phép chữ cái, dấu cách và dấu tiếng Việt
+  // Yêu cầu ít nhất 2 từ (họ và tên)
+  const vietnameseNameRegex =
+    /^[A-Za-zÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚĂĐĨŨƠàáâãèéêìíòóôõùúăđĩũơƯĂẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼỀỀỂưăạảấầẩẫậắằẳẵặẹẻẽềềểỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪễệỉịọỏốồổỗộớờởỡợụủứừỬỮỰỲỴÝỶỸửữựỳỵỷỹ]+(\s[A-Za-zÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚĂĐĨŨƠàáâãèéêìíòóôõùúăđĩũơƯĂẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼỀỀỂưăạảấầẩẫậắằẳẵặẹẻẽềềểỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪễệỉịọỏốồổỗộớờởỡợụủứừỬỮỰỲỴÝỶỸửữựỳỵỷỹ]+)+$/;
+  return vietnameseNameRegex.test(input);
+};
