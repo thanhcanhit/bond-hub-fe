@@ -6,7 +6,6 @@ import ChatHeader from "./ChatHeader";
 import MessageItem from "./MessageItem";
 import MessageInput from "./MessageInput";
 import { mockMessages } from "@/data/mockData";
-import { v4 as uuidv4 } from "uuid";
 
 interface ChatAreaProps {
   currentUser: User;
@@ -49,7 +48,7 @@ export default function ChatArea({
     if (!selectedContact) return;
 
     const newMessage: Message = {
-      id: uuidv4(),
+      id: `temp-${Date.now()}`, // Add temporary ID for frontend use only
       content: { text },
       senderId: currentUser.id,
       sender: currentUser,
@@ -65,6 +64,7 @@ export default function ChatArea({
       repliedTo: replyingTo?.id,
     };
 
+    // In a real app, the backend would generate the ID
     setMessages((prev) => [...prev, newMessage]);
 
     // Update mock data (in a real app, this would be an API call)
