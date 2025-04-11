@@ -1,6 +1,6 @@
-"use server";
 import axiosInstance from "@/lib/axios";
 import { Message, ReactionType } from "@/types/base";
+import { AxiosError } from "axios";
 
 /**
  * Gửi tin nhắn văn bản đến người dùng
@@ -10,14 +10,31 @@ import { Message, ReactionType } from "@/types/base";
  */
 export async function sendTextMessage(receiverId: string, text: string) {
   try {
+    // Check if we have a valid token
+
+    // Log the request details
+    console.log("Message request payload:", {
+      receiverId,
+      content: {
+        text: text.substring(0, 20) + (text.length > 20 ? "..." : ""),
+      },
+    });
+
     const response = await axiosInstance.post("/messages/user", {
       receiverId,
       content: { text },
     });
+
+    console.log("Message sent successfully:", { messageId: response.data?.id });
     const message = response.data as Message;
     return { success: true, message };
-  } catch (error) {
-    console.error("Send text message failed:", error);
+  } catch (error: unknown) {
+    const axiosError = error as AxiosError;
+    console.error("Send text message failed:", {
+      error: axiosError.message,
+      status: axiosError.response?.status,
+      data: axiosError.response?.data,
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import ContactList from "@/components/chat/ContactList";
 import ChatArea from "@/components/chat/ChatArea";
 import ContactInfo from "@/components/chat/ContactInfo";
-import { currentUser, mockContacts } from "@/data/mockData";
 import { User, UserInfo } from "@/types/base";
+import { useAuthStore } from "@/stores/authStore";
+import { getUserDataById } from "@/actions/user.action";
 
 export default function ChatPage() {
   const [isTabContentVisible, setIsTabContentVisible] = useState(true);
@@ -12,6 +13,10 @@ export default function ChatPage() {
     null,
   );
   const [showContactInfo, setShowContactInfo] = useState(false);
+  const [selectedContact, setSelectedContact] = useState<
+    (User & { userInfo: UserInfo }) | null
+  >(null);
+  const currentUser = useAuthStore((state) => state.user);
 
   // Handle window resize for responsive layout
   useEffect(() => {
@@ -26,12 +31,37 @@ export default function ChatPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Find the selected contact
-  const selectedContact = selectedContactId
-    ? mockContacts.find(
-        (contact) => contact.contactUser.id === selectedContactId,
-      )?.contactUser
-    : null;
+  // Fetch selected contact data when ID changes
+  useEffect(() => {
+    const fetchSelectedContact = async () => {
+      if (selectedContactId) {
+        const result = await getUserDataById(selectedContactId);
+        if (result.success && result.user) {
+          // Ensure userInfo exists
+          const user = result.user;
+          if (!user.userInfo) {
+            user.userInfo = {
+              id: user.id,
+              fullName: user.email || user.phoneNumber || "Unknown",
+              profilePictureUrl: null,
+              statusMessage: "No status",
+              blockStrangers: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              userAuth: user,
+            };
+          }
+          setSelectedContact(user as User & { userInfo: UserInfo });
+        } else {
+          setSelectedContact(null);
+        }
+      } else {
+        setSelectedContact(null);
+      }
+    };
+
+    fetchSelectedContact();
+  }, [selectedContactId]);
 
   // Toggle contact info sidebar
   const toggleContactInfo = () => {
@@ -53,7 +83,7 @@ export default function ChatPage() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <ChatArea
-          currentUser={currentUser}
+          currentUser={currentUser as User}
           selectedContact={
             selectedContact as (User & { userInfo: UserInfo }) | null
           }

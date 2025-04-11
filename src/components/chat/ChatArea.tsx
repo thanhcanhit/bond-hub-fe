@@ -5,7 +5,11 @@ import { Message, MessageType, User, UserInfo } from "@/types/base";
 import ChatHeader from "./ChatHeader";
 import MessageItem from "./MessageItem";
 import MessageInput from "./MessageInput";
-import { mockMessages } from "@/data/mockData";
+import {
+  getMessagesBetweenUsers,
+  sendTextMessage,
+} from "@/actions/message.action";
+import { formatMessageDate } from "@/utils/dateUtils";
 
 interface ChatAreaProps {
   currentUser: User;
@@ -24,8 +28,34 @@ export default function ChatArea({
 
   useEffect(() => {
     if (selectedContact) {
-      // Load messages for the selected contact
-      setMessages(mockMessages[selectedContact.id] || []);
+      // Load messages for the selected contact from API
+      const fetchMessages = async () => {
+        try {
+          const result = await getMessagesBetweenUsers(selectedContact.id);
+          if (result.success && result.messages) {
+            // Sắp xếp tin nhắn theo thời gian tạo, từ cũ đến mới
+            const sortedMessages = [...result.messages].sort((a, b) => {
+              return (
+                new Date(a.createdAt).getTime() -
+                new Date(b.createdAt).getTime()
+              );
+            });
+            setMessages(sortedMessages);
+
+            // Cuộn xuống cuối sau khi tin nhắn được tải
+            setTimeout(() => {
+              messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+            }, 100);
+          } else {
+            setMessages([]);
+          }
+        } catch (error) {
+          console.error("Error fetching messages:", error);
+          setMessages([]);
+        }
+      };
+
+      fetchMessages();
     } else {
       setMessages([]);
     }
@@ -36,6 +66,11 @@ export default function ChatArea({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Scroll to bottom when component mounts
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+  }, []);
+
   const handleReply = (message: Message) => {
     setReplyingTo(message);
   };
@@ -44,11 +79,17 @@ export default function ChatArea({
     setReplyingTo(null);
   };
 
-  const handleSendMessage = (text: string) => {
-    if (!selectedContact) return;
+  const handleSendMessage = async (text: string) => {
+    if (!selectedContact || !text.trim() || !currentUser || !currentUser.id) {
+      console.error(
+        "Cannot send message: Missing contact, message text, or current user",
+      );
+      return;
+    }
 
-    const newMessage: Message = {
-      id: `temp-${Date.now()}`, // Add temporary ID for frontend use only
+    // Create a temporary message to show immediately
+    const tempMessage: Message = {
+      id: `temp-${Date.now()}`,
       content: { text },
       senderId: currentUser.id,
       sender: currentUser,
@@ -64,16 +105,34 @@ export default function ChatArea({
       repliedTo: replyingTo?.id,
     };
 
-    // In a real app, the backend would generate the ID
-    setMessages((prev) => [...prev, newMessage]);
+    // Add temporary message to UI - đảm bảo tin nhắn mới được thêm vào cuối danh sách
+    setMessages((prev) => [...prev, tempMessage]);
 
-    // Update mock data (in a real app, this would be an API call)
-    if (!mockMessages[selectedContact.id]) {
-      mockMessages[selectedContact.id] = [];
+    // Cuộn xuống cuối ngay lập tức sau khi gửi tin nhắn
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
+
+    try {
+      // Send message to API
+      const result = await sendTextMessage(selectedContact.id, text);
+
+      if (result.success && result.message) {
+        // Replace temporary message with real one from server
+        setMessages((prev) =>
+          prev.map((msg) => (msg.id === tempMessage.id ? result.message : msg)),
+        );
+      } else {
+        // If sending failed, mark the message as failed
+        console.error("Failed to send message:", result.error);
+        // You could add error handling here, like marking the message as failed
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      // Handle error, maybe mark the message as failed
     }
-    mockMessages[selectedContact.id].push(newMessage);
 
-    // Clear reply state after sending
+    // Clear reply state
     setReplyingTo(null);
   };
 
@@ -84,7 +143,8 @@ export default function ChatArea({
     let currentGroup: Message[] = [];
 
     messages.forEach((message) => {
-      const messageDate = message.createdAt.toLocaleDateString("vi-VN");
+      // Use our utility function to format the date
+      const messageDate = formatMessageDate(message.createdAt);
 
       if (messageDate !== currentDate) {
         if (currentGroup.length > 0) {
@@ -122,7 +182,7 @@ export default function ChatArea({
     <div className="flex flex-col h-full w-full">
       <ChatHeader contact={selectedContact} onToggleInfo={onToggleInfo} />
 
-      <div className="flex-1 overflow-y-auto bg-gray-50 p-4 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 p-4 custom-scrollbar">
         {selectedContact ? (
           messageGroups.length > 0 ? (
             messageGroups.map((group, groupIndex) => (
