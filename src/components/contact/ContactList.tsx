@@ -6,7 +6,6 @@ type Friend = {
   id: string;
   fullName: string;
   profilePictureUrl: string;
-  status: string;
 };
 
 type FriendsByLetter = {
@@ -15,10 +14,9 @@ type FriendsByLetter = {
 
 type ContactListProps = {
   friends: Friend[];
-  title: string;
 };
 
-function ContactList({ friends, title }: ContactListProps) {
+function ContactList({ friends }: ContactListProps) {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortOption, setSortOption] = useState<string>("name");
 
@@ -49,18 +47,10 @@ function ContactList({ friends, title }: ContactListProps) {
 
     // Sort by selected option
     return [...filtered].sort((a, b) => {
-      if (sortOption === "name") {
-        return a.fullName.localeCompare(b.fullName);
-      } else if (sortOption === "status") {
-        return a.status === "online" && b.status !== "online"
-          ? -1
-          : a.status !== "online" && b.status === "online"
-            ? 1
-            : a.fullName.localeCompare(b.fullName);
-      }
-      return 0;
+      // Always sort by name since we removed status
+      return a.fullName.localeCompare(b.fullName);
     });
-  }, [friends, searchQuery, sortOption]);
+  }, [friends, searchQuery]);
 
   // Group friends by first letter
   const friendsByLetter = useMemo(() => {
@@ -76,25 +66,9 @@ function ContactList({ friends, title }: ContactListProps) {
   }, [filteredAndSortedFriends]);
 
   return (
-    <div className="flex-1 flex flex-col h-full">
-      <div className="p-4 border-b bg-white flex items-center justify-end">
-        <div className="flex items-center space-x-4">
-          <select
-            className="border rounded p-1 text-sm bg-white"
-            value={sortOption}
-            onChange={handleSortChange}
-          >
-            <option value="name">Name (A-Z)</option>
-            <option value="status">Status</option>
-          </select>
-          <div className="flex items-center space-x-2">
-            <span className="text-sm">All</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 bg-white">
-        <div className="relative w-full mb-4">
+    <div className="h-full w-full bg-white rounded-md shadow-sm overflow-hidden flex flex-col no-scrollbar">
+      <div className="p-4 flex items-center justify-between">
+        <div className="relative w-full">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="16"
@@ -112,18 +86,57 @@ function ContactList({ friends, title }: ContactListProps) {
           </svg>
           <input
             type="text"
-            placeholder="Search friends"
-            className="w-full h-8 bg-gray-100 border border-gray-200 rounded-md pl-8 outline-none"
+            placeholder="Tìm bạn"
+            className="w-full h-8 bg-white border border-gray-200/50 rounded-md pl-8 outline-none text-sm focus:border-blue-300/50 transition-colors"
             value={searchQuery}
             onChange={handleSearchChange}
           />
         </div>
 
+        <div className="flex items-center ml-4 space-x-2">
+          <div className="relative">
+            <select
+              className="appearance-none bg-white border border-gray-200 rounded-md px-3 py-1 pr-8 text-sm cursor-pointer outline-none"
+              value={sortOption}
+              onChange={handleSortChange}
+            >
+              <option value="name">Tên (A-Z)</option>
+              <option value="status">Trạng thái</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+              <svg
+                className="fill-current h-4 w-4"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+              >
+                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="relative">
+            <select className="appearance-none bg-white border border-gray-200 rounded-md px-3 py-1 pr-8 text-sm cursor-pointer outline-none">
+              <option>Tất cả</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+              <svg
+                className="fill-current h-4 w-4"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+              >
+                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
         {Object.keys(friendsByLetter)
           .sort()
           .map((letter) => (
             <div key={letter} className="mb-6">
-              <div className="text-lg font-semibold mb-2 text-gray-700">
+              <div className="text-base font-semibold mb-2 text-gray-700">
                 {letter}
               </div>
               {friendsByLetter[letter].map((friend) => (
@@ -132,7 +145,6 @@ function ContactList({ friends, title }: ContactListProps) {
                   id={friend.id}
                   fullName={friend.fullName}
                   profilePictureUrl={friend.profilePictureUrl}
-                  status={friend.status}
                 />
               ))}
             </div>
