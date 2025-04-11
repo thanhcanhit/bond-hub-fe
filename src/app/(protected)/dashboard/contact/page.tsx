@@ -174,23 +174,7 @@ const mockReceivedRequests: FriendRequest[] = [
     fullName: "Thanh Cảnh",
     profilePictureUrl: "https://i.pravatar.cc/150?img=20",
     message: "Xin chào, mình là Nguyễn Thanh Cảnh. Kết bạn với mình nhé!",
-    timeAgo: "1 giờ",
-  },
-  {
-    id: "2",
-    fullName: "Minh Tuấn",
-    profilePictureUrl: "https://i.pravatar.cc/150?img=22",
-    message:
-      "Chào bạn, mình là Minh Tuấn. Mình là bạn của Thanh Hà. Rất vui được làm quen với bạn!",
-    timeAgo: "3 giờ",
-  },
-  {
-    id: "3",
-    fullName: "Thu Hương",
-    profilePictureUrl: "https://i.pravatar.cc/150?img=23",
-    message:
-      "Chúng ta đã gặp nhau tại sự kiện hôm qua. Mình là người đã trò chuyện với bạn về dự án mới.",
-    timeAgo: "5 giờ",
+    timeAgo: "2 phút - Từ của số trò chuyện",
   },
 ];
 
@@ -199,19 +183,7 @@ const mockSentRequests: SentRequest[] = [
     id: "1",
     fullName: "Quỳnh Yến",
     profilePictureUrl: "https://i.pravatar.cc/150?img=21",
-    timeAgo: "2 giờ",
-  },
-  {
-    id: "2",
-    fullName: "Văn Khánh",
-    profilePictureUrl: "https://i.pravatar.cc/150?img=24",
-    timeAgo: "1 ngày",
-  },
-  {
-    id: "3",
-    fullName: "Hoàng Nam",
-    profilePictureUrl: "https://i.pravatar.cc/150?img=25",
-    timeAgo: "2 ngày",
+    timeAgo: "Bạn đã gửi lời mời",
   },
 ];
 

@@ -12,6 +12,8 @@ type FriendRequestProps = {
 };
 
 function FriendRequestItem({
+  // id is kept for future functionality
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   id,
   fullName,
   profilePictureUrl,
@@ -19,39 +21,53 @@ function FriendRequestItem({
   timeAgo,
 }: FriendRequestProps) {
   return (
-    <div className="bg-white rounded-md p-3 mb-4 w-[302px] h-[217px] flex flex-col justify-between shadow-sm">
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center">
-            <div className="h-10 w-10 mr-2 rounded-full overflow-hidden relative flex-shrink-0">
-              <Image
-                src={profilePictureUrl}
-                alt={fullName}
-                fill
-                sizes="40px"
-                className="object-cover"
-              />
-            </div>
-            <div className="font-semibold text-sm">{fullName}</div>
+    <div className="bg-white rounded-md p-4 mb-4 w-[302px] shadow-sm">
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex items-center">
+          <div className="h-10 w-10 mr-3 rounded-full overflow-hidden relative flex-shrink-0">
+            <Image
+              src={profilePictureUrl}
+              alt={fullName}
+              fill
+              sizes="40px"
+              className="object-cover"
+            />
           </div>
-          <div className="text-xs text-gray-500">{timeAgo}</div>
+          <div>
+            <div className="font-semibold text-sm">{fullName}</div>
+            <div className="text-xs text-gray-500">{timeAgo}</div>
+          </div>
         </div>
-        <div className="text-xs text-gray-700 mb-2 line-clamp-3 bg-gray-100 p-2 rounded-md max-h-[70px] overflow-hidden">
-          {message}
-        </div>
+        <button className="text-gray-500 hover:text-gray-700">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+            <polyline points="22,6 12,13 2,6"></polyline>
+          </svg>
+        </button>
       </div>
+
+      <div className="text-sm text-gray-700 mb-4 bg-[#ebecf0] p-3 rounded-md">
+        {message.length > 150 ? `${message.substring(0, 150)}...` : message}
+      </div>
+
       <div className="flex gap-2">
         <Button
           variant="outline"
-          size="sm"
-          className="flex-1 bg-[#e5e7eb] hover:bg-gray-300 border-gray-200 text-xs h-8 font-semibold"
+          className="flex-1 bg-[#e5e7eb] hover:bg-gray-300 border-gray-200 text-sm h-10 font-semibold"
         >
           Từ chối
         </Button>
-        <Button
-          size="sm"
-          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-xs h-8 font-semibold"
-        >
+        <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-sm h-10 font-semibold">
           Đồng ý
         </Button>
       </div>
@@ -67,36 +83,37 @@ type SentRequestProps = {
 };
 
 function SentRequestItem({
+  // id is kept for future functionality
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   id,
   fullName,
   profilePictureUrl,
   timeAgo,
 }: SentRequestProps) {
   return (
-    <div className="bg-white rounded-md p-3 mb-4 w-[302px] h-[142px] flex flex-col justify-between shadow-sm">
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center">
-            <div className="h-10 w-10 mr-2 rounded-full overflow-hidden relative flex-shrink-0">
-              <Image
-                src={profilePictureUrl}
-                alt={fullName}
-                fill
-                sizes="40px"
-                className="object-cover"
-              />
-            </div>
-            <div className="font-semibold text-sm">{fullName}</div>
+    <div className="bg-white rounded-md p-4 mb-4 w-[302px] shadow-sm">
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex items-center">
+          <div className="h-10 w-10 mr-3 rounded-full overflow-hidden relative flex-shrink-0">
+            <Image
+              src={profilePictureUrl}
+              alt={fullName}
+              fill
+              sizes="40px"
+              className="object-cover"
+            />
           </div>
-          <div className="text-xs text-gray-500">{timeAgo}</div>
+          <div>
+            <div className="font-semibold text-sm">{fullName}</div>
+            <div className="text-xs text-gray-500">{timeAgo}</div>
+          </div>
         </div>
-        <div className="text-xs text-gray-500 mb-2">Bạn đã gửi lời mời</div>
       </div>
-      <div>
+
+      <div className="mt-4">
         <Button
           variant="outline"
-          size="sm"
-          className="w-full bg-[#e5e7eb] hover:bg-gray-300 border-gray-200 text-xs h-8 font-semibold"
+          className="w-full bg-[#e5e7eb] hover:bg-gray-300 border-gray-200 text-sm h-10 font-semibold"
         >
           Thu hồi lời mời
         </Button>
@@ -118,9 +135,6 @@ function FriendRequests({
     <div className="space-y-6 overflow-auto no-scrollbar">
       {receivedRequests.length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold mb-3">
-            Lời mời đã nhận ({receivedRequests.length})
-          </h2>
           <div className="flex flex-wrap gap-4 overflow-auto no-scrollbar">
             {receivedRequests.map((request) => (
               <FriendRequestItem
