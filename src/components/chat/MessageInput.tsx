@@ -11,13 +11,14 @@ import {
   Reply,
   ImageIcon,
   FileText,
+  Play,
 } from "lucide-react";
 import { Message } from "@/types/base";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface MessageInputProps {
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, files?: File[]) => void;
   disabled?: boolean;
   replyingTo?: Message | null;
   onCancelReply?: () => void;
@@ -31,13 +32,75 @@ export default function MessageInput({
 }: MessageInputProps) {
   const [message, setMessage] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<
+    { file: File; url: string; type: string }[]
+  >([]);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Xử lý khi chọn file
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files);
+      setSelectedFiles((prev) => [...prev, ...newFiles]);
+
+      // Tạo preview URLs cho các file
+      newFiles.forEach((file) => {
+        const fileType = file.type.split("/")[0]; // image, video, application, etc.
+
+        if (fileType === "image") {
+          const url = URL.createObjectURL(file);
+          setPreviewUrls((prev) => [...prev, { file, url, type: "image" }]);
+        } else if (fileType === "video") {
+          const url = URL.createObjectURL(file);
+          setPreviewUrls((prev) => [...prev, { file, url, type: "video" }]);
+        } else {
+          // For other file types (documents, etc.)
+          setPreviewUrls((prev) => [...prev, { file, url: "", type: "file" }]);
+        }
+      });
+    }
+  };
+
+  // Xử lý khi xóa file
+  const handleRemoveFile = (fileToRemove: File) => {
+    setSelectedFiles((prev) => prev.filter((file) => file !== fileToRemove));
+    setPreviewUrls((prev) => {
+      const filtered = prev.filter((item) => item.file !== fileToRemove);
+      // Revoke object URL to avoid memory leaks
+      const itemToRemove = prev.find((item) => item.file === fileToRemove);
+      if (itemToRemove && itemToRemove.url) {
+        URL.revokeObjectURL(itemToRemove.url);
+      }
+      return filtered;
+    });
+  };
+
+  // Xử lý khi xóa tất cả file
+  const handleRemoveAllFiles = () => {
+    // Revoke all object URLs
+    previewUrls.forEach((item) => {
+      if (item.url) URL.revokeObjectURL(item.url);
+    });
+    setSelectedFiles([]);
+    setPreviewUrls([]);
+  };
+
+  // Xử lý khi nhấn nút đính kèm file
+  const handleAttachClick = () => {
+    fileInputRef.current?.click();
+  };
 
   const handleSendMessage = () => {
-    if (message.trim() && !disabled) {
-      onSendMessage(message);
+    if ((message.trim() || selectedFiles.length > 0) && !disabled) {
+      onSendMessage(
+        message,
+        selectedFiles.length > 0 ? selectedFiles : undefined,
+      );
       setMessage("");
+      handleRemoveAllFiles(); // Clear files after sending
     }
   };
 
@@ -153,20 +216,85 @@ export default function MessageInput({
         </div>
       )}
 
+      {/* File preview area */}
+      {previewUrls.length > 0 && (
+        <div className="px-3 py-2 border-t flex flex-wrap gap-2 items-center">
+          <div className="flex-1 flex flex-wrap gap-2">
+            {previewUrls.map((item, index) => (
+              <div key={index} className="relative group">
+                {item.type === "image" ? (
+                  <div className="w-16 h-16 rounded overflow-hidden border">
+                    <img
+                      src={item.url}
+                      alt={item.file.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : item.type === "video" ? (
+                  <div className="w-16 h-16 rounded overflow-hidden border bg-gray-100 flex items-center justify-center">
+                    <video
+                      src={item.url}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                      <Play className="h-6 w-6 text-white" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 rounded overflow-hidden border bg-gray-100 flex flex-col items-center justify-center p-1">
+                    <FileText className="h-6 w-6 text-gray-500" />
+                    <span className="text-xs text-gray-500 truncate w-full text-center mt-1">
+                      {item.file.name.split(".").pop()?.toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <button
+                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => handleRemoveFile(item.file)}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          {previewUrls.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+              onClick={handleRemoveAllFiles}
+            >
+              Xóa tất cả
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="p-3 flex items-center gap-2">
+        {/* Hidden file input */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          className="hidden"
+          onChange={handleFileChange}
+          multiple
+          accept="image/*,video/*,application/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+        />
         <Button
           variant="ghost"
           size="icon"
-          className="text-gray-500"
+          className="text-gray-500 hover:text-blue-500 hover:bg-blue-50"
           disabled={disabled}
+          onClick={handleAttachClick}
         >
           <Paperclip className="h-5 w-5" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="text-gray-500"
+          className="text-gray-500 hover:text-blue-500 hover:bg-blue-50"
           disabled={disabled}
+          onClick={handleAttachClick}
         >
           <ImageIcon className="h-5 w-5" />
         </Button>

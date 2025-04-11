@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
 import { formatMessageTime } from "@/utils/dateUtils";
 import { Message, Media } from "@/types/base";
+import MediaGrid from "./MediaGrid";
 import {
   Copy,
   Download,
@@ -63,16 +64,21 @@ function MediaItem({ media }: MediaItemProps) {
   switch (media.type) {
     case "IMAGE":
       return (
-        <div className="relative rounded-lg overflow-hidden max-w-full">
+        <div className="relative rounded-lg overflow-hidden max-w-full group">
           <Image
             src={media.url}
             alt={media.fileName}
             className="w-full rounded-lg object-cover max-h-[300px]"
             width={300}
             height={200}
+            unoptimized
           />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-200"></div>
+          <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded">
+            HD
+          </div>
           <button
-            className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full"
+            className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={handleDownload}
           >
             <Download className="h-4 w-4" />
@@ -82,21 +88,30 @@ function MediaItem({ media }: MediaItemProps) {
 
     case "VIDEO":
       return (
-        <div className="relative rounded-lg overflow-hidden max-w-full">
+        <div className="relative rounded-lg overflow-hidden max-w-full group">
           <video
             src={media.url}
             controls
             className="w-full rounded-lg max-h-[300px]"
             style={{ maxWidth: "100%" }}
           />
+          <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded z-10">
+            HD
+          </div>
+          <button
+            className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+            onClick={handleDownload}
+          >
+            <Download className="h-4 w-4" />
+          </button>
         </div>
       );
 
     // For documents and other file types
     default:
       return (
-        <div className="flex items-center p-2 bg-gray-100 rounded-lg overflow-hidden">
-          <div className="mr-3 p-2 bg-white rounded-md flex-shrink-0">
+        <div className="flex items-center p-2 bg-gray-100 rounded-lg overflow-hidden hover:bg-gray-200 transition-colors group">
+          <div className="mr-3 p-2 bg-white rounded-md flex-shrink-0 shadow-sm">
             {getFileIcon()}
           </div>
           <div className="flex-1 min-w-0 overflow-hidden">
@@ -106,7 +121,7 @@ function MediaItem({ media }: MediaItemProps) {
             </p>
           </div>
           <button
-            className="ml-2 p-1 bg-white rounded-full flex-shrink-0"
+            className="ml-2 p-1.5 bg-white rounded-full flex-shrink-0 shadow-sm hover:bg-gray-50 transition-colors"
             onClick={handleDownload}
           >
             <Download className="h-4 w-4" />
@@ -370,10 +385,22 @@ export default function MessageItem({
 
               {/* New media array support */}
               {message.content.media && message.content.media.length > 0 && (
-                <div className="mt-2 space-y-2 w-full overflow-hidden">
-                  {message.content.media.map((media, index) => (
-                    <MediaItem key={index} media={media} />
-                  ))}
+                <div className="mt-2 w-full overflow-hidden">
+                  {message.content.media.length === 1 ? (
+                    <MediaItem media={message.content.media[0]} />
+                  ) : (
+                    <MediaGrid
+                      media={message.content.media}
+                      onDownload={(media) => {
+                        const link = document.createElement("a");
+                        link.href = media.url;
+                        link.download = media.fileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }}
+                    />
+                  )}
                 </div>
               )}
             </>

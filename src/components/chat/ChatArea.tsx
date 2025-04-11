@@ -8,6 +8,7 @@ import MessageInput from "./MessageInput";
 import {
   getMessagesBetweenUsers,
   sendTextMessage,
+  sendMediaMessage,
 } from "@/actions/message.action";
 import { formatMessageDate } from "@/utils/dateUtils";
 
@@ -79,8 +80,13 @@ export default function ChatArea({
     setReplyingTo(null);
   };
 
-  const handleSendMessage = async (text: string) => {
-    if (!selectedContact || !text.trim() || !currentUser || !currentUser.id) {
+  const handleSendMessage = async (text: string, files?: File[]) => {
+    if (
+      !selectedContact ||
+      (!text.trim() && !files?.length) ||
+      !currentUser ||
+      !currentUser.id
+    ) {
       console.error(
         "Cannot send message: Missing contact, message text, or current user",
       );
@@ -90,7 +96,32 @@ export default function ChatArea({
     // Create a temporary message to show immediately
     const tempMessage: Message = {
       id: `temp-${Date.now()}`,
-      content: { text },
+      content: {
+        text,
+        // Add placeholder for files if they exist
+        media: files?.map((file) => ({
+          url: URL.createObjectURL(file),
+          type: file.type.startsWith("image/")
+            ? "IMAGE"
+            : file.type.startsWith("video/")
+              ? "VIDEO"
+              : "DOCUMENT",
+          fileId: `temp-${Date.now()}-${file.name}`,
+          fileName: file.name,
+          metadata: {
+            path: "",
+            size: file.size,
+            mimeType: file.type,
+            extension: file.name.split(".").pop() || "",
+            bucketName: "",
+            uploadedAt: new Date().toISOString(),
+            sizeFormatted: `${Math.round(file.size / 1024)} KB`,
+          },
+          thumbnailUrl: file.type.startsWith("image/")
+            ? URL.createObjectURL(file)
+            : undefined,
+        })),
+      },
       senderId: currentUser.id,
       sender: currentUser,
       receiverId: selectedContact.id,
@@ -115,7 +146,14 @@ export default function ChatArea({
 
     try {
       // Send message to API
-      const result = await sendTextMessage(selectedContact.id, text);
+      let result;
+      if (files && files.length > 0) {
+        // Use sendMediaMessage if we have files
+        result = await sendMediaMessage(selectedContact.id, text, files);
+      } else {
+        // Use sendTextMessage if we only have text
+        result = await sendTextMessage(selectedContact.id, text);
+      }
 
       if (result.success && result.message) {
         // Replace temporary message with real one from server
