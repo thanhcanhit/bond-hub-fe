@@ -5,12 +5,14 @@ import { Message, MessageType, User, UserInfo } from "@/types/base";
 import ChatHeader from "./ChatHeader";
 import MessageItem from "./MessageItem";
 import MessageInput from "./MessageInput";
+import MessageDetailDialog from "./MessageDetailDialog";
 import {
   getMessagesBetweenUsers,
   sendTextMessage,
   sendMediaMessage,
 } from "@/actions/message.action";
 import { formatMessageDate } from "@/utils/dateUtils";
+import { toast } from "sonner";
 
 interface ChatAreaProps {
   currentUser: User;
@@ -25,6 +27,8 @@ export default function ChatArea({
 }: ChatAreaProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,6 +78,24 @@ export default function ChatArea({
 
   const handleReply = (message: Message) => {
     setReplyingTo(message);
+  };
+
+  const handleMessageClick = (message: Message) => {
+    // Hiển thị chi tiết tin nhắn trong dialog khi click vào tin nhắn
+    console.log("Message clicked:", message);
+
+    // Chỉ mở dialog khi tin nhắn có media
+    if (
+      message.content.media?.length ||
+      message.content.image ||
+      message.content.video
+    ) {
+      setSelectedMessage(message);
+      setIsDialogOpen(true);
+    } else if (message.content.text) {
+      // Nếu chỉ có text thì hiển thị toast
+      toast.info("Xem chi tiết tin nhắn: " + message.content.text);
+    }
   };
 
   const handleCancelReply = () => {
@@ -239,6 +261,7 @@ export default function ChatArea({
                       isCurrentUser={isCurrentUser}
                       showAvatar={showAvatar}
                       onReply={handleReply}
+                      onMessageClick={handleMessageClick}
                     />
                   ),
                 )}
@@ -266,6 +289,13 @@ export default function ChatArea({
         disabled={!selectedContact}
         replyingTo={replyingTo}
         onCancelReply={handleCancelReply}
+      />
+
+      {/* Dialog hiển thị chi tiết tin nhắn */}
+      <MessageDetailDialog
+        message={selectedMessage}
+        isOpen={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
       />
     </div>
   );

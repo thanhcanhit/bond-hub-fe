@@ -3,16 +3,18 @@
 import { Media } from "@/types/base";
 import Image from "next/image";
 import { Download, FileText, Play } from "lucide-react";
-import { useState } from "react";
 
 interface MediaGridProps {
   media: Media[];
   onDownload: (media: Media) => void;
+  onClick?: () => void;
 }
 
-export default function MediaGrid({ media, onDownload }: MediaGridProps) {
-  const [expandedImage, setExpandedImage] = useState<string | null>(null);
-
+export default function MediaGrid({
+  media,
+  onDownload,
+  onClick,
+}: MediaGridProps) {
   // Lọc ra các media là hình ảnh
   const images = media.filter((item) => item.type === "IMAGE");
   // Lọc ra các media là video
@@ -88,8 +90,8 @@ export default function MediaGrid({ media, onDownload }: MediaGridProps) {
           >
             {item.type === "IMAGE" ? (
               <div
-                className="w-full h-full cursor-pointer group"
-                onClick={() => setExpandedImage(item.url)}
+                className="w-full h-full cursor-pointer isolate"
+                onClick={onClick}
               >
                 <Image
                   src={item.url}
@@ -99,13 +101,14 @@ export default function MediaGrid({ media, onDownload }: MediaGridProps) {
                   height={300}
                   unoptimized
                 />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200"></div>
+                <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-all duration-200"></div>
                 <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded">
                   HD
                 </div>
                 <button
-                  className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full shadow-sm hover:bg-white/100 transition-opacity opacity-0 peer-hover:opacity-100 hover:opacity-100"
                   onClick={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     onDownload(item);
                   }}
@@ -114,7 +117,7 @@ export default function MediaGrid({ media, onDownload }: MediaGridProps) {
                 </button>
               </div>
             ) : item.type === "VIDEO" ? (
-              <div className="w-full h-full cursor-pointer group">
+              <div className="w-full h-full cursor-pointer isolate">
                 <div className="w-full h-full relative">
                   {item.thumbnailUrl ? (
                     <Image
@@ -130,15 +133,16 @@ export default function MediaGrid({ media, onDownload }: MediaGridProps) {
                       <Play className="h-8 w-8 text-white" />
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center group-hover:bg-black/50 transition-all duration-200">
+                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center hover:bg-black/50 transition-all duration-200">
                     <Play className="h-10 w-10 text-white" />
                   </div>
                   <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded">
                     HD
                   </div>
                   <button
-                    className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full shadow-sm hover:bg-white/100 transition-opacity opacity-0 hover:opacity-100"
                     onClick={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
                       onDownload(item);
                     }}
@@ -148,7 +152,7 @@ export default function MediaGrid({ media, onDownload }: MediaGridProps) {
                 </div>
               </div>
             ) : (
-              <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center p-2 group hover:bg-gray-200 transition-colors duration-200">
+              <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center p-2 hover:bg-gray-200 transition-colors duration-200 isolate">
                 <FileText className="h-8 w-8 text-gray-500 mb-1" />
                 <span className="text-xs text-gray-700 font-medium truncate w-full text-center">
                   {item.fileName}
@@ -157,8 +161,12 @@ export default function MediaGrid({ media, onDownload }: MediaGridProps) {
                   {item.metadata.sizeFormatted}
                 </span>
                 <button
-                  className="mt-2 bg-white p-1 rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-100"
-                  onClick={() => onDownload(item)}
+                  className="mt-2 bg-white p-1 rounded-full shadow hover:bg-gray-100 transition-opacity opacity-0 hover:opacity-100"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onDownload(item);
+                  }}
                 >
                   <Download className="h-4 w-4" />
                 </button>
@@ -169,16 +177,7 @@ export default function MediaGrid({ media, onDownload }: MediaGridProps) {
             {index === maxDisplay - 1 && hasMore && (
               <div
                 className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-xl cursor-pointer hover:bg-black/70 transition-colors"
-                onClick={() => {
-                  // Nếu ảnh đầu tiên trong số ảnh còn lại là hình ảnh, mở nó lên
-                  const remainingImages = gridMedia.slice(maxDisplay);
-                  const firstImage = remainingImages.find(
-                    (item) => item.type === "IMAGE",
-                  );
-                  if (firstImage) {
-                    setExpandedImage(firstImage.url);
-                  }
-                }}
+                onClick={onClick}
               >
                 +{gridMedia.length - maxDisplay}
               </div>
@@ -186,45 +185,6 @@ export default function MediaGrid({ media, onDownload }: MediaGridProps) {
           </div>
         ))}
       </div>
-
-      {/* Modal hiển thị ảnh phóng to */}
-      {expandedImage && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
-          onClick={() => setExpandedImage(null)}
-        >
-          <div className="max-w-4xl max-h-[90vh] relative">
-            <Image
-              src={expandedImage}
-              alt="Expanded image"
-              className="object-contain max-h-[90vh]"
-              width={1200}
-              height={800}
-              unoptimized
-            />
-            <button
-              className="absolute top-4 right-4 bg-white/20 p-2 rounded-full text-white hover:bg-white/40 transition-colors"
-              onClick={() => setExpandedImage(null)}
-            >
-              &times;
-            </button>
-            <button
-              className="absolute bottom-4 right-4 bg-white/20 p-2 rounded-full text-white hover:bg-white/40 transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                const link = document.createElement("a");
-                link.href = expandedImage;
-                link.download = "image.jpg"; // Default name
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              }}
-            >
-              <Download className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-      )}
     </>
   );
 }

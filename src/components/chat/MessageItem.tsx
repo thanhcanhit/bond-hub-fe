@@ -6,6 +6,7 @@ import Image from "next/image";
 import { formatMessageTime } from "@/utils/dateUtils";
 import { Message, Media } from "@/types/base";
 import MediaGrid from "./MediaGrid";
+import { toast } from "sonner";
 import {
   Copy,
   Download,
@@ -32,11 +33,14 @@ import { deleteMessageForSelf, recallMessage } from "@/actions/message.action";
 
 interface MediaItemProps {
   media: Media;
+  onClick?: () => void;
 }
 
 // Component to render different types of media
-function MediaItem({ media }: MediaItemProps) {
-  const handleDownload = () => {
+function MediaItem({ media, onClick }: MediaItemProps) {
+  const handleDownload = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     // Tạo một thẻ a ẩn để tải file
     const link = document.createElement("a");
     link.href = media.url;
@@ -64,7 +68,10 @@ function MediaItem({ media }: MediaItemProps) {
   switch (media.type) {
     case "IMAGE":
       return (
-        <div className="relative rounded-lg overflow-hidden max-w-full group">
+        <div
+          className="relative rounded-lg overflow-hidden max-w-full isolate cursor-pointer hover:opacity-90"
+          onClick={onClick}
+        >
           <Image
             src={media.url}
             alt={media.fileName}
@@ -73,12 +80,12 @@ function MediaItem({ media }: MediaItemProps) {
             height={200}
             unoptimized
           />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-200"></div>
+          <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-all duration-200"></div>
           <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded">
             HD
           </div>
           <button
-            className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full shadow-sm hover:bg-white/100 transition-opacity opacity-0 hover:opacity-100"
             onClick={handleDownload}
           >
             <Download className="h-4 w-4" />
@@ -88,7 +95,10 @@ function MediaItem({ media }: MediaItemProps) {
 
     case "VIDEO":
       return (
-        <div className="relative rounded-lg overflow-hidden max-w-full group">
+        <div
+          className="relative rounded-lg overflow-hidden max-w-full isolate cursor-pointer hover:opacity-90"
+          onClick={onClick}
+        >
           <video
             src={media.url}
             controls
@@ -99,7 +109,7 @@ function MediaItem({ media }: MediaItemProps) {
             HD
           </div>
           <button
-            className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+            className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full shadow-sm hover:bg-white/100 transition-opacity opacity-0 hover:opacity-100 z-10"
             onClick={handleDownload}
           >
             <Download className="h-4 w-4" />
@@ -110,7 +120,10 @@ function MediaItem({ media }: MediaItemProps) {
     // For documents and other file types
     default:
       return (
-        <div className="flex items-center p-2 bg-gray-100 rounded-lg overflow-hidden hover:bg-gray-200 transition-colors group">
+        <div
+          className="flex items-center p-2 bg-gray-100 rounded-lg overflow-hidden hover:bg-gray-200 transition-colors isolate cursor-pointer"
+          onClick={onClick}
+        >
           <div className="mr-3 p-2 bg-white rounded-md flex-shrink-0 shadow-sm">
             {getFileIcon()}
           </div>
@@ -121,7 +134,7 @@ function MediaItem({ media }: MediaItemProps) {
             </p>
           </div>
           <button
-            className="ml-2 p-1.5 bg-white rounded-full flex-shrink-0 shadow-sm hover:bg-gray-50 transition-colors"
+            className="ml-2 p-1.5 bg-white rounded-full flex-shrink-0 shadow-sm hover:bg-gray-50 transition-opacity opacity-0 hover:opacity-100"
             onClick={handleDownload}
           >
             <Download className="h-4 w-4" />
@@ -136,6 +149,7 @@ interface MessageItemProps {
   isCurrentUser: boolean;
   showAvatar?: boolean;
   onReply?: (message: Message) => void;
+  onMessageClick?: (message: Message) => void;
 }
 
 export default function MessageItem({
@@ -143,6 +157,7 @@ export default function MessageItem({
   isCurrentUser,
   showAvatar = true,
   onReply,
+  onMessageClick,
 }: MessageItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const formattedTime = formatMessageTime(message.createdAt);
@@ -150,7 +165,7 @@ export default function MessageItem({
   const handleCopyMessage = () => {
     if (message.content.text) {
       navigator.clipboard.writeText(message.content.text);
-      alert("Đã sao chép tin nhắn"); // Using alert instead of toast for simplicity
+      toast.success("Đã sao chép tin nhắn");
     }
   };
 
@@ -158,14 +173,14 @@ export default function MessageItem({
     try {
       const result = await deleteMessageForSelf(message.id);
       if (result.success) {
-        alert("Đã xóa tin nhắn"); // Using alert instead of toast for simplicity
+        toast.success("Đã xóa tin nhắn");
         // In a real implementation, you would update the UI to reflect the deletion
       } else {
-        alert(`Lỗi: ${result.error}`);
+        toast.error(`Lỗi: ${result.error}`);
       }
     } catch (error) {
       console.error("Error deleting message:", error);
-      alert("Có lỗi xảy ra khi xóa tin nhắn");
+      toast.error("Có lỗi xảy ra khi xóa tin nhắn");
     }
   };
 
@@ -177,19 +192,25 @@ export default function MessageItem({
         message.recalled = true;
         // Force a re-render
         setIsHovered(false);
-        alert("Đã thu hồi tin nhắn"); // Using alert instead of toast for simplicity
+        toast.success("Đã thu hồi tin nhắn");
       } else {
-        alert(`Lỗi: ${result.error}`);
+        toast.error(`Lỗi: ${result.error}`);
       }
     } catch (error) {
       console.error("Error recalling message:", error);
-      alert("Có lỗi xảy ra khi thu hồi tin nhắn");
+      toast.error("Có lỗi xảy ra khi thu hồi tin nhắn");
     }
   };
 
   const handleReply = () => {
     if (onReply) {
       onReply(message);
+    }
+  };
+
+  const handleMessageClick = () => {
+    if (onMessageClick) {
+      onMessageClick(message);
     }
   };
 
@@ -310,102 +331,133 @@ export default function MessageItem({
             <p className="truncate">Tin nhắn gốc đã bị xóa hoặc thu hồi</p>
           </div>
         )}
-        <div
-          className={`rounded-2xl px-3 py-2 break-words overflow-hidden ${
-            isCurrentUser
-              ? message.recalled
-                ? "bg-gray-100 text-gray-500 italic"
-                : "bg-blue-500 text-white"
-              : message.recalled
-                ? "bg-gray-100 text-gray-500 italic"
-                : "bg-gray-200 text-gray-800"
-          }`}
-        >
-          {message.recalled ? (
-            <p className="flex items-center gap-1">
-              <RotateCcw className="h-3 w-3" />
-              <span>Tin nhắn đã được thu hồi</span>
-            </p>
-          ) : (
-            <>
-              {message.content.text && (
-                <p className="break-words">{message.content.text}</p>
-              )}
+        {/* Tin nhắn văn bản */}
+        {(message.recalled ||
+          (message.content.text &&
+            !(
+              message.content.media?.length ||
+              message.content.image ||
+              message.content.video
+            ))) && (
+          <div
+            className={`rounded-2xl px-3 py-2 break-words overflow-hidden ${
+              isCurrentUser
+                ? message.recalled
+                  ? "bg-gray-100 text-gray-500 italic"
+                  : "bg-blue-500 text-white"
+                : message.recalled
+                  ? "bg-gray-100 text-gray-500 italic"
+                  : "bg-gray-200 text-gray-800"
+            } ${!message.recalled ? "cursor-pointer hover:opacity-90" : ""}`}
+            onClick={!message.recalled ? handleMessageClick : undefined}
+          >
+            {message.recalled ? (
+              <p className="flex items-center gap-1">
+                <RotateCcw className="h-3 w-3" />
+                <span>Tin nhắn đã được thu hồi</span>
+              </p>
+            ) : (
+              <p className="break-words">{message.content.text}</p>
+            )}
+          </div>
+        )}
 
-              {/* Legacy image support */}
-              {message.content.image && (
-                <div className="mt-1 relative rounded-lg overflow-hidden max-w-full">
-                  <Image
-                    src={message.content.image}
-                    alt="Image"
-                    className="w-full rounded-lg object-cover max-h-[300px]"
-                    width={300}
-                    height={200}
+        {/* Media content - outside of message bubble */}
+        {!message.recalled && (
+          <>
+            {/* Legacy image support */}
+            {message.content.image && (
+              <div
+                className="mt-1 relative rounded-lg overflow-hidden max-w-full isolate cursor-pointer hover:opacity-90"
+                onClick={handleMessageClick}
+              >
+                <Image
+                  src={message.content.image}
+                  alt="Image"
+                  className="w-full rounded-lg object-cover max-h-[300px]"
+                  width={300}
+                  height={200}
+                />
+                <button
+                  className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full shadow-sm hover:bg-white/100 transition-opacity opacity-0 hover:opacity-100"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const link = document.createElement("a");
+                    link.href = message.content.image || "";
+                    link.download = "image.jpg"; // Default name
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                >
+                  <Download className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Legacy video support */}
+            {message.content.video && (
+              <div
+                className="mt-1 relative rounded-lg overflow-hidden max-w-full isolate cursor-pointer hover:opacity-90"
+                onClick={handleMessageClick}
+              >
+                <video
+                  src={message.content.video}
+                  controls
+                  className="w-full rounded-lg max-h-[300px]"
+                  style={{ maxWidth: "100%" }}
+                />
+                <button
+                  className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full shadow-sm hover:bg-white/100 transition-opacity opacity-0 hover:opacity-100 z-10"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const link = document.createElement("a");
+                    link.href = message.content.video || "";
+                    link.download = "video.mp4"; // Default name
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                >
+                  <Download className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {/* New media array support */}
+            {message.content.media && message.content.media.length > 0 && (
+              <div
+                className="mt-2 w-full overflow-hidden cursor-pointer hover:opacity-90"
+                onClick={handleMessageClick}
+              >
+                {message.content.media.length === 1 ? (
+                  <MediaItem
+                    media={message.content.media[0]}
+                    onClick={handleMessageClick}
                   />
-                  <button
-                    className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full"
-                    onClick={() => {
+                ) : (
+                  <MediaGrid
+                    media={message.content.media}
+                    onClick={handleMessageClick}
+                    onDownload={(media) => {
                       const link = document.createElement("a");
-                      link.href = message.content.image || "";
-                      link.download = "image.jpg"; // Default name
+                      link.href = media.url;
+                      link.download = media.fileName;
+                      link.target = "_blank";
+                      link.rel = "noopener noreferrer";
+                      link.setAttribute("download", media.fileName);
                       document.body.appendChild(link);
                       link.click();
                       document.body.removeChild(link);
                     }}
-                  >
-                    <Download className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-
-              {/* Legacy video support */}
-              {message.content.video && (
-                <div className="mt-1 relative rounded-lg overflow-hidden max-w-full">
-                  <video
-                    src={message.content.video}
-                    controls
-                    className="w-full rounded-lg max-h-[300px]"
-                    style={{ maxWidth: "100%" }}
                   />
-                  <button
-                    className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full"
-                    onClick={() => {
-                      const link = document.createElement("a");
-                      link.href = message.content.video || "";
-                      link.download = "video.mp4"; // Default name
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                    }}
-                  >
-                    <Download className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-
-              {/* New media array support */}
-              {message.content.media && message.content.media.length > 0 && (
-                <div className="mt-2 w-full overflow-hidden">
-                  {message.content.media.length === 1 ? (
-                    <MediaItem media={message.content.media[0]} />
-                  ) : (
-                    <MediaGrid
-                      media={message.content.media}
-                      onDownload={(media) => {
-                        const link = document.createElement("a");
-                        link.href = media.url;
-                        link.download = media.fileName;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                      }}
-                    />
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
         <div
           className={`text-xs text-gray-500 mt-1 ${isCurrentUser ? "text-right" : "text-left"}`}
         >
