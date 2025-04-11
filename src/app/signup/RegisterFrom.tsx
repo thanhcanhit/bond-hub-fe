@@ -2,8 +2,7 @@ import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import { format, subYears } from "date-fns";
 import {
   // Smartphone,
   UsersRound,
@@ -11,6 +10,8 @@ import {
   CalendarIcon,
   UserRound,
   Venus,
+  Mars,
+  VenusAndMars,
   //CircleUserRound
 } from "lucide-react";
 import {
@@ -33,25 +34,16 @@ import {
 import {
   completeRegistration,
   initiateRegistration,
-  login,
   verifyOtp,
 } from "@/actions/auth.action";
-import { DeviceType } from "@/types/base";
 import { useAuthStore } from "@/stores/authStore";
-
-// Hàm kiểm tra định dạng email hoặc số điện thoại
-const isEmail = (input: string): boolean => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(input);
-};
-
-const isPhoneNumber = (input: string): boolean => {
-  const phoneRegex = /^\d{10,11}$/; // Giả sử số điện thoại Việt Nam có 10-11 chữ số
-  return phoneRegex.test(input);
-};
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { getDeviceInfo, isEmail, isPhoneNumber } from "@/utils/helpers";
 
 export default function RegisterForm() {
-  const [date, setDate] = useState<Date | undefined>(undefined);
+  // Đặt ngày mặc định là ngày hiện tại
+  const [date, setDate] = useState<Date>(new Date());
   const [step, setStep] = useState(1);
   const [inputValue, setInputValue] = useState("");
   const [password, setPassword] = useState("");
@@ -61,12 +53,15 @@ export default function RegisterForm() {
   const [registrationId, setRegistrationId] = useState(""); // Lưu registrationId từ bước 1
   const [error, setError] = useState<string | null>(null); // Xử lý lỗi
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const { login } = useAuthStore();
 
   // Bước 1: Gửi yêu cầu OTP
   const handleRequestOTP = async () => {
     setLoading(true);
     setError(null);
     if (!inputValue) {
+      toast.warning("Vui lòng nhập số điện thoại hoặc email.");
       setError("Vui lòng nhập số điện thoại hoặc email.");
       setLoading(false);
       return;
@@ -76,27 +71,25 @@ export default function RegisterForm() {
     const inputIsPhone = isPhoneNumber(inputValue);
 
     if (!inputIsEmail && !inputIsPhone) {
+      toast.warning("Vui lòng nhập email hoặc số điện thoại hợp lệ.");
       setError("Vui lòng nhập email hoặc số điện thoại hợp lệ.");
       setLoading(false);
       return;
     }
 
-    // Hiện tại chỉ hỗ trợ gửi OTP qua email
-    if (inputIsEmail) {
-      const result = await initiateRegistration(inputValue); // Gửi email thay vì phoneNumber
-      setLoading(false);
+    // Gửi OTP qua email hoặc số điện thoại
+    const result = await initiateRegistration(inputValue);
+    setLoading(false);
 
-      if (result.success && result.registrationId) {
-        setRegistrationId(result.registrationId);
-        setStep(2);
-      } else {
-        setError(result.error || "Không thể gửi OTP. Vui lòng thử lại.");
-      }
-    } else if (inputIsPhone) {
-      setError(
-        "Hiện tại chúng tôi chỉ hỗ trợ gửi OTP qua email. Vui lòng dùng email để đăng ký.",
+    if (result.success && result.registrationId) {
+      setRegistrationId(result.registrationId);
+      setStep(2);
+      toast.success(
+        `Đã gửi mã OTP đến ${inputIsEmail ? "email" : "số điện thoại"} của bạn!`,
       );
-      setLoading(false);
+    } else {
+      toast.error("Không thể gửi OTP. Vui lòng thử lại.");
+      setError(result.error || "Không thể gửi OTP. Vui lòng thử lại.");
     }
   };
 
@@ -108,8 +101,10 @@ export default function RegisterForm() {
     setLoading(false);
 
     if (result.success) {
+      toast.success("Xác thực OTP thành công!");
       setStep(3);
     } else {
+      toast.error("Xác thực OTP thất bại!");
       setError(result.error || "Mã OTP không đúng. Vui lòng thử lại.");
     }
   };
@@ -120,7 +115,17 @@ export default function RegisterForm() {
     setLoading(true);
     setError(null);
     if (!date) {
+      toast.warning("Vui lòng chọn ngày sinh.");
       setError("Vui lòng chọn ngày sinh.");
+      setLoading(false);
+      return;
+    }
+
+    // Kiểm tra tuổi tối thiểu (13 tuổi)
+    const minAgeDate = subYears(new Date(), 13);
+    if (date > minAgeDate) {
+      toast.warning("Bạn phải ít nhất 13 tuổi để đăng ký.");
+      setError("Bạn phải ít nhất 13 tuổi để đăng ký.");
       setLoading(false);
       return;
     }
@@ -133,35 +138,41 @@ export default function RegisterForm() {
       gender,
     );
     setLoading(false);
-
+    const { deviceType, deviceName } = getDeviceInfo();
     if (result.success) {
-      const loginResult = await login(inputValue, password, DeviceType.DESKTOP);
-      if (loginResult.success) {
-        useAuthStore
-          .getState()
-          .setAuth(loginResult.user, loginResult.accessToken);
+      const loginResult = await login(
+        inputValue,
+        password,
+        deviceName,
+        deviceType,
+      );
+      if (loginResult) {
+        toast.success("Đăng ký thành công!");
+        router.push("/dashboard");
       } else {
+        toast.error("Đăng nhập thất bại!");
         setError(result.error || "Đăng ký thất bại. Vui lòng thử lại.");
       }
     }
   };
 
   return (
-    <div className="mb-4">
+    <div className="mb-4 overflow-auto no-scrollbar">
       {step === 1 && (
-        <div className="items-center">
-          <div className="flex items-center gap-2 border-b border-gray-200 mb-6">
+        <div className="items-center w-full max-w-[373px] mx-auto justify-center overflow-auto no-scrollbar">
+          <div className="flex items-center justify-center gap-2 border-b border-gray-200 mb-6">
             <UsersRound className="w-5 h-5" />
             <Input
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder="Số điện thoại hoặc Email"
+              className="border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0"
               required
             />
           </div>
           <Button
-            className="w-[373px] h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
+            className="w-full h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
             onClick={handleRequestOTP}
             disabled={loading || !inputValue}
           >
@@ -171,27 +182,29 @@ export default function RegisterForm() {
       )}
 
       {step === 2 && (
-        <div className="items-center flex flex-col gap-4">
-          <p>Nhập mã OTP</p>
+        <div className="items-center flex flex-col gap-4 w-full max-w-[373px] mx-auto overflow-auto no-scrollbar">
+          <p className="text-center">Nhập mã OTP</p>
           <InputOTP
             maxLength={6}
             value={otp}
             onChange={setOtp}
-            className="mb-4 flex gap-x-4"
+            className="mb-4 flex gap-x-2 sm:gap-x-4 justify-center"
           >
             <InputOTPGroup>
               {[...Array(6)].map((_, i) => (
                 <InputOTPSlot
-                  className="w-12 h-12 text-xl text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-8 h-10 sm:w-12 sm:h-12 text-lg sm:text-xl text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   key={i}
                   index={i}
                 />
               ))}
             </InputOTPGroup>
           </InputOTP>
-          {error && <p className="text-red-500 mb-3">{error}</p>}
+          {error && (
+            <p className="text-red-500 mb-3 text-center text-sm">{error}</p>
+          )}
           <Button
-            className="w-[373px] h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
+            className="w-full h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
             onClick={handleVerifyOTP}
           >
             Xác nhận
@@ -200,46 +213,238 @@ export default function RegisterForm() {
       )}
 
       {step === 3 && (
-        <form onSubmit={handleSubmit} className="flex flex-col">
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col w-full max-w-[373px] mx-auto overflow-auto no-scrollbar"
+        >
           <div className="flex items-center justify-center mb-3 text-muted-foreground">
-            <p>Nhập thông tin cá nhân</p>
+            <p className="text-center">Nhập thông tin cá nhân</p>
           </div>
-          <div className="flex items-center gap-2 border-b border-gray-200 pl-4 mb-8">
-            <UserRound className="w-5 h-5" />
+          <div className="flex items-center gap-2 border-b border-gray-200 pl-4 mb-6">
+            <UserRound className="w-5 h-5 flex-shrink-0" />
             <Input
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="Họ và tên"
+              className="border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0"
               required
             />
           </div>
-          <div className="flex flex-row gap-2 mb-4">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant={"outline"}
-                  className={cn(
-                    "w-full h-12 justify-start text-left font-normal",
-                    !date && "text-muted-foreground",
-                  )}
-                >
-                  <CalendarIcon className="w-5 h-5" />
-                  {date ? format(date, "PPP") : <span>Pick a date</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={setDate}
-                  initialFocus
+          <div className="flex flex-col sm:flex-row gap-2 mb-4">
+            <div className="w-full">
+              <div className="relative w-full">
+                <Input
+                  type="text"
+                  placeholder="dd/mm/yyyy"
+                  value={format(date, "dd/MM/yyyy")}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Nếu người dùng xóa hết, đặt date thành ngày hiện tại
+                    if (!value) {
+                      setDate(new Date());
+                      return;
+                    }
+
+                    // Thử phân tích chuỗi ngày tháng
+                    // Hỗ trợ định dạng: mm/dd/yyyy
+                    const parts = value.split(/[\/\-\.]/);
+                    if (parts.length === 3) {
+                      const month = parseInt(parts[0], 10) - 1; // Tháng trong JS bắt đầu từ 0
+                      const day = parseInt(parts[1], 10);
+                      const year = parseInt(parts[2], 10);
+
+                      if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+                        const newDate = new Date(year, month, day);
+                        // Kiểm tra xem ngày có hợp lệ không
+                        if (
+                          newDate.getDate() === day &&
+                          newDate.getMonth() === month &&
+                          newDate.getFullYear() === year
+                        ) {
+                          // Kiểm tra tuổi tối thiểu
+                          const minAgeDate = subYears(new Date(), 13);
+                          if (newDate <= minAgeDate) {
+                            setDate(newDate);
+                          }
+                        }
+                      }
+                    }
+                  }}
+                  className="h-12 pr-10 border-gray-300 focus:border-none focus:outline-none focus:ring-0 focus-visible:ring-0"
                 />
-              </PopoverContent>
-            </Popover>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-gray-600"
+                    >
+                      <CalendarIcon className="w-5 h-5" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-auto p-0"
+                    align="end"
+                    side="right"
+                    alignOffset={-5}
+                    sideOffset={20}
+                    style={{ marginTop: "40px" }} // Thêm khoảng cách với phía trên
+                    forceMount // Đảm bảo popover luôn được render khi mở
+                    sticky="always" // Luôn gắn với nút khi cuộn trang
+                  >
+                    <div className="p-3 border-b">
+                      <div className="flex justify-between items-center mb-2">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="text-sm font-medium px-4 py-2 h-9 rounded-md"
+                            >
+                              {format(date, "MMMM")}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="p-0 w-auto" align="start">
+                            <div className="grid grid-cols-3 gap-1 p-2">
+                              {[
+                                "January",
+                                "February",
+                                "March",
+                                "April",
+                                "May",
+                                "June",
+                                "July",
+                                "August",
+                                "September",
+                                "October",
+                                "November",
+                                "December",
+                              ].map((month, index) => (
+                                <Button
+                                  key={month}
+                                  variant="ghost"
+                                  className="text-sm py-1 px-2"
+                                  onClick={() => {
+                                    const newDate = date
+                                      ? new Date(date)
+                                      : new Date();
+                                    newDate.setMonth(index);
+                                    setDate(newDate);
+                                    // Đóng popover tháng
+                                    const button = document
+                                      .querySelector(
+                                        '[data-state="open"][data-side="bottom"]',
+                                      )
+                                      ?.closest(
+                                        "div[data-radix-popper-content-wrapper]",
+                                      )
+                                      ?.querySelector('button[type="button"]');
+                                    if (button instanceof HTMLElement) {
+                                      button.click();
+                                    }
+                                  }}
+                                >
+                                  {month}
+                                </Button>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+
+                        <Button
+                          variant="ghost"
+                          className="text-sm font-medium px-3 py-2 h-9"
+                          onClick={() => setDate(new Date())}
+                        >
+                          Today
+                        </Button>
+
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="text-sm font-medium px-4 py-2 h-9 rounded-md"
+                            >
+                              {format(date, "yyyy")}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="p-0 w-auto" align="end">
+                            <div className="grid grid-cols-4 gap-1 p-2 max-h-[200px] overflow-y-auto">
+                              {Array.from(
+                                { length: 73 },
+                                (_, i) => new Date().getFullYear() - 13 - i,
+                              ).map((year) => (
+                                <Button
+                                  key={year}
+                                  variant="ghost"
+                                  className="text-sm py-1 px-2"
+                                  onClick={() => {
+                                    const newDate = date
+                                      ? new Date(date)
+                                      : new Date();
+                                    newDate.setFullYear(year);
+                                    setDate(newDate);
+                                    // Đóng popover năm
+                                    const button = document
+                                      .querySelector(
+                                        '[data-state="open"][data-side="bottom"]',
+                                      )
+                                      ?.closest(
+                                        "div[data-radix-popper-content-wrapper]",
+                                      )
+                                      ?.querySelector('button[type="button"]');
+                                    if (button instanceof HTMLElement) {
+                                      button.click();
+                                    }
+                                  }}
+                                >
+                                  {year}
+                                </Button>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <Calendar
+                        mode="single"
+                        selected={date}
+                        onSelect={(newDate) => {
+                          // Nếu newDate là null (bỏ chọn), giữ nguyên ngày hiện tại
+                          if (newDate) {
+                            setDate(newDate);
+                            // Tự động đóng popover khi chọn ngày
+                            document.body.click();
+                          }
+                        }}
+                        initialFocus
+                        fromYear={1950}
+                        toYear={new Date().getFullYear() - 13}
+                        captionLayout="buttons"
+                        month={date} // Sử dụng month thay vì defaultMonth để cập nhật khi thay đổi tháng/năm
+                        disabled={{
+                          after: subYears(new Date(), 13),
+                        }}
+                        showOutsideDays={true}
+                        className="rounded-md border-0"
+                      />
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
             <Select value={gender} onValueChange={setGender}>
-              <SelectTrigger className="w-full h-12 font-normal text-left justify-start gap-1">
-                <Venus className="w-5 h-5" />
+              <SelectTrigger className="w-full h-12 font-normal text-left justify-start gap-1 focus:border-none focus:outline-none focus:ring-0 focus-visible:ring-0">
+                {gender === "MALE" && (
+                  <Mars className="w-5 h-5 flex-shrink-0" />
+                )}
+                {gender === "FEMALE" && (
+                  <Venus className="w-5 h-5 flex-shrink-0" />
+                )}
+                {gender === "OTHER" && (
+                  <VenusAndMars className="w-5 h-5 flex-shrink-0" />
+                )}
                 <SelectValue placeholder="Chọn giới tính" />
               </SelectTrigger>
               <SelectContent>
@@ -249,10 +454,10 @@ export default function RegisterForm() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-center gap-2 border-b border-gray-200 pl-4 mb-8">
-            <Lock className="w-5 h-5" />
+          <div className="flex items-center gap-2 border-b border-gray-200 pl-4 mb-6">
+            <Lock className="w-5 h-5 flex-shrink-0" />
             <Input
-              className="w-[350px] h-[50px]"
+              className="border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -261,10 +466,11 @@ export default function RegisterForm() {
             />
           </div>
 
+          {error && <p className="text-red-500 mb-3 text-sm">{error}</p>}
           <Button
-            className="w-[373px] h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
+            className="w-full h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
             type="submit"
-            disabled={loading || !fullName || !password}
+            disabled={loading || !fullName || !password || !date}
           >
             {loading ? "Đang hoàn tất..." : "Hoàn tất đăng ký"}
           </Button>

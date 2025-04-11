@@ -5,50 +5,6 @@
 body {
   font-family: "Roboto", sans-serif;
 }
-/* Ẩn thanh scrollbar mặc định của trình duyệt */
-.scroll-container {
-  -ms-overflow-style: none;
-  /* IE và Edge */
-  scrollbar-width: none;
-  /* Firefox */
-  overflow-y: scroll;
-  /* Đảm bảo vẫn cuộn được */
-}
-
-.scroll-container::-webkit-scrollbar {
-  display: none;
-  /* Chrome, Safari, và Opera */
-}
-
-/* Thanh scrollbar tùy chỉnh */
-.custom-scrollbar {
-  scrollbar-width: thin;
-  /* Firefox */
-  scrollbar-color: #888 #f1f1f1;
-  /* Firefox: màu thanh cuộn và nền */
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  /* Chiều rộng thanh cuộn cho Chrome/Safari */
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  /* Màu nền của thanh cuộn */
-  border-radius: 4px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #888;
-  /* Màu của thanh cuộn */
-  border-radius: 4px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #555;
-  /* Màu khi hover */
-}
 
 @layer base {
   :root {
@@ -128,5 +84,18 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Custom components can be added here */
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
   }
 }

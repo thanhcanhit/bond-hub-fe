@@ -8,92 +8,228 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Compass, LucideContactRound, MessageCircleMore } from "lucide-react";
-import { useRouter } from "next/navigation";
+// Sử dụng react-icons thay vì lucide-react
+import { BsChatDotsFill, BsGear, BsDoorOpenFill } from "react-icons/bs";
+import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+import SettingsDialog from "./SettingDialog";
+
+import { useState } from "react";
+import ProfileDialog from "./ProfileDialog";
+import { LoadingWithMessage } from "./Loading";
+import { IconType } from "react-icons";
+import { LucideBookUser, LucideCircuitBoard } from "lucide-react";
 
 export default function Sidebar() {
-  const { logout: logoutFromStore } = useAuthStore();
-  const user = useAuthStore((state) => state.user);
+  const { logout: logoutFromStore, user } = useAuthStore();
   const router = useRouter();
-  // State for editable fields
+  const pathname = usePathname();
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
-    const result = await logoutFromStore();
-    if (result) {
-      router.push("/login");
-    } else {
-      console.log("Logout failed:");
+    setIsLoggingOut(true);
+    try {
+      const result = await logoutFromStore();
+      if (result) {
+        router.push("/login");
+      } else {
+        setIsLoggingOut(false);
+        console.log("Logout failed:");
+      }
+    } catch (error) {
+      setIsLoggingOut(false);
+      console.error("Logout error:", error);
     }
   };
 
+  // Navigation items configuration
+  const navItems: { path: string; icon: IconType; label: string }[] = [
+    { path: "/dashboard/chat", icon: BsChatDotsFill, label: "Chat" },
+    { path: "/dashboard/contact", icon: LucideBookUser, label: "Contacts" },
+    { path: "/dashboard/post", icon: LucideCircuitBoard, label: "Posts" },
+  ];
+
+  // Bottom navigation items
+  const bottomNavItems: {
+    icon: IconType;
+    label: string;
+    action?: () => void;
+    isActive?: boolean;
+    isDropdown?: boolean;
+  }[] = [
+    {
+      icon: BsGear,
+      label: "Settings",
+      isActive: isSettingsMenuOpen,
+      isDropdown: true,
+    },
+    {
+      icon: BsDoorOpenFill,
+      label: "Logout",
+      action: handleLogout,
+    },
+  ];
+
+  // Hàm kiểm tra đường dẫn hiện tại để xác định mục đang được chọn
+  const isActive = (path: string) => {
+    return pathname === path || pathname.startsWith(`${path}/`);
+  };
+
   return (
-    <div className="w-16 bg-[#005ae0] text-white flex flex-col items-center space-y-6">
-      <div className="mt-5">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Avatar className="cursor-pointer">
-              <AvatarImage
-                src={
-                  user?.userInfo?.profilePictureUrl ||
-                  ` https://i.ibb.co/XxXXczsK/480479681-599145336423941-8941882180530449347-n.jpg`
-                }
-              />
-              <AvatarFallback>NT</AvatarFallback>
-            </Avatar>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className="w-56"
-            side="right"
-            align="start"
-            sideOffset={5}
-            alignOffset={5}
-          >
-            <DropdownMenuLabel>
-              {user?.userInfo.fullName || "Guest"}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                Nâng cấp tài khoản
-                <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
-              </DropdownMenuItem>
-              <DropdownMenuItem>Hồ sơ của bạn</DropdownMenuItem>
-              <DropdownMenuItem>Cài đặt</DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={handleLogout}>
-                Đăng xuất
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+    <>
+      {isLoggingOut && <LoadingWithMessage message="Đang đăng xuất..." />}
+      <div className="w-16 bg-[#005ae0] text-white flex flex-col items-center py-0 space-y-0 shadow-lg">
+        <div className="mt-8 mb-6">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Avatar className="cursor-pointer h-12 w-12 border-2 border-white hover:border-blue-300 transition-all">
+                <AvatarImage
+                  className="object-cover"
+                  src={user?.userInfo?.profilePictureUrl || ""}
+                />
+                <AvatarFallback className="text-gray">
+                  {user?.userInfo?.fullName?.split(" ")?.map((w) => w[0])}
+                </AvatarFallback>
+              </Avatar>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              className="w-56"
+              side="right"
+              align="start"
+              sideOffset={5}
+              alignOffset={5}
+            >
+              <DropdownMenuLabel>
+                {user?.userInfo.fullName || "Guest"}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem>
+                  Nâng cấp tài khoản
+                  <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
+                  Hồ sơ của bạn
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+                  Cài đặt
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem onClick={handleLogout}>
+                  Đăng xuất
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Main navigation buttons */}
+        <div className="flex flex-col items-center w-full space-y-2">
+          {navItems.map((item) => (
+            <div key={item.path} className="relative group">
+              <Link href={item.path} scroll={false}>
+                <Button
+                  variant="ghost"
+                  className={`flex items-center justify-center text-white p-3 hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white ${isActive(item.path) ? "bg-[#0045b8]" : ""} [&_svg]:!size-7 !h-12 !w-12 !rounded-2sm`}
+                  title={item.label}
+                >
+                  <item.icon size={40} />
+                </Button>
+              </Link>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex-1" />
+
+        <div className="flex flex-col items-center w-full space-y-2 pb-8 px-2">
+          {bottomNavItems.map((item, index) => (
+            <div key={index} className="relative group">
+              {item.isDropdown ? (
+                <DropdownMenu
+                  open={isSettingsMenuOpen}
+                  onOpenChange={setIsSettingsMenuOpen}
+                >
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className={`flex items-center justify-center text-white hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white ${item.isActive ? "bg-[#0045b8]" : ""} [&_svg]:!size-7 !h-12 !w-12 !rounded-2sm !p-0`}
+                      title={item.label}
+                    >
+                      <item.icon size={40} className="!w-8 !h-8" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    className="w-56 ml-8"
+                    side="top"
+                    align="center"
+                    sideOffset={5}
+                    alignOffset={0}
+                  >
+                    <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
+                      Thông tin tài khoản
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+                      Cài đặt
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>Dữ liệu</DropdownMenuItem>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>Ngôn ngữ</DropdownMenuSubTrigger>
+                      <DropdownMenuPortal>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuItem>Tiếng Việt</DropdownMenuItem>
+                          <DropdownMenuItem>Tiếng Anh</DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuPortal>
+                    </DropdownMenuSub>
+                    <DropdownMenuItem>Hỗ trợ</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="text-red-500"
+                    >
+                      Đăng xuất
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button
+                  variant="ghost"
+                  className="flex items-center justify-center text-white hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white [&_svg]:!size-7 !h-12 !w-12 !rounded-2sm !p-0"
+                  onClick={item.action}
+                  title={item.label}
+                >
+                  <item.icon size={40} className="!w-8 !h-8" />
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <ProfileDialog
+          user={user}
+          isOpen={isProfileOpen}
+          onOpenChange={setIsProfileOpen}
+          isOwnProfile={true}
+        />
+
+        <SettingsDialog
+          isOpen={isSettingsOpen}
+          onOpenChange={setIsSettingsOpen}
+        />
       </div>
-      <Button
-        variant="ghost"
-        className="text-white focus:bg-[#005ae0]"
-        onClick={() => router.push("/dashboard/chat")}
-      >
-        <MessageCircleMore className="h-20 w-20" />
-      </Button>
-      <Button
-        variant="ghost"
-        className="text-white focus:bg-[#005ae0]"
-        onClick={() => router.push("/dashboard/contact")}
-      >
-        <LucideContactRound className="h-20 w-20" />
-      </Button>
-      <Button
-        variant="ghost"
-        className="text-white focus:bg-[#005ae0]"
-        onClick={() => router.push("/dashboard/post")}
-      >
-        <Compass className="h-20 w-20" />
-      </Button>
-      <div></div>
-    </div>
+    </>
   );
 }

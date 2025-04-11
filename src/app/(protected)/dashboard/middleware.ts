@@ -1,18 +1,13 @@
-import { useAuthStore } from "@/stores/authStore";
-import { NextRequest, NextResponse } from "next/server";
+// Tạm thời vô hiệu hóa middleware để tìm nguyên nhân gây vòng lặp
 
-export function middleware(req: NextRequest) {
-  const url = req.nextUrl.clone();
-  const isAuthenticated = useAuthStore.getState().isAuthenticated;
+import { NextResponse } from "next/server";
 
-  if (!isAuthenticated && url.pathname !== "/login") {
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
-
+export function middleware() {
+  // Không làm gì cả, chỉ cho phép tiếp tục
   return NextResponse.next();
 }
 
+// Chỉ áp dụng cho các đường dẫn trong thư mục dashboard
 export const config = {
-  matcher: ["/:path*"],
+  matcher: ["/dashboard/:path*"],
 };

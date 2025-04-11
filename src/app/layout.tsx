@@ -1,4 +1,18 @@
+import { Toaster } from "sonner";
 import "./globals.css";
+import AuthProvider from "@/providers/AuthProvider";
+import { Inter } from "next/font/google"; // Import Inter font
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+export const metadata = {
+  title: "Vodka",
+  description:
+    "Vodka is a community for sharing and connecting. Chat, share, and connect with others.",
+};
 
 export default function RootLayout({
   children,
@@ -10,11 +24,12 @@ export default function RootLayout({
       <head>
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Bondhub</title>
-        <link rel="icon" href="/bondhub.png" />
       </head>
-      <body suppressHydrationWarning>
-        <main className="min-h-screen">{children}</main>
+      <body className={`${inter.className}`}>
+        <Toaster position="top-center" richColors />
+        <AuthProvider>
+          <main className="min-h-screen">{children}</main>
+        </AuthProvider>
       </body>
     </html>
   );

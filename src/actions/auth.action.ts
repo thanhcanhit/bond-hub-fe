@@ -2,11 +2,15 @@
 import axiosInstance from "@/lib/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { DeviceType } from "@/types/base";
+import { isEmail } from "@/utils/helpers";
 
-export async function initiateRegistration(email: string) {
+export async function initiateRegistration(identifier: string) {
   try {
+    // Determine if the identifier is an email or phone number
+    const isEmailFormat = isEmail(identifier);
+
     const response = await axiosInstance.post("/auth/register/initiate", {
-      email,
+      [isEmailFormat ? "email" : "phoneNumber"]: identifier,
     });
     const { registrationId } = response.data;
 
@@ -65,31 +69,21 @@ export async function completeRegistration(
 export async function login(
   identifier: string,
   password: string,
+  deviceName: string,
   deviceType: DeviceType,
 ) {
   try {
-    const deviceName =
-      typeof window !== "undefined"
-        ? navigator.platform || "Unknown Device"
-        : "Server";
-    const response = await axiosInstance.post(
-      "/auth/login",
-      {
-        [isEmail(identifier) ? "email" : "phoneNumber"]: identifier,
-        password,
-        deviceType,
-      },
-      {
-        headers: {
-          "x-device-name": deviceName, // Gửi x-device-name
-        },
-      },
-    );
+    const response = await axiosInstance.post("/auth/login", {
+      [isEmail(identifier) ? "email" : "phoneNumber"]: identifier,
+      password,
+      deviceName,
+      deviceType,
+    });
     console.log("Login response:", response.data);
 
-    const { user, accessToken, refreshToken } = response.data;
+    const { user, accessToken, refreshToken, deviceId } = response.data;
 
-    return { success: true, user, accessToken, refreshToken };
+    return { success: true, user, accessToken, refreshToken, deviceId };
   } catch (error) {
     console.error("Login failed:", error);
     return {
@@ -97,11 +91,6 @@ export async function login(
       error: error instanceof Error ? error.message : "Unknown error",
     };
   }
-}
-
-function isEmail(input: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(input);
 }
 
 export async function logout() {
@@ -130,23 +119,28 @@ export async function logout() {
 export async function refreshToken() {
   try {
     const refreshToken = useAuthStore.getState().refreshToken;
+    const deviceId = useAuthStore.getState().deviceId;
+
     if (!refreshToken) {
       throw new Error("No refresh token available");
     }
 
-    const response = await axiosInstance.post(
-      "/auth/refresh",
-      {},
-      {
-        headers: { "refresh-token": refreshToken },
-      },
-    );
-    const { accessToken, refreshToken: newRefreshToken } = response.data;
+    if (!deviceId) {
+      throw new Error("No device ID available");
+    }
+
+    // Send both refreshToken and deviceId in the request body as required by backend
+    const response = await axiosInstance.post("/auth/refresh", {
+      refreshToken,
+      deviceId,
+    });
+
+    const { accessToken } = response.data;
+    const device = response.data.device;
 
     if (typeof window !== "undefined") {
-      useAuthStore
-        .getState()
-        .setTokens(accessToken, newRefreshToken || refreshToken);
+      // Keep the same refreshToken since backend doesn't return a new one
+      useAuthStore.getState().setTokens(accessToken, refreshToken);
     }
 
     // Cập nhật cookie
@@ -158,7 +152,7 @@ export async function refreshToken() {
       path: "/",
     });
 
-    return { success: true };
+    return { success: true, accessToken, device };
   } catch (error) {
     console.error("Token refresh failed:", error);
     if (typeof window !== "undefined") {
@@ -171,10 +165,13 @@ export async function refreshToken() {
   }
 }
 
-export async function initiateForgotPassword(phoneNumber: string) {
+export async function initiateForgotPassword(identifier: string) {
   try {
+    // Kiểm tra xem identifier là email hay số điện thoại
+    const isEmailFormat = isEmail(identifier);
+
     const response = await axiosInstance.post("/auth/forgot-password", {
-      phoneNumber,
+      [isEmailFormat ? "email" : "phoneNumber"]: identifier,
     });
     const { resetId } = response.data;
 
@@ -213,6 +210,50 @@ export async function resetPassword(resetId: string, newPassword: string) {
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Reset password failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// Thay đổi mật khẩu (khi đã đăng nhập)
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+) {
+  try {
+    const response = await axiosInstance.post("/auth/change-password", {
+      currentPassword,
+      newPassword,
+    });
+
+    return {
+      success: true,
+      message: response.data.message || "Password changed successfully",
+    };
+  } catch (error) {
+    console.error("Change password failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// Xác nhận đặt lại mật khẩu với token (qua email)
+export async function confirmResetPassword(token: string, newPassword: string) {
+  try {
+    const response = await axiosInstance.post("/auth/reset-password/confirm", {
+      token,
+      newPassword,
+    });
+    return {
+      success: true,
+      message: response.data.message || "Password has been reset successfully",
+    };
+  } catch (error) {
+    console.error("Confirm reset password failed:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

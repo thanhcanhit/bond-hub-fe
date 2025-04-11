@@ -1,35 +1,29 @@
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+// import { useRouter } from "next/navigation";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Smartphone, Lock } from "lucide-react";
-import { DeviceType } from "@/types/base";
 import { useAuthStore } from "@/stores/authStore";
-
-// Hàm để xác định deviceType dựa trên userAgent
-const getDeviceType = (): DeviceType => {
-  if (typeof window === "undefined") return DeviceType.OTHER; // Trường hợp không xác định được
-
-  const userAgent = navigator.userAgent.toLowerCase();
-
-  // Logic đơn giản để xác định thiết bị
-  if (/mobile|iphone|android/.test(userAgent)) {
-    return DeviceType.MOBILE;
-  } else if (/tablet|ipad/.test(userAgent)) {
-    return DeviceType.TABLET;
-  } else if (/mac|win|linux/.test(userAgent)) {
-    return DeviceType.DESKTOP;
-  } else {
-    return DeviceType.OTHER;
-  }
-};
+import { toast } from "sonner";
+import ForgotPasswordFlow from "./ForgotPasswordFlow";
+import { getDeviceInfo } from "@/utils/helpers";
+import Loading from "./Loading";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 export default function LoginForm() {
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [showSetPasswordForm, setShowSetPasswordForm] = useState(false);
+  const [showForgotPasswordDialog, setShowForgotPasswordDialog] =
+    useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuthStore();
-  const router = useRouter();
+  // const router = useRouter();
 
   // Handle hydration
   useEffect(() => {
@@ -38,75 +32,76 @@ export default function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
     try {
-      const deviceType = getDeviceType();
-      const isSuccess = await login(phoneNumber, password, deviceType);
-      if (isSuccess) {
-        // Debug: Check localStorage
-        console.log("Auth Storage:", localStorage.getItem("auth-storage"));
-        console.log("Store State:", useAuthStore.getState());
+      const { deviceType, deviceName } = getDeviceInfo();
+      console.log("Attempting login with:", {
+        identifier,
+        deviceName,
+        deviceType,
+      });
 
-        router.push("/dashboard");
+      const isSuccess = await login(
+        identifier,
+        password,
+        deviceName,
+        deviceType,
+      );
+
+      console.log("Login result:", isSuccess);
+
+      if (isSuccess) {
+        toast.success("Đăng nhập thành công!");
+        // Không cần chuyển hướng tại đây, AuthProvider sẽ tự động chuyển hướng
+        // router.push("/dashboard");
+
+        // Chỉ ẩn loading sau 1 giây để tránh nháy màn hình
+        setTimeout(() => {
+          setIsLoading(false);
+        }, 1000);
+      } else {
+        setIsLoading(false);
+        toast.error("Đăng nhập thất bại! Vui lòng kiểm tra lại thông tin!");
+        console.error("Login failed: No response data");
       }
     } catch (error) {
+      setIsLoading(false);
+      toast.error("Đăng nhập thất bại! ");
       console.error("Login error:", error);
     }
   };
 
-  const handleSelect = (currentValue: string) => {
-    if (currentValue === "forget-password") {
-      setShowSetPasswordForm(true);
-    } else {
-      setShowSetPasswordForm(false);
-    }
+  const handleForgotPassword = () => {
+    setShowForgotPasswordDialog(true);
+  };
+
+  const handleForgotPasswordComplete = () => {
+    setShowForgotPasswordDialog(false);
+    toast.success(
+      "Password has been reset. You can now log in with your new password.",
+    );
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      {showSetPasswordForm ? (
+    <>
+      {isLoading && <Loading />}
+      <form onSubmit={handleSubmit} className="w-full">
         <div className="flex flex-col gap-2 justify-center items-center">
-          <p className="text-center mb-3">Nhập số điện thoại của bạn</p>
-          <div className="flex items-center gap-2 border-b border-gray-200 mb-3">
-            <Smartphone className="w-5 h-5" />
+          <div className="flex items-center gap-2 border-b border-gray-200 mb-3 w-full max-w-[350px] mx-auto">
+            <Smartphone className="w-4 h-4 sm:w-5 sm:h-5" />
             <Input
-              className="w-[350px] h-[50px]"
+              className="w-full h-[40px] pl-8 sm:h-[50px] border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0"
               type="text"
-              name="phoneNumber"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              placeholder="Số điện thoại"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="Số điện thoại hoặc Email"
               required
             />
           </div>
-          <Button className="w-[373px] h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3">
-            Tiếp tục
-          </Button>
-
-          <a
-            className="cursor-pointer self-start hover:text-[#80c7f9] hover:underline hover:underline-offset-2"
-            onClick={() => handleSelect("back")}
-          >
-            {" "}
-            &lt;&lt; Quay lại
-          </a>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2 justify-center items-center">
-          <div className="flex items-center gap-2 border-b border-gray-200 mb-3">
-            <Smartphone className="w-5 h-5" />
+          <div className="flex items-center gap-2 border-b border-gray-200 mb-7 w-full max-w-[350px] mx-auto">
+            <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
             <Input
-              className="w-[350px] h-[50px]"
-              type="phoneNumber"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              placeholder="Số điện thoại"
-              required
-            />
-          </div>
-          <div className="flex items-center gap-2 border-b border-gray-200 mb-7">
-            <Lock className="w-5 h-5" />
-            <Input
-              className="w-[350px] h-[50px]"
+              className="w-full h-[40px] pl-8 sm:h-[50px] border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0"
               type="password"
               name="password"
               value={password}
@@ -117,20 +112,37 @@ export default function LoginForm() {
           </div>
 
           <Button
-            className="w-[373px] h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
+            className="w-full max-w-[373px] h-[40px] sm:h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
             type="submit"
           >
             Đăng nhập với mật khẩu
           </Button>
 
           <a
-            className="cursor-pointer"
-            onClick={() => handleSelect("forget-password")}
+            className="cursor-pointer text-sm sm:text-base hover:underline"
+            onClick={handleForgotPassword}
           >
             Quên mật khẩu
           </a>
         </div>
-      )}
-    </form>
+      </form>
+
+      <Dialog
+        open={showForgotPasswordDialog}
+        onOpenChange={setShowForgotPasswordDialog}
+      >
+        <DialogContent className="sm:max-w-[500px] p-6">
+          <DialogHeader>
+            <DialogTitle className="text-center text-xl font-semibold mb-2">
+              Quên mật khẩu
+            </DialogTitle>
+            <DialogDescription className="text-center">
+              Làm theo các bước để đặt lại mật khẩu của bạn
+            </DialogDescription>
+          </DialogHeader>
+          <ForgotPasswordFlow onComplete={handleForgotPasswordComplete} />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -6,7 +6,7 @@ import {
   logout as logoutAction,
 } from "@/actions/auth.action";
 import { getUserDataById } from "@/actions/user.action";
-
+// Không cần import socket nữa vì đã sử dụng hook
 // Custom storage that handles SSR
 const storage = {
   getItem: (name: string): string | null => {
@@ -33,11 +33,13 @@ interface AuthState {
   refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  deviceId: string | null;
   _hasHydrated: boolean;
   setAuth: (user: User, accessToken: string) => void;
   login: (
-    phoneNumber: string,
+    identifier: string,
     password: string,
+    deviceName: string,
     deviceType: DeviceType,
   ) => Promise<boolean>;
   updateUser: (user: Partial<User>) => void;
@@ -55,6 +57,9 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
+      socket: null,
+      socketId: null,
+      deviceId: null,
       _hasHydrated: false,
       setHasHydrated: (state) => set({ _hasHydrated: state }),
       setAuth: (user: User, accessToken: string) =>
@@ -65,26 +70,34 @@ export const useAuthStore = create<AuthState>()(
           isLoading: false,
         }),
       login: async (
-        phoneNumber: string,
+        identifier: string,
         password: string,
+        deviceName: string,
         deviceType: DeviceType,
       ) => {
         try {
           set({ isLoading: true });
-          const result = await loginAction(phoneNumber, password, deviceType);
+          const result = await loginAction(
+            identifier,
+            password,
+            deviceName,
+            deviceType,
+          );
 
+          console.log(result);
           if (result.success) {
             // First set the tokens and basic user data
             set({
               accessToken: result.accessToken,
               refreshToken: result.refreshToken,
+              deviceId: result.deviceId,
               isAuthenticated: true,
               isLoading: false,
             });
-
+            // Socket sẽ được khởi tạo tự động bởi SocketProvider
             // Then try to get additional user data
             try {
-              const userData = await getUserDataById(result.user.id);
+              const userData = await getUserDataById(result.user.userId);
               if (userData.success && userData.user) {
                 set({
                   user: userData.user as UserWithInfo,
@@ -102,9 +115,9 @@ export const useAuthStore = create<AuthState>()(
                 isLoading: false,
               });
             }
-
             return true;
           }
+
           return false;
         } catch (error) {
           console.error("Login error:", error);
@@ -115,31 +128,65 @@ export const useAuthStore = create<AuthState>()(
       },
       setLoading: (loading: boolean) => set({ isLoading: loading }),
       updateUser: (updatedUser) =>
-        set((state) => ({
-          user: state.user
-            ? { ...state.user, ...updatedUser, userInfo: state.user.userInfo }
-            : null,
-        })),
+        set((state) => {
+          if (!state.user) return { user: null };
+
+          // Merge userInfo properly if it exists in updatedUser
+          const mergedUserInfo = updatedUser.userInfo
+            ? { ...state.user.userInfo, ...updatedUser.userInfo }
+            : state.user.userInfo;
+
+          return {
+            user: {
+              ...state.user,
+              ...updatedUser,
+              userInfo: mergedUserInfo,
+            },
+          };
+        }),
       logout: async () => {
-        const result = await logoutAction();
-        if (result.success) {
+        try {
+          // Socket sẽ được ngắt kết nối tự động khi accessToken thay đổi
+          const result = await logoutAction();
+
+          // Reset store state
           set({
             user: null,
             accessToken: null,
             refreshToken: null,
+            deviceId: null,
             isAuthenticated: false,
             isLoading: false,
           });
+
+          return result.success || true; // Return true even if API call fails
+        } catch (error) {
+          console.error("Error during logout:", error);
+
+          // Reset store state even if there's an error
+          set({
+            user: null,
+            accessToken: null,
+            refreshToken: null,
+            deviceId: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+
+          return true; // Always return true to ensure UI updates
         }
-        return result.success;
       },
-      setTokens: (accessToken, refreshToken) =>
+      setTokens: (accessToken, refreshToken) => {
         set({
           accessToken,
           refreshToken,
           isAuthenticated: true,
-        }),
+          // Keep existing deviceId
+        });
+        // Socket sẽ được cập nhật tự động bởi SocketProvider khi accessToken thay đổi
+      },
     }),
+
     {
       name: "auth-storage",
       storage: createJSONStorage(() => storage),
@@ -148,13 +195,13 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
         user: state.user,
+        deviceId: state.deviceId,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.setHasHydrated(true);
         }
       },
-      skipHydration: true,
     },
   ),
 );
