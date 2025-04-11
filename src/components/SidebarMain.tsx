@@ -113,6 +113,8 @@ function Sidebar() {
                 <AvatarImage
                   className="object-cover"
                   src={user?.userInfo?.profilePictureUrl || ""}
+                  width={1200}
+                  height={1200}
                 />
                 <AvatarFallback className="text-gray">
                   {avatarFallback}

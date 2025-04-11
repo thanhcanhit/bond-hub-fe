@@ -4,7 +4,7 @@ import { memo } from "react";
 function SimpleSearchHeader() {
   return (
     <div className="w-[300px] p-4 flex items-center justify-between border-r bg-white">
-      <div className="flex items-center space-x-2 border bg-gray-100 rounded-md pl-2 h-8 w-[200px]">
+      <div className="flex items-center border bg-[#ebecf0] rounded-md px-2 h-8 w-[200px]">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="16"
@@ -15,14 +15,14 @@ function SimpleSearchHeader() {
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="h-4 w-4 text-gray-500"
+          className="h-4 w-4 flex-shrink-0 my-auto"
         >
           <circle cx="11" cy="11" r="8"></circle>
           <path d="m21 21-4.3-4.3"></path>
         </svg>
         <input
-          placeholder="Search"
-          className="border-0 h-8 bg-transparent outline-none w-full"
+          placeholder="Tìm kiếm"
+          className="border-0 h-8 bg-transparent outline-none w-full placeholder:text-[0.8125rem] ml-2 py-0"
         />
       </div>
       <div className="flex items-center space-x-2">

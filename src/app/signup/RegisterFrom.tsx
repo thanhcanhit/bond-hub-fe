@@ -1,10 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
 import {
-  // Smartphone,
   UsersRound,
   Lock,
   CalendarIcon,
@@ -12,8 +9,8 @@ import {
   Venus,
   Mars,
   VenusAndMars,
-  //CircleUserRound
 } from "lucide-react";
+import DateOfBirthPicker from "@/components/DateOfBirthPicker";
 import {
   InputOTP,
   InputOTPGroup,
@@ -26,11 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+
 import {
   completeRegistration,
   initiateRegistration,
@@ -49,6 +42,9 @@ import {
 export default function RegisterForm() {
   // Đặt ngày mặc định là ngày hiện tại
   const [date, setDate] = useState<Date>(new Date());
+  const [day, setDay] = useState<string>(String(new Date().getDate()));
+  const [month, setMonth] = useState<string>(String(new Date().getMonth() + 1));
+  const [year, setYear] = useState<string>(String(new Date().getFullYear()));
   const [step, setStep] = useState(1);
   const [inputValue, setInputValue] = useState("");
   const [password, setPassword] = useState("");
@@ -56,10 +52,24 @@ export default function RegisterForm() {
   const [fullName, setFullName] = useState("");
   const [gender, setGender] = useState("MALE");
   const [registrationId, setRegistrationId] = useState(""); // Lưu registrationId từ bước 1
-  const [error, setError] = useState<string | null>(null); // Xử lý lỗi
+  // Sử dụng state error để lưu trữ thông báo lỗi (không hiển thị trên UI)
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { login } = useAuthStore();
+
+  // Đồng bộ giữa date và day, month, year
+  useEffect(() => {
+    const newDate = new Date(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+    );
+    // Kiểm tra xem ngày có hợp lệ không
+    if (!isNaN(newDate.getTime())) {
+      setDate(newDate);
+    }
+  }, [day, month, year]);
 
   // Bước 1: Gửi yêu cầu OTP
   const handleRequestOTP = async () => {
@@ -129,9 +139,9 @@ export default function RegisterForm() {
     }
 
     // Kiểm tra ngày sinh
-    if (!date) {
-      toast.warning("Vui lòng chọn ngày sinh.");
-      setError("Vui lòng chọn ngày sinh.");
+    if (!day || !month || !year) {
+      toast.warning("Vui lòng chọn ngày sinh đầy đủ.");
+      setError("Vui lòng chọn ngày sinh đầy đủ.");
       setLoading(false);
       return;
     }
@@ -153,11 +163,18 @@ export default function RegisterForm() {
       return;
     }
 
+    // Tạo đối tượng Date từ day, month, year
+    const birthDate = new Date(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+    );
+
     const result = await completeRegistration(
       registrationId,
       password,
       fullName,
-      date.toISOString(),
+      birthDate.toISOString(),
       gender,
     );
     setLoading(false);
@@ -223,8 +240,8 @@ export default function RegisterForm() {
               ))}
             </InputOTPGroup>
           </InputOTP>
-          {error && (
-            <p className="text-red-500 mb-3 text-center text-sm">{error}</p>
+          {error && process.env.NODE_ENV === "development" && (
+            <p className="hidden">{error}</p>
           )}
           <Button
             className="w-full h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
@@ -254,220 +271,29 @@ export default function RegisterForm() {
               required
             />
           </div>
-          <div className="flex flex-col sm:flex-row gap-2 mb-4">
+          <div className="flex items-center gap-2 border-b border-gray-200 pl-4 mb-6">
+            <CalendarIcon className="w-5 h-5 flex-shrink-0" />
             <div className="w-full">
-              <div className="relative w-full">
-                <Input
-                  type="text"
-                  placeholder="dd/mm/yyyy"
-                  value={format(date, "dd/MM/yyyy")}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    // Nếu người dùng xóa hết, đặt date thành ngày hiện tại
-                    if (!value) {
-                      setDate(new Date());
-                      return;
-                    }
-
-                    // Thử phân tích chuỗi ngày tháng
-                    // Hỗ trợ định dạng: mm/dd/yyyy
-                    const parts = value.split(/[\/\-\.]/);
-                    if (parts.length === 3) {
-                      const month = parseInt(parts[0], 10) - 1; // Tháng trong JS bắt đầu từ 0
-                      const day = parseInt(parts[1], 10);
-                      const year = parseInt(parts[2], 10);
-
-                      if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-                        const newDate = new Date(year, month, day);
-                        // Kiểm tra xem ngày có hợp lệ không
-                        if (
-                          newDate.getDate() === day &&
-                          newDate.getMonth() === month &&
-                          newDate.getFullYear() === year
-                        ) {
-                          // Kiểm tra không phải ngày tương lai
-                          const today = new Date();
-                          if (newDate <= today) {
-                            setDate(newDate);
-                          }
-                        }
-                      }
-                    }
-                  }}
-                  className="h-12 pr-10 border-gray-300 focus:border-none focus:outline-none focus:ring-0 focus-visible:ring-0"
-                />
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-gray-600"
-                    >
-                      <CalendarIcon className="w-5 h-5" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-auto p-0"
-                    align="end"
-                    side="right"
-                    alignOffset={-5}
-                    sideOffset={20}
-                    style={{ marginTop: "40px" }} // Thêm khoảng cách với phía trên
-                    forceMount // Đảm bảo popover luôn được render khi mở
-                    sticky="always" // Luôn gắn với nút khi cuộn trang
-                  >
-                    <div className="p-3 border-b">
-                      <div className="flex justify-between items-center mb-2">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="text-sm font-medium px-4 py-2 h-9 rounded-md"
-                            >
-                              {format(date, "MMMM")}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="p-0 w-auto" align="start">
-                            <div className="grid grid-cols-3 gap-1 p-2">
-                              {[
-                                "January",
-                                "February",
-                                "March",
-                                "April",
-                                "May",
-                                "June",
-                                "July",
-                                "August",
-                                "September",
-                                "October",
-                                "November",
-                                "December",
-                              ].map((month, index) => (
-                                <Button
-                                  key={month}
-                                  variant="ghost"
-                                  className="text-sm py-1 px-2"
-                                  onClick={() => {
-                                    const newDate = date
-                                      ? new Date(date)
-                                      : new Date();
-                                    newDate.setMonth(index);
-                                    setDate(newDate);
-                                    // Đóng popover tháng
-                                    const button = document
-                                      .querySelector(
-                                        '[data-state="open"][data-side="bottom"]',
-                                      )
-                                      ?.closest(
-                                        "div[data-radix-popper-content-wrapper]",
-                                      )
-                                      ?.querySelector('button[type="button"]');
-                                    if (button instanceof HTMLElement) {
-                                      button.click();
-                                    }
-                                  }}
-                                >
-                                  {month}
-                                </Button>
-                              ))}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-
-                        <Button
-                          variant="ghost"
-                          className="text-sm font-medium px-3 py-2 h-9"
-                          onClick={() => setDate(new Date())}
-                        >
-                          Today
-                        </Button>
-
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="text-sm font-medium px-4 py-2 h-9 rounded-md"
-                            >
-                              {format(date, "yyyy")}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="p-0 w-auto" align="end">
-                            <div className="grid grid-cols-4 gap-1 p-2 max-h-[200px] overflow-y-auto">
-                              {Array.from(
-                                { length: 100 },
-                                (_, i) => new Date().getFullYear() - i,
-                              ).map((year) => (
-                                <Button
-                                  key={year}
-                                  variant="ghost"
-                                  className="text-sm py-1 px-2"
-                                  onClick={() => {
-                                    const newDate = date
-                                      ? new Date(date)
-                                      : new Date();
-                                    newDate.setFullYear(year);
-                                    setDate(newDate);
-                                    // Đóng popover năm
-                                    const button = document
-                                      .querySelector(
-                                        '[data-state="open"][data-side="bottom"]',
-                                      )
-                                      ?.closest(
-                                        "div[data-radix-popper-content-wrapper]",
-                                      )
-                                      ?.querySelector('button[type="button"]');
-                                    if (button instanceof HTMLElement) {
-                                      button.click();
-                                    }
-                                  }}
-                                >
-                                  {year}
-                                </Button>
-                              ))}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    </div>
-                    <div className="mt-2">
-                      <Calendar
-                        mode="single"
-                        selected={date}
-                        onSelect={(newDate) => {
-                          // Nếu newDate là null (bỏ chọn), giữ nguyên ngày hiện tại
-                          if (newDate) {
-                            setDate(newDate);
-                            // Tự động đóng popover khi chọn ngày
-                            document.body.click();
-                          }
-                        }}
-                        initialFocus
-                        fromYear={1950}
-                        toYear={new Date().getFullYear()}
-                        captionLayout="buttons"
-                        month={date} // Sử dụng month thay vì defaultMonth để cập nhật khi thay đổi tháng/năm
-                        disabled={{
-                          after: new Date(),
-                        }}
-                        showOutsideDays={true}
-                        className="rounded-md border-0"
-                      />
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
+              <DateOfBirthPicker
+                day={day}
+                month={month}
+                year={year}
+                onDayChange={setDay}
+                onMonthChange={setMonth}
+                onYearChange={setYear}
+                className="border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0"
+              />
             </div>
+          </div>
+
+          <div className="flex items-center gap-2 border-b border-gray-200 pl-4 mb-6">
+            {gender === "MALE" && <Mars className="w-5 h-5 flex-shrink-0" />}
+            {gender === "FEMALE" && <Venus className="w-5 h-5 flex-shrink-0" />}
+            {gender === "OTHER" && (
+              <VenusAndMars className="w-5 h-5 flex-shrink-0" />
+            )}
             <Select value={gender} onValueChange={setGender}>
-              <SelectTrigger className="w-full h-12 font-normal text-left justify-start gap-1 focus:border-none focus:outline-none focus:ring-0 focus-visible:ring-0">
-                {gender === "MALE" && (
-                  <Mars className="w-5 h-5 flex-shrink-0" />
-                )}
-                {gender === "FEMALE" && (
-                  <Venus className="w-5 h-5 flex-shrink-0" />
-                )}
-                {gender === "OTHER" && (
-                  <VenusAndMars className="w-5 h-5 flex-shrink-0" />
-                )}
+              <SelectTrigger className="border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0 h-[40px] sm:h-[50px] pl-0">
                 <SelectValue placeholder="Chọn giới tính" />
               </SelectTrigger>
               <SelectContent>
@@ -489,11 +315,15 @@ export default function RegisterForm() {
             />
           </div>
 
-          {error && <p className="text-red-500 mb-3 text-sm">{error}</p>}
+          {error && process.env.NODE_ENV === "development" && (
+            <p className="hidden">{error}</p>
+          )}
           <Button
             className="w-full h-[50px] bg-[#80c7f9] hover:bg-[#0068ff] text-white font-semibold rounded-md mb-3"
             type="submit"
-            disabled={loading || !fullName || !password || !date}
+            disabled={
+              loading || !fullName || !password || !day || !month || !year
+            }
           >
             {loading ? "Đang hoàn tất..." : "Hoàn tất đăng ký"}
           </Button>
