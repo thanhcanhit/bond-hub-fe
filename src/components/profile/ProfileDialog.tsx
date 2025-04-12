@@ -26,7 +26,12 @@ import {
   updateCoverImage,
   updateUserBasicInfo,
 } from "@/actions/user.action";
-import { getRelationship, sendFriendRequest } from "@/actions/friend.action";
+import {
+  getRelationship,
+  sendFriendRequest,
+  removeFriend,
+} from "@/actions/friend.action";
+import { useFriendStore } from "@/stores/friendStore";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 // Removed framer-motion imports to improve performance
@@ -58,7 +63,13 @@ export default function ProfileDialog({
   const [showFriendRequestForm, setShowFriendRequestForm] = useState(false);
   const [requestMessage, setRequestMessage] = useState("");
   const [isSendingRequest, setIsSendingRequest] = useState(false);
+  const [isAcceptingRequest, setIsAcceptingRequest] = useState(false);
+  const [isRejectingRequest, setIsRejectingRequest] = useState(false);
+  const [requestId, setRequestId] = useState<string | null>(null);
   const profilePictureInputRef = useRef<HTMLInputElement>(null);
+
+  // Lấy các hàm từ friendStore
+  const { acceptRequest, rejectRequest } = useFriendStore();
 
   // Lấy user từ store để luôn có dữ liệu mới nhất
   const storeUser = useAuthStore((state) => state.user);
@@ -66,17 +77,27 @@ export default function ProfileDialog({
   // Sử dụng user từ store nếu đang xem profile của chính mình
   const currentUser = isOwnProfile && storeUser ? storeUser : user;
 
-  // Kiểm tra mối quan hệ khi user thay đổi
+  // Kiểm tra mối quan hệ khi user thay đổi hoặc dialog mở
   useEffect(() => {
     // Không cần kiểm tra mối quan hệ nếu đang xem profile của chính mình
-    if (isOwnProfile || !user?.id) return;
+    if (isOwnProfile || !user?.id || !isOpen) return;
 
     const checkRelationship = async () => {
       try {
         setIsLoadingRelationship(true);
-        const result = await getRelationship(user.id);
+        const accessToken = useAuthStore.getState().accessToken || undefined;
+        const result = await getRelationship(user.id, accessToken);
         if (result.success && result.data) {
+          console.log("Setting relationship to:", result.data.status);
           setRelationship(result.data.status || "NONE");
+
+          // Lưu lại ID của lời mời kết bạn nếu có
+          if (
+            result.data.status === "PENDING_RECEIVED" &&
+            result.data.requestId
+          ) {
+            setRequestId(result.data.requestId);
+          }
         } else {
           setRelationship("NONE");
         }
@@ -89,7 +110,7 @@ export default function ProfileDialog({
     };
 
     checkRelationship();
-  }, [isOwnProfile, user?.id]);
+  }, [isOwnProfile, user?.id, isOpen]);
 
   // Default date of birth
   const defaultDob = useMemo(() => new Date("2003-11-03"), []);
@@ -162,6 +183,77 @@ export default function ProfileDialog({
     setShowFriendRequestForm(!showFriendRequestForm);
     if (showFriendRequestForm) {
       setRequestMessage("");
+    }
+  };
+
+  // Handle remove friend
+  const handleRemoveFriend = async () => {
+    if (!user?.id) return;
+
+    if (!confirm("Bạn có chắc chắn muốn xóa kết bạn với người dùng này?")) {
+      return;
+    }
+
+    try {
+      const accessToken = useAuthStore.getState().accessToken || undefined;
+      const result = await removeFriend(user.id, accessToken);
+      if (result.success) {
+        toast.success("Xóa kết bạn thành công!");
+        setRelationship("NONE");
+      } else {
+        toast.error(`Không thể xóa kết bạn: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error removing friend:", error);
+      toast.error("Đã xảy ra lỗi khi xóa kết bạn");
+    }
+  };
+
+  // Handle accept friend request
+  const handleAcceptRequest = async () => {
+    if (!user?.id || !requestId) return;
+
+    setIsAcceptingRequest(true);
+    try {
+      const success = await acceptRequest(requestId);
+      if (success) {
+        toast.success(
+          `Đã chấp nhận lời mời kết bạn từ ${user.userInfo?.fullName || "người dùng"}`,
+        );
+        setRelationship("FRIEND");
+      } else {
+        toast.error(
+          "Không thể chấp nhận lời mời kết bạn. Vui lòng thử lại sau.",
+        );
+      }
+    } catch (error) {
+      console.error("Error accepting friend request:", error);
+      toast.error("Đã xảy ra lỗi khi chấp nhận lời mời kết bạn");
+    } finally {
+      setIsAcceptingRequest(false);
+    }
+  };
+
+  // Handle reject friend request
+  const handleRejectRequest = async () => {
+    if (!user?.id || !requestId) return;
+
+    setIsRejectingRequest(true);
+    try {
+      const success = await rejectRequest(requestId);
+      if (success) {
+        toast.success(
+          `Đã từ chối lời mời kết bạn từ ${user.userInfo?.fullName || "người dùng"}`,
+        );
+        setRelationship("NONE");
+      } else {
+        toast.error("Không thể từ chối lời mời kết bạn. Vui lòng thử lại sau.");
+      }
+    } catch (error) {
+      console.error("Error rejecting friend request:", error);
+      toast.error("Đã xảy ra lỗi khi từ chối lời mời kết bạn");
+    } finally {
+      setIsRejectingRequest(false);
     }
   };
 
@@ -403,11 +495,27 @@ export default function ProfileDialog({
                     </Button>
                   ) : relationship === "PENDING_RECEIVED" ? (
                     <div className="flex gap-2 w-full">
-                      <Button className="flex-1 bg-blue-500 hover:bg-blue-600">
-                        Chấp nhận
+                      <Button
+                        className="flex-1 bg-blue-500 hover:bg-blue-600"
+                        onClick={handleAcceptRequest}
+                        disabled={isAcceptingRequest}
+                      >
+                        {isAcceptingRequest ? (
+                          <>
+                            <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                            Đang chấp nhận...
+                          </>
+                        ) : (
+                          "Chấp nhận"
+                        )}
                       </Button>
-                      <Button variant="outline" className="flex-1">
-                        Từ chối
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={handleRejectRequest}
+                        disabled={isRejectingRequest}
+                      >
+                        {isRejectingRequest ? "Đang từ chối..." : "Từ chối"}
                       </Button>
                     </div>
                   ) : showFriendRequestForm ? (
@@ -592,13 +700,16 @@ export default function ProfileDialog({
                     <AlertTriangle className="h-5 w-5 mr-2 text-gray-500" />
                     Báo cáo
                   </Button>
-                  <Button
-                    variant="ghost"
-                    className="justify-start w-full text-red-500"
-                  >
-                    <UserMinus className="h-5 w-5 mr-2" />
-                    Xóa bạn bè
-                  </Button>
+                  {relationship === "FRIEND" && (
+                    <Button
+                      variant="ghost"
+                      className="justify-start w-full text-red-500"
+                      onClick={handleRemoveFriend}
+                    >
+                      <UserMinus className="h-5 w-5 mr-2" />
+                      Xóa bạn bè
+                    </Button>
+                  )}
                 </div>
               )}
 

@@ -1,6 +1,9 @@
 "use client";
 import { memo } from "react";
 import Image from "next/image";
+import { removeFriend } from "@/actions/friend.action";
+import { useAuthStore } from "@/stores/authStore";
+import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,13 +16,40 @@ type ContactItemProps = {
   id: string; // Keeping for future use
   fullName: string;
   profilePictureUrl: string;
+  onRemove?: (id: string) => void; // Callback when friend is removed
 };
 
 function ContactItem({
-  // id is kept in props but not used currently
+  id,
   fullName,
   profilePictureUrl,
+  onRemove,
 }: ContactItemProps) {
+  // Handle remove friend
+  const handleRemoveFriend = async () => {
+    if (!id) return;
+
+    if (!confirm(`Bạn có chắc chắn muốn xóa kết bạn với ${fullName}?`)) {
+      return;
+    }
+
+    try {
+      const accessToken = useAuthStore.getState().accessToken || undefined;
+      const result = await removeFriend(id, accessToken);
+      if (result.success) {
+        toast.success(`Đã xóa kết bạn với ${fullName}`);
+        // Call the callback if provided
+        if (onRemove) {
+          onRemove(id);
+        }
+      } else {
+        toast.error(`Không thể xóa kết bạn: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error removing friend:", error);
+      toast.error("Đã xảy ra lỗi khi xóa kết bạn");
+    }
+  };
   return (
     <div className="group flex items-center justify-between py-3 px-1 hover:bg-[#f0f2f5] cursor-pointer relative last:after:hidden after:content-[''] after:absolute after:left-[56px] after:right-0 after:bottom-0 after:h-[0.25px] after:bg-black/20">
       <div className="flex items-center">
@@ -73,7 +103,10 @@ function ContactItem({
               Chặn người này
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer text-red-500">
+            <DropdownMenuItem
+              className="cursor-pointer text-red-500"
+              onClick={handleRemoveFriend}
+            >
               Xóa bạn
             </DropdownMenuItem>
           </DropdownMenuContent>

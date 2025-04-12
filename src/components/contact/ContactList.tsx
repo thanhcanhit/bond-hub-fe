@@ -1,6 +1,7 @@
 "use client";
-import { useMemo, useState, memo, useCallback } from "react";
+import { useMemo, useState, memo, useCallback, useEffect } from "react";
 import ContactItem from "./ContactItem";
+import { toast } from "sonner";
 
 type Friend = {
   id: string;
@@ -16,9 +17,24 @@ type ContactListProps = {
   friends: Friend[];
 };
 
-function ContactList({ friends }: ContactListProps) {
+function ContactList({ friends: initialFriends }: ContactListProps) {
+  const [friends, setFriends] = useState<Friend[]>(initialFriends);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortOption, setSortOption] = useState<string>("name");
+
+  // Update friends when initialFriends changes
+  useEffect(() => {
+    setFriends(initialFriends);
+  }, [initialFriends]);
+
+  // Handle friend removal
+  const handleRemoveFriend = useCallback((id: string) => {
+    // Update local state to remove the friend
+    setFriends((prevFriends) =>
+      prevFriends.filter((friend) => friend.id !== id),
+    );
+    toast.success("Xóa kết bạn thành công");
+  }, []);
 
   // Memoize the search input handler
   const handleSearchChange = useCallback(
@@ -145,6 +161,7 @@ function ContactList({ friends }: ContactListProps) {
                   id={friend.id}
                   fullName={friend.fullName}
                   profilePictureUrl={friend.profilePictureUrl}
+                  onRemove={handleRemoveFriend}
                 />
               ))}
             </div>

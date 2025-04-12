@@ -1,17 +1,38 @@
 "use server";
 import axios from "axios";
-import axiosInstance from "@/lib/axios";
 
 // Create a server-side axios instance
 const createServerAxiosInstance = (token?: string) => {
   const instance = axios.create({
     baseURL: process.env.NEXT_PUBLIC_BACKEND_URL,
     headers: { "Content-Type": "application/json" },
+    timeout: 10000, // 10 seconds timeout
   });
 
   if (token) {
     instance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
   }
+
+  // Add response interceptor to handle network errors
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      // Handle network errors
+      if (error.code === "ECONNABORTED") {
+        console.error("Request timeout:", error);
+        return Promise.reject(new Error("Request timeout. Please try again."));
+      }
+
+      if (!error.response) {
+        console.error("Network error:", error);
+        return Promise.reject(
+          new Error("Network error. Please check your connection."),
+        );
+      }
+
+      return Promise.reject(error);
+    },
+  );
 
   return instance;
 };
@@ -46,6 +67,7 @@ interface FriendRequest {
   updatedAt: string;
   sender: FriendInfo;
   receiver: FriendInfo;
+  introduce?: string;
 }
 
 // Simplified Friend type for UI components
@@ -98,8 +120,8 @@ export async function getReceivedFriendRequests(token?: string) {
       id: request.id,
       fullName: request.sender.userInfo.fullName,
       profilePictureUrl: request.sender.userInfo.profilePictureUrl,
-      // Add default values for UI compatibility
-      message: "",
+      // Get the introduce message from the API response
+      message: request.introduce || "",
       timeAgo: new Date(request.createdAt).toLocaleDateString(),
     }));
 
@@ -163,21 +185,58 @@ export async function sendFriendRequest(
     const response = await serverAxios.post("/friends/request", payload);
     console.log("Friend request response:", response.data);
     return { success: true, data: response.data };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Send friend request failed:", error);
 
     // Log chi tiết hơn về lỗi
-    if (error.response) {
+    if (axios.isAxiosError(error) && error.response) {
       console.error("Error response:", {
         status: error.response.status,
         data: error.response.data,
         headers: error.response.headers,
       });
+
+      // Return specific error message based on status code
+      if (error.response.status === 401) {
+        return {
+          success: false,
+          error: "Bạn cần đăng nhập để thực hiện hành động này",
+        };
+      }
+
+      if (error.response.status === 403) {
+        return {
+          success: false,
+          error: "Bạn không có quyền thực hiện hành động này",
+        };
+      }
+
+      if (error.response.status === 404) {
+        return {
+          success: false,
+          error: "Không tìm thấy người dùng",
+        };
+      }
+
+      if (error.response.data?.message) {
+        return {
+          success: false,
+          error: error.response.data.message,
+        };
+      }
+    }
+
+    // Network errors or other errors
+    if (error instanceof Error) {
+      return {
+        success: false,
+        error: error.message,
+      };
     }
 
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: "Unknown error",
     };
   }
 }
@@ -222,9 +281,56 @@ export async function removeFriend(friendId: string, token?: string) {
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Remove friend failed:", error);
+
+    // Log chi tiết hơn về lỗi
+    if (axios.isAxiosError(error) && error.response) {
+      console.error("Error response:", {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers,
+      });
+
+      // Return specific error message based on status code
+      if (error.response.status === 401) {
+        return {
+          success: false,
+          error: "Bạn cần đăng nhập để thực hiện hành động này",
+        };
+      }
+
+      if (error.response.status === 403) {
+        return {
+          success: false,
+          error: "Bạn không có quyền thực hiện hành động này",
+        };
+      }
+
+      if (error.response.status === 404) {
+        return {
+          success: false,
+          error: "Không tìm thấy người dùng",
+        };
+      }
+
+      if (error.response.data?.message) {
+        return {
+          success: false,
+          error: error.response.data.message,
+        };
+      }
+    }
+
+    // Network errors or other errors
+    if (error instanceof Error) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: "Unknown error",
     };
   }
 }
@@ -313,11 +419,12 @@ export async function getBlockedUsers(token?: string) {
 }
 
 // Lấy mối quan hệ với một người dùng cụ thể
-export async function getRelationship(targetId: string) {
+export async function getRelationship(targetId: string, token?: string) {
   try {
-    const response = await axiosInstance.get(
-      `/friends/relationship/${targetId}`,
-    );
+    // Sử dụng serverAxios để gửi token xác thực
+    const serverAxios = createServerAxiosInstance(token);
+    const response = await serverAxios.get(`/friends/relationship/${targetId}`);
+    console.log("Relationship response:", response.data);
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Get relationship failed:", error);
