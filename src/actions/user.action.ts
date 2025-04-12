@@ -330,18 +330,29 @@ export async function updateUserBasicInfo(userData: {
   }
 }
 
-// Tìm kiếm người dùng theo số điện thoại
-export async function searchUserByPhoneNumber(phoneNumber: string) {
+// Tìm kiếm người dùng theo email hoặc số điện thoại
+export async function searchUser(searchValue: string) {
   try {
-    const response = await axiosInstance.post("/user/search", {
-      phoneNumber,
-    });
+    // Kiểm tra xem searchValue có phải là email không
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(searchValue);
+
+    // Tạo payload phù hợp dựa trên loại tìm kiếm
+    const payload = isEmail
+      ? { email: searchValue }
+      : { phoneNumber: searchValue };
+
+    const response = await axiosInstance.post("/users/search", payload);
     return { success: true, user: response.data };
   } catch (error) {
-    console.error("Search user by phone number failed:", error);
+    console.error("Search user failed:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     };
   }
+}
+
+// Tìm kiếm người dùng theo số điện thoại (giữ lại để tương thích ngược)
+export async function searchUserByPhoneNumber(phoneNumber: string) {
+  return searchUser(phoneNumber);
 }

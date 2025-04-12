@@ -12,6 +12,11 @@ import {
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { useDebounce } from "@/hooks/useDebounce";
+import { searchUser } from "@/actions/user.action";
+import { searchMessages } from "@/actions/message.action";
+import { getFriendsList } from "@/actions/friend.action";
+import { isEmail, isPhoneNumber } from "@/utils/helpers";
+import { useAuthStore } from "@/stores/authStore";
 
 type Friend = {
   id: string;
@@ -19,21 +24,9 @@ type Friend = {
   profilePictureUrl: string;
 };
 
-// Mock data for friends
-const mockFriends: Friend[] = [
-  {
-    id: "1",
-    fullName: "Trần Đình Kiên",
-    profilePictureUrl: "https://i.pravatar.cc/150?img=1",
-  },
-  {
-    id: "2",
-    fullName: "Trần Thị B",
-    profilePictureUrl: "https://i.pravatar.cc/150?img=2",
-  },
-];
+// Danh sách bạn bè sẽ được lấy từ API
 
-// Mock data for messages
+// Type for messages
 type Message = {
   id: string;
   sender: {
@@ -46,72 +39,12 @@ type Message = {
   highlighted?: boolean;
 };
 
-const mockMessages: Message[] = [
-  {
-    id: "1",
-    sender: {
-      id: "3",
-      fullName: "Vodka",
-      profilePictureUrl: "", // Empty for avatar with letter
-    },
-    content:
-      "Bạn: ... phoneNumber: '0336551833', fullName: 'Hồ Thị Như Tâm'...",
-    date: "Hôm qua",
-  },
-  {
-    id: "2",
-    sender: {
-      id: "4",
-      fullName: "Như Ngọc",
-      profilePictureUrl: "https://i.pravatar.cc/150?img=5",
-    },
-    content: "Bạn: Như Tâm",
-    date: "28/03",
-  },
-  {
-    id: "3",
-    sender: {
-      id: "5",
-      fullName: "Thủy Linh",
-      profilePictureUrl: "https://i.pravatar.cc/150?img=9",
-    },
-    content:
-      "Bạn: Stk: 0336551833 Ngân hàng MB bank chi nhánh quận 10 Tên: HỒ THỊ...",
-    date: "20/03",
-  },
-  {
-    id: "4",
-    sender: {
-      id: "6",
-      fullName: "Ba",
-      profilePictureUrl: "https://i.pravatar.cc/150?img=12",
-    },
-    content: "Bạn: Mb bank 0336551833",
-    date: "01/03",
-  },
-  {
-    id: "5",
-    sender: {
-      id: "7",
-      fullName: "Ba",
-      profilePictureUrl: "https://i.pravatar.cc/150?img=15",
-    },
-    content: "Bạn: mb bank 0336551833",
-    date: "21/02",
-  },
-];
-
-// Kiểm tra xem một chuỗi có phải là số điện thoại hợp lệ không
-const isValidPhoneNumber = (value: string): boolean => {
-  // Kiểm tra xem chuỗi có chỉ chứa số và có độ dài 10 số không
-  return /^\d{10}$/.test(value);
-};
-
-type PhoneSearchResult = {
+type UserSearchResult = {
   id: string;
   fullName: string;
   profilePictureUrl: string;
   phoneNumber: string;
+  email?: string;
 };
 
 export default function SearchHeader() {
@@ -120,13 +53,37 @@ export default function SearchHeader() {
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
   const [isSearchActive, setIsSearchActive] = useState<boolean>(false);
   const [filteredFriends, setFilteredFriends] = useState<Friend[]>([]);
+  const [allFriends, setAllFriends] = useState<Friend[]>([]);
   const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [phoneSearchResult, setPhoneSearchResult] =
-    useState<PhoneSearchResult | null>(null);
-  const [isSearchingPhone, setIsSearchingPhone] = useState<boolean>(false);
+    useState<UserSearchResult | null>(null);
+  const [isSearchingUser, setIsSearchingUser] = useState<boolean>(false);
+  const [isLoadingFriends, setIsLoadingFriends] = useState<boolean>(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const { accessToken } = useAuthStore();
+
+  // Lấy danh sách bạn bè khi component mount
+  useEffect(() => {
+    const fetchFriends = async () => {
+      try {
+        setIsLoadingFriends(true);
+        const result = await getFriendsList(accessToken || undefined);
+        if (result.success && result.friends) {
+          setAllFriends(result.friends);
+        } else {
+          console.error("Failed to fetch friends:", result.error);
+        }
+      } catch (error) {
+        console.error("Error fetching friends:", error);
+      } finally {
+        setIsLoadingFriends(false);
+      }
+    };
+
+    fetchFriends();
+  }, [accessToken]);
 
   // Handle click outside to close search results and suggestions
   useEffect(() => {
@@ -153,60 +110,72 @@ export default function SearchHeader() {
       setFilteredFriends([]);
       setFilteredMessages([]);
       setPhoneSearchResult(null);
-      setIsSearchingPhone(false);
+      setIsSearchingUser(false);
       return;
     }
 
-    // Kiểm tra xem có phải số điện thoại không
-    const isPhone = isValidPhoneNumber(debouncedSearchQuery);
-    setIsSearchingPhone(isPhone);
+    // Kiểm tra xem có phải số điện thoại hoặc email không
+    const isPhone = isPhoneNumber(debouncedSearchQuery);
+    const isEmailValue = isEmail(debouncedSearchQuery);
+    const isSearchingUser = isPhone || isEmailValue;
+    setIsSearchingUser(isSearchingUser);
 
-    // Lọc tin nhắn dựa trên từ khóa tìm kiếm
-    const filteredMsgs = mockMessages
-      .filter((message) =>
-        message.content
-          .toLowerCase()
-          .includes(debouncedSearchQuery.toLowerCase()),
-      )
-      .map((message) => {
-        // Đánh dấu phần văn bản chứa từ khóa tìm kiếm
-        return {
-          ...message,
-          highlighted: true,
-        };
-      });
-    setFilteredMessages(filteredMsgs);
+    // Tìm kiếm tin nhắn dựa trên từ khóa
+    const searchForMessages = async () => {
+      try {
+        const result = await searchMessages(debouncedSearchQuery);
+        if (result.success) {
+          // Đánh dấu các tin nhắn có chứa từ khóa tìm kiếm
+          const messages = result.messages.map((message: Message) => ({
+            ...message,
+            highlighted: true,
+          }));
+          setFilteredMessages(messages);
+        } else {
+          setFilteredMessages([]);
+        }
+      } catch (error) {
+        console.error("Error searching messages:", error);
+        setFilteredMessages([]);
+      }
+    };
 
-    if (isPhone) {
-      // Nếu là số điện thoại hợp lệ, gọi API tìm kiếm
-      const searchPhone = async () => {
+    // Gọi hàm tìm kiếm tin nhắn
+    searchForMessages();
+
+    if (isSearchingUser) {
+      // Nếu là số điện thoại hoặc email hợp lệ, gọi API tìm kiếm
+      const searchUserByValue = async () => {
         try {
-          // Trong môi trường thực tế, gọi API tìm kiếm
-          // const result = await searchUserByPhoneNumber(debouncedSearchQuery);
+          // Gọi API tìm kiếm người dùng bằng số điện thoại hoặc email
+          const result = await searchUser(debouncedSearchQuery);
 
-          // Sử dụng dữ liệu mẫu cho demo
-          // Giả lập tìm thấy người dùng với số điện thoại 0336551833
-          if (debouncedSearchQuery === "0336551833") {
+          if (result.success && result.user) {
+            // API trả về dữ liệu người dùng trực tiếp, không phải trong trường user
+            const userData = result.user;
             setPhoneSearchResult({
-              id: "user-1",
-              fullName: "Như Tâm",
-              profilePictureUrl: "https://i.pravatar.cc/150?img=3",
-              phoneNumber: debouncedSearchQuery,
+              id: userData.id,
+              fullName: userData.userInfo?.fullName || "Người dùng",
+              profilePictureUrl:
+                userData.userInfo?.profilePictureUrl ||
+                "https://i.pravatar.cc/150",
+              phoneNumber: userData.phoneNumber || debouncedSearchQuery, // Nếu tìm bằng email, có thể không có phoneNumber
             });
           } else {
             setPhoneSearchResult(null);
           }
         } catch (error) {
-          console.error("Error searching by phone:", error);
+          console.error("Error searching user:", error);
           setPhoneSearchResult(null);
         }
       };
 
       // Gọi hàm tìm kiếm
-      searchPhone();
+      searchUserByValue();
     } else {
       // Tìm kiếm bạn bè dựa trên tên
-      const filtered = mockFriends.filter((friend) =>
+      // Lọc danh sách bạn bè từ API
+      const filtered = allFriends.filter((friend) =>
         friend.fullName
           .toLowerCase()
           .includes(debouncedSearchQuery.toLowerCase()),
@@ -214,7 +183,7 @@ export default function SearchHeader() {
       setFilteredFriends(filtered);
       setPhoneSearchResult(null);
     }
-  }, [debouncedSearchQuery]);
+  }, [debouncedSearchQuery, allFriends]);
 
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -275,7 +244,7 @@ export default function SearchHeader() {
   const groupFriendsByLetter = () => {
     const groups: { [key: string]: Friend[] } = {};
 
-    const friendsToGroup = searchQuery ? filteredFriends : mockFriends;
+    const friendsToGroup = searchQuery ? filteredFriends : allFriends;
 
     friendsToGroup.forEach((friend) => {
       const firstLetter = friend.fullName.charAt(0).toUpperCase();
@@ -303,7 +272,7 @@ export default function SearchHeader() {
                 onClick={activateSearch}
               >
                 <Search className="h-4 w-4 text-gray-500" />
-                <div className="border-0 h-8 bg-transparent outline-none w-full text-[0.8125rem] ml-2 py-0 text-gray-400 flex items-center">
+                <div className="border-0 h-8 bg-transparent outline-none w-full text-xs ml-2 py-0 text-gray-400 flex items-center">
                   Tìm kiếm
                 </div>
               </div>
@@ -332,7 +301,7 @@ export default function SearchHeader() {
                 <Search className="h-4 w-4 text-gray-500" />
                 <input
                   placeholder="Tìm kiếm"
-                  className="border-0 h-8 bg-transparent outline-none w-full placeholder:text-[0.8125rem] ml-2 py-0"
+                  className="border-0 h-8 bg-transparent outline-none w-full text-xs placeholder:text-[0.8125rem] ml-2 py-0"
                   value={searchQuery}
                   onChange={handleSearchChange}
                   autoFocus
@@ -418,12 +387,13 @@ export default function SearchHeader() {
       {/* Search Results Dropdown */}
       {isSearchActive && showResults && searchQuery && (
         <div className="absolute left-0 top-[60px] w-full bg-white border-t border-gray-200 shadow-lg z-50 overflow-hidden">
-          {/* Phone search section */}
-          {isSearchingPhone && (
+          {/* User search section */}
+          {isSearchingUser && (
             <div className="border-b border-gray-100">
               <div className="p-3">
                 <div className="text-sm font-medium mb-2">
-                  Tìm bạn qua số điện thoại:
+                  Tìm bạn qua{" "}
+                  {isEmail(debouncedSearchQuery) ? "email" : "số điện thoại"}:
                 </div>
 
                 {phoneSearchResult ? (
@@ -443,9 +413,14 @@ export default function SearchHeader() {
                           {phoneSearchResult.fullName}
                         </div>
                         <div className="text-xs text-gray-500">
-                          Số điện thoại:{" "}
+                          {isEmail(debouncedSearchQuery)
+                            ? "Email"
+                            : "Số điện thoại"}
+                          :{" "}
                           <span className="text-blue-500">
-                            {phoneSearchResult.phoneNumber}
+                            {isEmail(debouncedSearchQuery)
+                              ? phoneSearchResult.email || debouncedSearchQuery
+                              : phoneSearchResult.phoneNumber}
                           </span>
                         </div>
                       </div>
@@ -453,7 +428,9 @@ export default function SearchHeader() {
                   </div>
                 ) : (
                   <div className="text-sm text-gray-500 py-2">
-                    Không tìm thấy người dùng nào với số điện thoại này
+                    Không tìm thấy người dùng nào với{" "}
+                    {isEmail(debouncedSearchQuery) ? "email" : "số điện thoại"}{" "}
+                    này
                   </div>
                 )}
               </div>
@@ -519,20 +496,29 @@ export default function SearchHeader() {
             </div>
           )}
 
-          {filteredFriends.length > 0 && (
-            <div className="p-2 border-b border-gray-100">
-              <div className="flex justify-between items-center">
-                <div className="text-sm font-medium">
-                  Bạn bè ({filteredFriends.length})
-                </div>
-                <div className="flex items-center">
-                  <button className="text-xs text-blue-500 hover:underline mr-1">
-                    Tất cả
-                  </button>
-                  <MoreHorizontal className="h-4 w-4 text-gray-400" />
+          {isLoadingFriends ? (
+            <div className="p-4 text-center">
+              <div className="animate-spin h-6 w-6 border-2 border-blue-500 rounded-full border-t-transparent mx-auto mb-2"></div>
+              <p className="text-sm text-gray-500">
+                Đang tải danh sách bạn bè...
+              </p>
+            </div>
+          ) : (
+            filteredFriends.length > 0 && (
+              <div className="p-2 border-b border-gray-100">
+                <div className="flex justify-between items-center">
+                  <div className="text-sm font-medium">
+                    Bạn bè ({filteredFriends.length})
+                  </div>
+                  <div className="flex items-center">
+                    <button className="text-xs text-blue-500 hover:underline mr-1">
+                      Tất cả
+                    </button>
+                    <MoreHorizontal className="h-4 w-4 text-gray-400" />
+                  </div>
                 </div>
               </div>
-            </div>
+            )
           )}
 
           {filteredFriends.length > 0 && (
