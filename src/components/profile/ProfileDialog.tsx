@@ -30,6 +30,7 @@ import {
   sendFriendRequest,
   removeFriend,
 } from "@/actions/friend.action";
+import ImageViewerDialog from "./ImageViewerDialog";
 import { useFriendStore } from "@/stores/friendStore";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
@@ -66,6 +67,11 @@ export default function ProfileDialog({
   const [isRejectingRequest, setIsRejectingRequest] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
   const profilePictureInputRef = useRef<HTMLInputElement>(null);
+
+  // State for image viewer
+  const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
+  const [viewerImageUrl, setViewerImageUrl] = useState("");
+  const [viewerImageAlt, setViewerImageAlt] = useState("");
 
   // Lấy các hàm từ friendStore
   const { acceptRequest, rejectRequest } = useFriendStore();
@@ -400,20 +406,36 @@ export default function ProfileDialog({
               {/* Cover Image */}
               <div className="relative">
                 <div className="relative w-full h-[180px] bg-gray-200">
-                  <Image
-                    src={
-                      coverImageUrl ||
-                      (currentUser?.userInfo?.coverImgUrl
-                        ? `${currentUser.userInfo.coverImgUrl}?t=${new Date().getTime()}`
-                        : "https://i.ibb.co/yncCwjgj/default-cover.jpg")
-                    }
-                    alt="Cover Photo"
-                    fill
-                    className="object-cover h-full w-full"
-                    priority={true}
-                    key={currentUser?.userInfo?.coverImgUrl || "default-cover"}
-                    unoptimized={true}
-                  />
+                  <div
+                    className="absolute inset-0 cursor-pointer"
+                    onClick={() => {
+                      const imageUrl =
+                        coverImageUrl ||
+                        (currentUser?.userInfo?.coverImgUrl
+                          ? `${currentUser.userInfo.coverImgUrl}?t=${new Date().getTime()}`
+                          : "https://i.ibb.co/yncCwjgj/default-cover.jpg");
+                      setViewerImageUrl(imageUrl);
+                      setViewerImageAlt("Cover Photo");
+                      setIsImageViewerOpen(true);
+                    }}
+                  >
+                    <Image
+                      src={
+                        coverImageUrl ||
+                        (currentUser?.userInfo?.coverImgUrl
+                          ? `${currentUser.userInfo.coverImgUrl}?t=${new Date().getTime()}`
+                          : "https://i.ibb.co/yncCwjgj/default-cover.jpg")
+                      }
+                      alt="Cover Photo"
+                      fill
+                      className="object-cover h-full w-full"
+                      priority={true}
+                      key={
+                        currentUser?.userInfo?.coverImgUrl || "default-cover"
+                      }
+                      unoptimized={true}
+                    />
+                  </div>
                   {isOwnProfile && (
                     <div className="absolute bottom-2 right-2">
                       <input
@@ -467,7 +489,22 @@ export default function ProfileDialog({
               <div className="flex flex-col items-center -mt-12 mb-1.5">
                 <div className="relative">
                   {currentUser && (
-                    <UserAvatar user={currentUser} className="h-24 w-24" />
+                    <div
+                      className="cursor-pointer"
+                      onClick={() => {
+                        if (currentUser?.userInfo?.profilePictureUrl) {
+                          setViewerImageUrl(
+                            `${currentUser.userInfo.profilePictureUrl}?t=${new Date().getTime()}`,
+                          );
+                          setViewerImageAlt(
+                            currentUser.userInfo.fullName || "Profile Picture",
+                          );
+                          setIsImageViewerOpen(true);
+                        }
+                      }}
+                    >
+                      <UserAvatar user={currentUser} className="h-24 w-24" />
+                    </div>
                   )}
                   {isOwnProfile && (
                     <div className="absolute bottom-0 right-0">
@@ -791,6 +828,14 @@ export default function ProfileDialog({
           </div>
         )}
       </DialogContent>
+
+      {/* Image Viewer Dialog */}
+      <ImageViewerDialog
+        isOpen={isImageViewerOpen}
+        onClose={() => setIsImageViewerOpen(false)}
+        imageUrl={viewerImageUrl}
+        alt={viewerImageAlt}
+      />
     </Dialog>
   );
 }
