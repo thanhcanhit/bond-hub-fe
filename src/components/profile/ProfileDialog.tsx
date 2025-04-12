@@ -15,7 +15,6 @@ import {
   Share2,
   UserMinus,
   UserPlus,
-  Users,
 } from "lucide-react";
 import RefreshUserDataButton from "./RefreshUserDataButton";
 import { User } from "@/types/base";
@@ -82,34 +81,44 @@ export default function ProfileDialog({
     // Không cần kiểm tra mối quan hệ nếu đang xem profile của chính mình
     if (isOwnProfile || !user?.id || !isOpen) return;
 
+    console.log(
+      "Checking relationship for user:",
+      user.id,
+      user.userInfo?.fullName,
+    );
+
     const checkRelationship = async () => {
       try {
         setIsLoadingRelationship(true);
-        const accessToken = useAuthStore.getState().accessToken || undefined;
-        const result = await getRelationship(user.id, accessToken);
+        console.log("Calling getRelationship with userId:", user.id);
+        const result = await getRelationship(user.id);
         console.log("Full relationship response:", result);
 
         if (result.success && result.data) {
+          // Lấy trạng thái từ API response
+          // API trả về status ở cấp cao nhất, ví dụ: "FRIEND", "PENDING_SENT", "PENDING_RECEIVED", "DECLINED_RECEIVED", v.v.
           console.log("Setting relationship to:", result.data.status);
           setRelationship(result.data.status || "NONE");
 
-          // Lưu lại ID của lời mời kết bạn nếu có
-          if (result.data.status === "PENDING_RECEIVED") {
+          // Xử lý các trường hợp đặc biệt
+          if (
+            result.data.status === "PENDING_RECEIVED" &&
+            result.data.relationship
+          ) {
             console.log(
               "Found PENDING_RECEIVED relationship with data:",
-              result.data,
+              result.data.relationship,
             );
-            if (result.data.requestId) {
-              console.log("Setting requestId to:", result.data.requestId);
-              setRequestId(result.data.requestId);
-            } else if (result.data.id) {
-              // Nếu API trả về id thay vì requestId
-              console.log("Setting requestId to id:", result.data.id);
-              setRequestId(result.data.id);
-            } else {
-              console.error(
-                "No requestId or id found in PENDING_RECEIVED relationship",
+            // Lấy ID của lời mời kết bạn từ trường relationship
+            const relationshipData = result.data.relationship;
+            if (relationshipData.id) {
+              console.log(
+                "Setting requestId to relationship.id:",
+                relationshipData.id,
               );
+              setRequestId(relationshipData.id);
+            } else {
+              console.error("No id found in PENDING_RECEIVED relationship");
             }
           }
         } else {
@@ -124,7 +133,7 @@ export default function ProfileDialog({
     };
 
     checkRelationship();
-  }, [isOwnProfile, user?.id, isOpen]);
+  }, [isOwnProfile, user?.id, user?.userInfo?.fullName, isOpen]);
 
   // Default date of birth
   const defaultDob = useMemo(() => new Date("2003-11-03"), []);
@@ -498,14 +507,25 @@ export default function ProfileDialog({
                       Đang tải...
                     </Button>
                   ) : relationship === "FRIEND" ? (
-                    <>
-                      {onCall && <Button onClick={onCall}>Gọi</Button>}
-                      {onChat && (
-                        <Button onClick={onChat} className="flex-1">
-                          Trò chuyện
+                    <div className="flex gap-6 w-full p-2 pb-4">
+                      {onCall && (
+                        <Button
+                          onClick={onCall}
+                          variant="outline"
+                          className="flex-1 bg-[#ebecf0] font-semibold hover:bg-[#B3B6B9] py-2 px-4 h-8 !border-none !rounded-none"
+                        >
+                          Gọi điện
                         </Button>
                       )}
-                    </>
+                      {onChat && (
+                        <Button
+                          onClick={onChat}
+                          className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 h-8 !border-none !rounded-none"
+                        >
+                          Nhắn tin
+                        </Button>
+                      )}
+                    </div>
                   ) : relationship === "PENDING_SENT" ? (
                     <Button
                       disabled
@@ -601,7 +621,7 @@ export default function ProfileDialog({
                 <h4 className="font-semibold text-sm mb-3">
                   Thông tin cá nhân
                 </h4>
-                <div className="space-y-1.5">
+                <div className="space-y-2.5">
                   {/* Chỉ hiển thị bio khi có dữ liệu */}
                   {currentUser?.userInfo?.bio && (
                     <div className="grid grid-cols-[100px_1fr] gap-1">
@@ -612,17 +632,19 @@ export default function ProfileDialog({
                     </div>
                   )}
 
-                  {/* Giới tính luôn hiển thị vì luôn có giá trị mặc định */}
-                  <div className="grid grid-cols-[100px_1fr] gap-1">
-                    <span className="text-xs text-gray-500">Giới tính</span>
-                    <span className="text-xs text-left">
-                      {currentUser?.userInfo?.gender === "FEMALE"
-                        ? "Nữ"
-                        : currentUser?.userInfo?.gender === "MALE"
-                          ? "Nam"
-                          : "Khác"}
-                    </span>
-                  </div>
+                  {/* Chỉ hiển thị giới tính khi có dữ liệu */}
+                  {currentUser?.userInfo?.gender && (
+                    <div className="grid grid-cols-[100px_1fr] gap-1">
+                      <span className="text-xs text-gray-500">Giới tính</span>
+                      <span className="text-xs text-left">
+                        {currentUser.userInfo.gender === "FEMALE"
+                          ? "Nữ"
+                          : currentUser.userInfo.gender === "MALE"
+                            ? "Nam"
+                            : "Khác"}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Chỉ hiển thị ngày sinh khi có dữ liệu */}
                   {currentUser?.userInfo?.dateOfBirth && (
@@ -640,27 +662,29 @@ export default function ProfileDialog({
                     </div>
                   )}
 
-                  {/* Chỉ hiển thị số điện thoại khi có dữ liệu */}
-                  {currentUser?.phoneNumber && (
-                    <div className="grid grid-cols-[100px_1fr] gap-1">
-                      <span className="text-xs text-gray-500">
-                        Số điện thoại
-                      </span>
-                      <span className="text-xs text-left">
-                        {currentUser.phoneNumber}
-                      </span>
-                    </div>
-                  )}
+                  {/* Chỉ hiển thị số điện thoại khi có dữ liệu và là profile của chính mình hoặc là bạn bè */}
+                  {currentUser?.phoneNumber &&
+                    (isOwnProfile || relationship === "FRIEND") && (
+                      <div className="grid grid-cols-[100px_1fr] gap-1">
+                        <span className="text-xs text-gray-500">
+                          Số điện thoại
+                        </span>
+                        <span className="text-xs text-left">
+                          {currentUser.phoneNumber}
+                        </span>
+                      </div>
+                    )}
 
-                  {/* Chỉ hiển thị email khi có dữ liệu */}
-                  {currentUser?.email && (
-                    <div className="grid grid-cols-[100px_1fr] gap-1">
-                      <span className="text-xs text-gray-500">Email</span>
-                      <span className="text-xs text-left">
-                        {currentUser.email}
-                      </span>
-                    </div>
-                  )}
+                  {/* Chỉ hiển thị email khi có dữ liệu và là profile của chính mình hoặc là bạn bè */}
+                  {currentUser?.email &&
+                    (isOwnProfile || relationship === "FRIEND") && (
+                      <div className="grid grid-cols-[100px_1fr] gap-1">
+                        <span className="text-xs text-gray-500">Email</span>
+                        <span className="text-xs text-left">
+                          {currentUser.email}
+                        </span>
+                      </div>
+                    )}
 
                   {/* Thông báo về quyền riêng tư số điện thoại */}
                   {isOwnProfile && currentUser?.phoneNumber && (
@@ -672,6 +696,16 @@ export default function ProfileDialog({
                       </p>
                     </>
                   )}
+
+                  {/* Thông báo về quyền riêng tư khi xem profile người khác không phải bạn bè */}
+                  {!isOwnProfile && relationship !== "FRIEND" && (
+                    <>
+                      <div className="h-1"></div>
+                      <p className="text-xs text-gray-500">
+                        Kết bạn để xem thông tin liên hệ của người dùng này
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -679,7 +713,7 @@ export default function ProfileDialog({
               {!isOwnProfile &&
                 currentUser?.posts &&
                 currentUser.posts.length > 0 && (
-                  <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 mt-4 overflow-auto no-scrollbar">
+                  <div className="px-6 py-4 border-t-4 border-gray-200 bg-white mt-4 overflow-auto no-scrollbar">
                     <div className="flex justify-between items-center mb-2">
                       <h4 className="font-medium text-base">Hình ảnh/Video</h4>
                       <Button variant="link" className="text-sm p-0 h-auto">
@@ -703,31 +737,36 @@ export default function ProfileDialog({
 
               {/* Additional Options for Other User's Profile */}
               {!isOwnProfile && (
-                <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 mt-4 space-y-4 overflow-auto no-scrollbar">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-gray-500" />
-                    <span className="text-sm">4 nhóm chung</span>
-                  </div>
-                  <Button variant="ghost" className="justify-start w-full">
-                    <Share2 className="h-5 w-5 mr-2 text-gray-500" />
-                    Chia sẻ liên hệ
+                <div className="px-2 py-4 border-t-4 border-gray-200 bg-white mt-4 space-y-2 overflow-auto no-scrollbar">
+                  <Button
+                    variant="ghost"
+                    className="justify-start w-full h-10 px-3"
+                  >
+                    <Share2 className="h-5 w-5 mr-2 text-gray-500 flex-shrink-0" />
+                    <span className="text-sm">Chia sẻ liên hệ</span>
                   </Button>
-                  <Button variant="ghost" className="justify-start w-full">
-                    <Ban className="h-5 w-5 mr-2 text-gray-500" />
-                    Chặn tin nhắn và cuộc gọi
+                  <Button
+                    variant="ghost"
+                    className="justify-start w-full h-10 px-3"
+                  >
+                    <Ban className="h-5 w-5 mr-2 text-gray-500 flex-shrink-0" />
+                    <span className="text-sm">Chặn tin nhắn và cuộc gọi</span>
                   </Button>
-                  <Button variant="ghost" className="justify-start w-full">
-                    <AlertTriangle className="h-5 w-5 mr-2 text-gray-500" />
-                    Báo cáo
+                  <Button
+                    variant="ghost"
+                    className="justify-start w-full h-10 px-3"
+                  >
+                    <AlertTriangle className="h-5 w-5 mr-2 text-gray-500 flex-shrink-0" />
+                    <span className="text-sm">Báo cáo</span>
                   </Button>
                   {relationship === "FRIEND" && (
                     <Button
                       variant="ghost"
-                      className="justify-start w-full text-red-500"
+                      className="justify-start w-full h-10 px-3 text-red-500"
                       onClick={handleRemoveFriend}
                     >
-                      <UserMinus className="h-5 w-5 mr-2" />
-                      Xóa bạn bè
+                      <UserMinus className="h-5 w-5 mr-2 flex-shrink-0" />
+                      <span className="text-sm">Xóa bạn bè</span>
                     </Button>
                   )}
                 </div>

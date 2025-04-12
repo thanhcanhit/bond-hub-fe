@@ -2,6 +2,7 @@
 import { memo, useState, useEffect } from "react";
 import Image from "next/image";
 import { removeFriend, blockUser } from "@/actions/friend.action";
+import { getUserDataById } from "@/actions/user.action";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import {
@@ -25,22 +26,34 @@ import {
 } from "@/components/ui/alert-dialog";
 
 type ContactItemProps = {
-  id: string; // Keeping for future use
-  fullName: string;
-  profilePictureUrl: string;
-  email?: string;
-  phoneNumber?: string;
+  user: User; // Sử dụng đối tượng User đầy đủ
   onRemove?: (id: string) => void; // Callback when friend is removed
 };
 
-function ContactItem({
-  id,
-  fullName,
-  profilePictureUrl,
-  email,
-  phoneNumber,
-  onRemove,
-}: ContactItemProps) {
+function ContactItem({ user, onRemove }: ContactItemProps) {
+  // Lấy các thông tin cần thiết từ đối tượng user
+  const id = user.id;
+  const fullName = user.userInfo?.fullName || "";
+  const profilePictureUrl = user.userInfo?.profilePictureUrl || "";
+
+  // State để lưu trữ thông tin đầy đủ của user
+  const [fullUserData, setFullUserData] = useState<User | null>(null);
+
+  // Lấy thông tin đầy đủ của user khi component mount hoặc khi user thay đổi
+  useEffect(() => {
+    const fetchFullUserData = async () => {
+      try {
+        const result = await getUserDataById(id);
+        if (result.success && result.user) {
+          setFullUserData(result.user);
+        }
+      } catch (error) {
+        console.error("Error fetching full user data:", error);
+      }
+    };
+
+    fetchFullUserData();
+  }, [id]);
   // State for dialogs
   const [showProfileDialog, setShowProfileDialog] = useState(false);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
@@ -54,16 +67,7 @@ function ContactItem({
     };
   }, []);
 
-  // Create user object for ProfileDialog
-  const userForProfile = {
-    id,
-    userInfo: {
-      fullName,
-      profilePictureUrl,
-    },
-    email,
-    phoneNumber,
-  } as unknown as User;
+  // Sử dụng trực tiếp đối tượng user được truyền vào
 
   // Add a global click handler to ensure dialogs can be closed
   useEffect(() => {
@@ -219,7 +223,7 @@ function ContactItem({
 
       {/* Profile Dialog - Using controlled component pattern */}
       <ProfileDialog
-        user={userForProfile}
+        user={fullUserData || user}
         isOpen={showProfileDialog}
         onOpenChange={(open) => {
           console.log("Profile dialog onOpenChange:", open);
@@ -233,6 +237,22 @@ function ContactItem({
           }
         }}
         isOwnProfile={false}
+        onChat={() => {
+          // Xử lý khi nhấn nút nhắn tin
+          console.log("Bắt đầu trò chuyện với:", fullName);
+          toast.success(`Đang mở cuộc trò chuyện với ${fullName}`);
+          // Đóng dialog
+          setShowProfileDialog(false);
+          // TODO: Chuyển hướng đến trang chat hoặc mở chat dialog
+        }}
+        onCall={() => {
+          // Xử lý khi nhấn nút gọi điện
+          console.log("Bắt đầu cuộc gọi với:", fullName);
+          toast.success(`Đang gọi cho ${fullName}`);
+          // Đóng dialog
+          setShowProfileDialog(false);
+          // TODO: Bắt đầu cuộc gọi
+        }}
       />
 
       {/* Block User Confirmation Dialog - Using controlled component pattern */}

@@ -2,6 +2,7 @@
 import { useMemo, useState, memo, useCallback, useEffect } from "react";
 import ContactItem from "./ContactItem";
 import { toast } from "sonner";
+import { User } from "@/types/base";
 
 type Friend = {
   id: string;
@@ -160,11 +161,15 @@ function ContactList({ friends: initialFriends }: ContactListProps) {
               {friendsByLetter[letter].map((friend) => (
                 <ContactItem
                   key={friend.id}
-                  id={friend.id}
-                  fullName={friend.fullName}
-                  profilePictureUrl={friend.profilePictureUrl}
-                  email={friend.email}
-                  phoneNumber={friend.phoneNumber}
+                  user={
+                    {
+                      id: friend.id,
+                      userInfo: {
+                        fullName: friend.fullName,
+                        profilePictureUrl: friend.profilePictureUrl,
+                      },
+                    } as unknown as User
+                  }
                   onRemove={handleRemoveFriend}
                 />
               ))}

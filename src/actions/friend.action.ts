@@ -41,8 +41,11 @@ const createServerAxiosInstance = (token?: string) => {
 interface UserInfo {
   fullName: string;
   profilePictureUrl: string;
-  statusMessage: string;
-  lastSeen: string;
+  statusMessage?: string;
+  lastSeen?: string;
+  gender?: string;
+  bio?: string;
+  dateOfBirth?: string;
 }
 
 interface FriendInfo {
@@ -79,6 +82,9 @@ export interface SimpleFriend {
   lastSeen?: string;
   email?: string;
   phoneNumber?: string;
+  gender?: string;
+  bio?: string;
+  dateOfBirth?: string;
 }
 
 // Lấy danh sách bạn bè của người dùng hiện tại
@@ -97,6 +103,9 @@ export async function getFriendsList(token?: string) {
       lastSeen: friendship.friend.userInfo.lastSeen,
       email: friendship.friend.email,
       phoneNumber: friendship.friend.phoneNumber,
+      gender: friendship.friend.userInfo.gender,
+      bio: friendship.friend.userInfo.bio,
+      dateOfBirth: friendship.friend.userInfo.dateOfBirth,
     }));
 
     return { success: true, friends };
@@ -472,13 +481,63 @@ export async function getBlockedUsers(token?: string) {
 }
 
 // Lấy mối quan hệ với một người dùng cụ thể
-export async function getRelationship(targetId: string, token?: string) {
+export async function getRelationship(targetId: string) {
   try {
+    // TEMPORARY MOCK FOR TESTING - Assume all users in contact list are friends
+    // This is a temporary solution until the API is fixed
+    console.log("MOCK: Returning FRIEND relationship for user ID:", targetId);
+    return {
+      success: true,
+      data: {
+        status: "FRIEND",
+        message: "Bạn bè từ 2023",
+        relationship: {
+          id: "mock-relationship-id",
+          senderId: "sender-id",
+          receiverId: targetId,
+          status: "ACCEPTED",
+          introduce: "Xin chào",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          sender: {
+            id: "sender-id",
+            email: "sender@example.com",
+            phoneNumber: "0123456789",
+            userInfo: {
+              fullName: "Người gửi",
+              profilePictureUrl: "https://i.pravatar.cc/150?img=1",
+            },
+          },
+          receiver: {
+            id: targetId,
+            email: "receiver@example.com",
+            phoneNumber: "0987654321",
+            userInfo: {
+              fullName: "Người nhận",
+              profilePictureUrl: "https://i.pravatar.cc/150?img=2",
+            },
+          },
+        },
+        targetUser: {
+          id: targetId,
+          email: "target@example.com",
+          phoneNumber: "0123456789",
+          userInfo: {
+            fullName: "Người dùng",
+            profilePictureUrl: "https://i.pravatar.cc/150?img=3",
+          },
+        },
+      },
+    };
+
+    // ORIGINAL CODE - Uncomment when API is fixed
+    /*
     // Sử dụng serverAxios để gửi token xác thực
     const serverAxios = createServerAxiosInstance(token);
     const response = await serverAxios.get(`/friends/relationship/${targetId}`);
     console.log("Relationship response:", response.data);
     return { success: true, data: response.data };
+    */
   } catch (error) {
     console.error("Get relationship failed:", error);
     return {
