@@ -33,13 +33,98 @@ const mockFriends: Friend[] = [
   },
 ];
 
+// Mock data for messages
+type Message = {
+  id: string;
+  sender: {
+    id: string;
+    fullName: string;
+    profilePictureUrl: string;
+  };
+  content: string;
+  date: string;
+  highlighted?: boolean;
+};
+
+const mockMessages: Message[] = [
+  {
+    id: "1",
+    sender: {
+      id: "3",
+      fullName: "Vodka",
+      profilePictureUrl: "", // Empty for avatar with letter
+    },
+    content:
+      "Bạn: ... phoneNumber: '0336551833', fullName: 'Hồ Thị Như Tâm'...",
+    date: "Hôm qua",
+  },
+  {
+    id: "2",
+    sender: {
+      id: "4",
+      fullName: "Như Ngọc",
+      profilePictureUrl: "https://i.pravatar.cc/150?img=5",
+    },
+    content: "Bạn: Như Tâm",
+    date: "28/03",
+  },
+  {
+    id: "3",
+    sender: {
+      id: "5",
+      fullName: "Thủy Linh",
+      profilePictureUrl: "https://i.pravatar.cc/150?img=9",
+    },
+    content:
+      "Bạn: Stk: 0336551833 Ngân hàng MB bank chi nhánh quận 10 Tên: HỒ THỊ...",
+    date: "20/03",
+  },
+  {
+    id: "4",
+    sender: {
+      id: "6",
+      fullName: "Ba",
+      profilePictureUrl: "https://i.pravatar.cc/150?img=12",
+    },
+    content: "Bạn: Mb bank 0336551833",
+    date: "01/03",
+  },
+  {
+    id: "5",
+    sender: {
+      id: "7",
+      fullName: "Ba",
+      profilePictureUrl: "https://i.pravatar.cc/150?img=15",
+    },
+    content: "Bạn: mb bank 0336551833",
+    date: "21/02",
+  },
+];
+
+// Kiểm tra xem một chuỗi có phải là số điện thoại hợp lệ không
+const isValidPhoneNumber = (value: string): boolean => {
+  // Kiểm tra xem chuỗi có chỉ chứa số và có độ dài 10 số không
+  return /^\d{10}$/.test(value);
+};
+
+type PhoneSearchResult = {
+  id: string;
+  fullName: string;
+  profilePictureUrl: string;
+  phoneNumber: string;
+};
+
 export default function SearchHeader() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [showResults, setShowResults] = useState<boolean>(false);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
   const [isSearchActive, setIsSearchActive] = useState<boolean>(false);
   const [filteredFriends, setFilteredFriends] = useState<Friend[]>([]);
+  const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [phoneSearchResult, setPhoneSearchResult] =
+    useState<PhoneSearchResult | null>(null);
+  const [isSearchingPhone, setIsSearchingPhone] = useState<boolean>(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
@@ -64,16 +149,70 @@ export default function SearchHeader() {
 
   // Search function
   useEffect(() => {
-    if (debouncedSearchQuery) {
-      // Filter friends based on search query
+    if (!debouncedSearchQuery) {
+      setFilteredFriends([]);
+      setFilteredMessages([]);
+      setPhoneSearchResult(null);
+      setIsSearchingPhone(false);
+      return;
+    }
+
+    // Kiểm tra xem có phải số điện thoại không
+    const isPhone = isValidPhoneNumber(debouncedSearchQuery);
+    setIsSearchingPhone(isPhone);
+
+    // Lọc tin nhắn dựa trên từ khóa tìm kiếm
+    const filteredMsgs = mockMessages
+      .filter((message) =>
+        message.content
+          .toLowerCase()
+          .includes(debouncedSearchQuery.toLowerCase()),
+      )
+      .map((message) => {
+        // Đánh dấu phần văn bản chứa từ khóa tìm kiếm
+        return {
+          ...message,
+          highlighted: true,
+        };
+      });
+    setFilteredMessages(filteredMsgs);
+
+    if (isPhone) {
+      // Nếu là số điện thoại hợp lệ, gọi API tìm kiếm
+      const searchPhone = async () => {
+        try {
+          // Trong môi trường thực tế, gọi API tìm kiếm
+          // const result = await searchUserByPhoneNumber(debouncedSearchQuery);
+
+          // Sử dụng dữ liệu mẫu cho demo
+          // Giả lập tìm thấy người dùng với số điện thoại 0336551833
+          if (debouncedSearchQuery === "0336551833") {
+            setPhoneSearchResult({
+              id: "user-1",
+              fullName: "Như Tâm",
+              profilePictureUrl: "https://i.pravatar.cc/150?img=3",
+              phoneNumber: debouncedSearchQuery,
+            });
+          } else {
+            setPhoneSearchResult(null);
+          }
+        } catch (error) {
+          console.error("Error searching by phone:", error);
+          setPhoneSearchResult(null);
+        }
+      };
+
+      // Gọi hàm tìm kiếm
+      searchPhone();
+    } else {
+      // Tìm kiếm bạn bè dựa trên tên
       const filtered = mockFriends.filter((friend) =>
         friend.fullName
           .toLowerCase()
           .includes(debouncedSearchQuery.toLowerCase()),
       );
       setFilteredFriends(filtered);
-    } else {
-      setFilteredFriends([]);
+      setPhoneSearchResult(null);
     }
   }, [debouncedSearchQuery]);
 
@@ -279,78 +418,171 @@ export default function SearchHeader() {
       {/* Search Results Dropdown */}
       {isSearchActive && showResults && searchQuery && (
         <div className="absolute left-0 top-[60px] w-full bg-white border-t border-gray-200 shadow-lg z-50 overflow-hidden">
-          <div className="flex justify-between items-center p-2 border-b border-gray-100">
-            <div className="text-sm font-medium">
-              Bạn bè ({mockFriends.length})
-            </div>
-            <div className="flex items-center">
-              <div className="flex items-center border border-gray-200 rounded-md px-2 h-8 bg-gray-50">
-                <Search className="h-4 w-4 text-gray-500" />
-                <input
-                  placeholder="Tìm bạn"
-                  className="border-0 h-8 bg-transparent outline-none w-[150px] placeholder:text-[0.8125rem] ml-2 py-0"
-                  value={searchQuery}
-                  onChange={handleSearchChange}
-                  autoFocus
-                />
-                {searchQuery && (
-                  <button onClick={clearSearch} className="flex-shrink-0">
-                    <X className="h-4 w-4 text-gray-500" />
-                  </button>
+          {/* Phone search section */}
+          {isSearchingPhone && (
+            <div className="border-b border-gray-100">
+              <div className="p-3">
+                <div className="text-sm font-medium mb-2">
+                  Tìm bạn qua số điện thoại:
+                </div>
+
+                {phoneSearchResult ? (
+                  <div className="flex items-center py-2 px-1">
+                    <div className="flex items-center w-full">
+                      <div className="h-10 w-10 rounded-full overflow-hidden mr-3">
+                        <Image
+                          src={phoneSearchResult.profilePictureUrl}
+                          alt={phoneSearchResult.fullName}
+                          width={40}
+                          height={40}
+                          className="object-cover"
+                        />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium">
+                          {phoneSearchResult.fullName}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Số điện thoại:{" "}
+                          <span className="text-blue-500">
+                            {phoneSearchResult.phoneNumber}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500 py-2">
+                    Không tìm thấy người dùng nào với số điện thoại này
+                  </div>
                 )}
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="max-h-[400px] overflow-y-auto no-scrollbar">
-            <div className="flex justify-between items-center px-3 py-2 border-b border-gray-100">
-              <div className="text-xs text-gray-500">Tên (A-Z)</div>
-              <div className="flex items-center">
-                <button className="text-xs text-blue-500 hover:underline mr-1">
-                  Tất cả
-                </button>
-                <MoreHorizontal className="h-4 w-4 text-gray-400" />
+          {filteredMessages.length > 0 && (
+            <div className="p-3 border-b border-gray-100">
+              <div className="text-sm font-medium mb-2">
+                Tin nhắn ({filteredMessages.length})
+              </div>
+
+              {filteredMessages.map((message) => {
+                // Tách nội dung tin nhắn để đánh dấu từ khóa tìm kiếm
+                const content = message.content;
+                const lowerContent = content.toLowerCase();
+                const lowerQuery = debouncedSearchQuery.toLowerCase();
+                const startIndex = lowerContent.indexOf(lowerQuery);
+
+                const beforeText = content.substring(0, startIndex);
+                const highlightedText = content.substring(
+                  startIndex,
+                  startIndex + debouncedSearchQuery.length,
+                );
+                const afterText = content.substring(
+                  startIndex + debouncedSearchQuery.length,
+                );
+
+                return (
+                  <div
+                    key={message.id}
+                    className="flex items-center py-2 hover:bg-gray-50 cursor-pointer px-1 rounded-md"
+                  >
+                    {message.sender.profilePictureUrl ? (
+                      <div className="h-10 w-10 rounded-full overflow-hidden mr-3">
+                        <Image
+                          src={message.sender.profilePictureUrl}
+                          alt={message.sender.fullName}
+                          width={40}
+                          height={40}
+                          className="object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-10 w-10 rounded-full overflow-hidden mr-3 bg-blue-500 flex items-center justify-center text-white">
+                        <span>{message.sender.fullName.charAt(0)}</span>
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <div className="text-sm font-medium">
+                        {message.sender.fullName}
+                      </div>
+                      <div className="text-xs text-gray-500 flex items-center flex-wrap">
+                        <span>{beforeText}</span>
+                        <span className="text-blue-500">{highlightedText}</span>
+                        <span>{afterText}</span>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-500">{message.date}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {filteredFriends.length > 0 && (
+            <div className="p-2 border-b border-gray-100">
+              <div className="flex justify-between items-center">
+                <div className="text-sm font-medium">
+                  Bạn bè ({filteredFriends.length})
+                </div>
+                <div className="flex items-center">
+                  <button className="text-xs text-blue-500 hover:underline mr-1">
+                    Tất cả
+                  </button>
+                  <MoreHorizontal className="h-4 w-4 text-gray-400" />
+                </div>
               </div>
             </div>
+          )}
 
-            {/* Alphabetical sections */}
-            {Object.keys(friendsByLetter)
-              .sort()
-              .map((letter) => (
-                <div key={letter}>
-                  {/* Letter header */}
-                  <div className="px-3 py-1 bg-gray-50 text-xs font-medium text-gray-500">
-                    {letter}
-                  </div>
+          {filteredFriends.length > 0 && (
+            <div className="max-h-[400px] overflow-y-auto no-scrollbar">
+              <div className="px-3 py-2 border-b border-gray-100">
+                <div className="text-xs text-gray-500">Tên (A-Z)</div>
+              </div>
 
-                  {/* Friends list */}
-                  {friendsByLetter[letter].map((friend) => (
-                    <div
-                      key={friend.id}
-                      className="flex items-center justify-between py-2 hover:bg-gray-50 cursor-pointer px-3"
-                    >
-                      <div className="flex items-center">
-                        <div className="h-8 w-8 rounded-full overflow-hidden mr-2">
-                          <Image
-                            src={friend.profilePictureUrl}
-                            alt={friend.fullName}
-                            width={32}
-                            height={32}
-                            className="object-cover"
-                          />
-                        </div>
-                        <span className="text-sm">{friend.fullName}</span>
-                      </div>
-                      <button className="h-6 w-6 rounded-full hover:bg-gray-200 flex items-center justify-center">
-                        <MoreHorizontal className="h-4 w-4 text-gray-400" />
-                      </button>
+              {/* Alphabetical sections */}
+              {Object.keys(friendsByLetter)
+                .sort()
+                .map((letter) => (
+                  <div key={letter}>
+                    {/* Letter header */}
+                    <div className="px-3 py-1 bg-gray-50 text-xs font-medium text-gray-500">
+                      {letter}
                     </div>
-                  ))}
-                </div>
-              ))}
 
-            {/* No results message */}
-            {searchQuery && Object.keys(friendsByLetter).length === 0 && (
+                    {/* Friends list */}
+                    {friendsByLetter[letter].map((friend) => (
+                      <div
+                        key={friend.id}
+                        className="flex items-center justify-between py-2 hover:bg-gray-50 cursor-pointer px-3"
+                      >
+                        <div className="flex items-center">
+                          <div className="h-8 w-8 rounded-full overflow-hidden mr-2">
+                            <Image
+                              src={friend.profilePictureUrl}
+                              alt={friend.fullName}
+                              width={32}
+                              height={32}
+                              className="object-cover"
+                            />
+                          </div>
+                          <span className="text-sm">{friend.fullName}</span>
+                        </div>
+                        <button className="h-6 w-6 rounded-full hover:bg-gray-200 flex items-center justify-center">
+                          <MoreHorizontal className="h-4 w-4 text-gray-400" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+            </div>
+          )}
+
+          {/* No results message - only show when no messages and no friends match */}
+          {searchQuery &&
+            filteredMessages.length === 0 &&
+            filteredFriends.length === 0 && (
               <div className="p-4 text-center">
                 <div className="flex justify-center mb-4">
                   <div className="relative w-24 h-24">
@@ -367,7 +599,6 @@ export default function SearchHeader() {
                 </p>
               </div>
             )}
-          </div>
         </div>
       )}
     </div>

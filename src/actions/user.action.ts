@@ -1,4 +1,4 @@
-// "use server";
+"use server";
 import axiosInstance from "@/lib/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { User } from "@/types/base";
@@ -323,6 +323,22 @@ export async function updateUserBasicInfo(userData: {
     return { success: true, user: updatedUser };
   } catch (error) {
     console.error("Update user basic info failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// Tìm kiếm người dùng theo số điện thoại
+export async function searchUserByPhoneNumber(phoneNumber: string) {
+  try {
+    const response = await axiosInstance.post("/user/search", {
+      phoneNumber,
+    });
+    return { success: true, user: response.data };
+  } catch (error) {
+    console.error("Search user by phone number failed:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
