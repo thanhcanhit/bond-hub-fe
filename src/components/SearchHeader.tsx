@@ -17,6 +17,8 @@ import { searchMessages } from "@/actions/message.action";
 import { getFriendsList } from "@/actions/friend.action";
 import { isEmail, isPhoneNumber } from "@/utils/helpers";
 import { useAuthStore } from "@/stores/authStore";
+import { User } from "@/types/base";
+import ProfileDialog from "./profile/ProfileDialog";
 
 type Friend = {
   id: string;
@@ -60,9 +62,12 @@ export default function SearchHeader() {
     useState<UserSearchResult | null>(null);
   const [isSearchingUser, setIsSearchingUser] = useState<boolean>(false);
   const [isLoadingFriends, setIsLoadingFriends] = useState<boolean>(false);
+  const [showProfileDialog, setShowProfileDialog] = useState<boolean>(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [isAddFriendMode, setIsAddFriendMode] = useState<boolean>(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  const { accessToken } = useAuthStore();
+  const { accessToken, user: currentUser } = useAuthStore();
 
   // Lấy danh sách bạn bè khi component mount
   useEffect(() => {
@@ -158,7 +163,7 @@ export default function SearchHeader() {
               fullName: userData.userInfo?.fullName || "Người dùng",
               profilePictureUrl:
                 userData.userInfo?.profilePictureUrl ||
-                "https://i.pravatar.cc/150",
+                "/images/default-avatar.png",
               phoneNumber: userData.phoneNumber || debouncedSearchQuery, // Nếu tìm bằng email, có thể không có phoneNumber
             });
           } else {
@@ -183,7 +188,7 @@ export default function SearchHeader() {
       setFilteredFriends(filtered);
       setPhoneSearchResult(null);
     }
-  }, [debouncedSearchQuery, allFriends]);
+  }, [debouncedSearchQuery, allFriends, isAddFriendMode]);
 
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -214,11 +219,38 @@ export default function SearchHeader() {
     setShowResults(false);
     setShowSuggestions(false);
     setSearchQuery("");
+    setIsAddFriendMode(false);
     // Dispatch a custom event to notify other components
     const event = new CustomEvent("searchActivated", {
       detail: { active: false },
     });
     document.dispatchEvent(event);
+  };
+
+  // Handle add friend mode
+  const activateAddFriendMode = () => {
+    setIsAddFriendMode(true);
+    setIsSearchActive(true);
+    setShowSuggestions(false);
+    setSearchQuery("");
+  };
+
+  // Handle user profile click
+  const handleUserClick = (user: UserSearchResult) => {
+    // Chuyển đổi từ UserSearchResult sang User
+    // Sử dụng type assertion để tránh lỗi TypeScript
+    const userForProfile = {
+      id: user.id,
+      userInfo: {
+        fullName: user.fullName,
+        profilePictureUrl: user.profilePictureUrl,
+      },
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+    } as unknown as User;
+
+    setSelectedUser(userForProfile);
+    setShowProfileDialog(true);
   };
 
   // Handle search submission
@@ -281,7 +313,8 @@ export default function SearchHeader() {
             <div className="flex items-center space-x-2">
               <button
                 className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center"
-                title="Lời mời kết bạn"
+                title="Tìm kiếm và kết bạn"
+                onClick={activateAddFriendMode}
               >
                 <UserPlus className="h-5 w-5" />
               </button>
@@ -384,6 +417,20 @@ export default function SearchHeader() {
         </div>
       )}
 
+      {/* Profile Dialog */}
+      {showProfileDialog && selectedUser && (
+        <ProfileDialog
+          isOpen={showProfileDialog}
+          onOpenChange={(open) => setShowProfileDialog(open)}
+          user={selectedUser}
+          isOwnProfile={selectedUser?.id === currentUser?.id}
+          onChat={() => {
+            // Xử lý khi nhấn nút nhắn tin
+            setShowProfileDialog(false);
+          }}
+        />
+      )}
+
       {/* Search Results Dropdown */}
       {isSearchActive && showResults && searchQuery && (
         <div className="absolute left-0 top-[60px] w-full bg-white border-t border-gray-200 shadow-lg z-50 overflow-hidden">
@@ -397,7 +444,10 @@ export default function SearchHeader() {
                 </div>
 
                 {phoneSearchResult ? (
-                  <div className="flex items-center py-2 px-1">
+                  <div
+                    className="flex items-center py-2 px-1 hover:bg-gray-50 cursor-pointer rounded-md"
+                    onClick={() => handleUserClick(phoneSearchResult)}
+                  >
                     <div className="flex items-center w-full">
                       <div className="h-10 w-10 rounded-full overflow-hidden mr-3">
                         <Image
@@ -542,6 +592,15 @@ export default function SearchHeader() {
                       <div
                         key={friend.id}
                         className="flex items-center justify-between py-2 hover:bg-gray-50 cursor-pointer px-3"
+                        onClick={() =>
+                          handleUserClick({
+                            id: friend.id,
+                            fullName: friend.fullName,
+                            profilePictureUrl: friend.profilePictureUrl,
+                            phoneNumber: "", // Thêm trường bắt buộc
+                            email: "", // Thêm trường bắt buộc
+                          })
+                        }
                       >
                         <div className="flex items-center">
                           <div className="h-8 w-8 rounded-full overflow-hidden mr-2">
@@ -555,7 +614,13 @@ export default function SearchHeader() {
                           </div>
                           <span className="text-sm">{friend.fullName}</span>
                         </div>
-                        <button className="h-6 w-6 rounded-full hover:bg-gray-200 flex items-center justify-center">
+                        <button
+                          className="h-6 w-6 rounded-full hover:bg-gray-200 flex items-center justify-center"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Thêm xử lý menu nếu cần
+                          }}
+                        >
                           <MoreHorizontal className="h-4 w-4 text-gray-400" />
                         </button>
                       </div>

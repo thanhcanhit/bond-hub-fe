@@ -14,6 +14,7 @@ import {
   Pencil,
   Share2,
   UserMinus,
+  UserPlus,
   Users,
 } from "lucide-react";
 import RefreshUserDataButton from "./RefreshUserDataButton";
@@ -25,6 +26,7 @@ import {
   updateCoverImage,
   updateUserBasicInfo,
 } from "@/actions/user.action";
+import { getRelationship, sendFriendRequest } from "@/actions/friend.action";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 // Removed framer-motion imports to improve performance
@@ -51,6 +53,11 @@ export default function ProfileDialog({
   const [isUploading, setIsUploading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [relationship, setRelationship] = useState<string | null>(null);
+  const [isLoadingRelationship, setIsLoadingRelationship] = useState(false);
+  const [showFriendRequestForm, setShowFriendRequestForm] = useState(false);
+  const [requestMessage, setRequestMessage] = useState("");
+  const [isSendingRequest, setIsSendingRequest] = useState(false);
   const profilePictureInputRef = useRef<HTMLInputElement>(null);
 
   // Lấy user từ store để luôn có dữ liệu mới nhất
@@ -58,6 +65,31 @@ export default function ProfileDialog({
 
   // Sử dụng user từ store nếu đang xem profile của chính mình
   const currentUser = isOwnProfile && storeUser ? storeUser : user;
+
+  // Kiểm tra mối quan hệ khi user thay đổi
+  useEffect(() => {
+    // Không cần kiểm tra mối quan hệ nếu đang xem profile của chính mình
+    if (isOwnProfile || !user?.id) return;
+
+    const checkRelationship = async () => {
+      try {
+        setIsLoadingRelationship(true);
+        const result = await getRelationship(user.id);
+        if (result.success && result.data) {
+          setRelationship(result.data.status || "NONE");
+        } else {
+          setRelationship("NONE");
+        }
+      } catch (error) {
+        console.error("Error checking relationship:", error);
+        setRelationship("NONE");
+      } finally {
+        setIsLoadingRelationship(false);
+      }
+    };
+
+    checkRelationship();
+  }, [isOwnProfile, user?.id]);
 
   // Default date of birth
   const defaultDob = useMemo(() => new Date("2003-11-03"), []);
@@ -97,6 +129,41 @@ export default function ProfileDialog({
       setCoverImageUrl(currentUser.userInfo?.coverImgUrl || null);
     }
   }, [currentUser]);
+
+  // Handle send friend request
+  const handleSendFriendRequest = async () => {
+    if (!user?.id) return;
+
+    try {
+      setIsSendingRequest(true);
+      const accessToken = useAuthStore.getState().accessToken || undefined;
+      const result = await sendFriendRequest(
+        user.id,
+        requestMessage,
+        accessToken,
+      );
+      if (result.success) {
+        toast.success("Lời mời kết bạn đã được gửi!");
+        setRelationship("PENDING_SENT");
+        setShowFriendRequestForm(false);
+      } else {
+        toast.error(`Không thể gửi lời mời kết bạn: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error sending friend request:", error);
+      toast.error("Đã xảy ra lỗi khi gửi lời mời kết bạn");
+    } finally {
+      setIsSendingRequest(false);
+    }
+  };
+
+  // Toggle friend request form
+  const toggleFriendRequestForm = () => {
+    setShowFriendRequestForm(!showFriendRequestForm);
+    if (showFriendRequestForm) {
+      setRequestMessage("");
+    }
+  };
 
   const handleProfilePictureUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -310,11 +377,94 @@ export default function ProfileDialog({
                 </div>
               </div>
 
-              {/* Call/Chat Buttons (for other users) */}
+              {/* Action Buttons (for other users) */}
               {!isOwnProfile && (
                 <div className="flex gap-2 px-4">
-                  <Button onClick={onCall}>Gọi</Button>
-                  <Button onClick={onChat}>Trò chuyện</Button>
+                  {isLoadingRelationship ? (
+                    <Button disabled className="w-full">
+                      <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                      Đang tải...
+                    </Button>
+                  ) : relationship === "FRIEND" ? (
+                    <>
+                      {onCall && <Button onClick={onCall}>Gọi</Button>}
+                      {onChat && (
+                        <Button onClick={onChat} className="flex-1">
+                          Trò chuyện
+                        </Button>
+                      )}
+                    </>
+                  ) : relationship === "PENDING_SENT" ? (
+                    <Button
+                      disabled
+                      className="w-full bg-gray-300 text-gray-700 cursor-not-allowed"
+                    >
+                      Đã gửi lời mời kết bạn
+                    </Button>
+                  ) : relationship === "PENDING_RECEIVED" ? (
+                    <div className="flex gap-2 w-full">
+                      <Button className="flex-1 bg-blue-500 hover:bg-blue-600">
+                        Chấp nhận
+                      </Button>
+                      <Button variant="outline" className="flex-1">
+                        Từ chối
+                      </Button>
+                    </div>
+                  ) : showFriendRequestForm ? (
+                    <div className="w-full space-y-4">
+                      <div>
+                        <label
+                          htmlFor="message"
+                          className="text-sm font-medium"
+                        >
+                          Lời nhắn (không bắt buộc)
+                        </label>
+                        <textarea
+                          id="message"
+                          placeholder="Xin chào, tôi muốn kết bạn với bạn..."
+                          value={requestMessage}
+                          onChange={(e) => setRequestMessage(e.target.value)}
+                          className="mt-1 w-full p-2 border border-gray-300 rounded-md text-sm"
+                          maxLength={150}
+                        />
+                        <div className="text-xs text-right text-gray-500 mt-1">
+                          {requestMessage.length}/150 ký tự
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3">
+                        <Button
+                          variant="outline"
+                          onClick={toggleFriendRequestForm}
+                          className="flex-1"
+                        >
+                          Hủy
+                        </Button>
+                        <Button
+                          onClick={handleSendFriendRequest}
+                          className="flex-1 bg-blue-500 hover:bg-blue-600"
+                          disabled={isSendingRequest}
+                        >
+                          {isSendingRequest ? (
+                            <>
+                              <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                              Đang gửi...
+                            </>
+                          ) : (
+                            "Gửi lời mời"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={toggleFriendRequestForm}
+                      className="w-full bg-blue-500 hover:bg-blue-600"
+                    >
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Kết bạn
+                    </Button>
+                  )}
                 </div>
               )}
 

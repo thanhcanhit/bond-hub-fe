@@ -1,4 +1,4 @@
-"use server";
+//"use server";
 import axiosInstance from "@/lib/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { User } from "@/types/base";

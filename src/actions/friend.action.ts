@@ -138,13 +138,43 @@ export async function getSentFriendRequests(token?: string) {
 }
 
 // Gửi lời mời kết bạn
-export async function sendFriendRequest(userId: string, token?: string) {
+export async function sendFriendRequest(
+  userId: string,
+  introduce?: string,
+  token?: string,
+) {
   try {
+    console.log(
+      `Sending friend request to user ${userId} with token: ${!!token}`,
+    );
     const serverAxios = createServerAxiosInstance(token);
-    const response = await serverAxios.post("/friends/request", { userId });
+
+    // Tạo payload theo đúng format API yêu cầu
+    const payload: { receiverId: string; introduce?: string } = {
+      receiverId: userId,
+    };
+
+    // Thêm introduce nếu có
+    if (introduce && introduce.trim()) {
+      payload.introduce = introduce.trim();
+    }
+
+    console.log("Friend request payload:", payload);
+    const response = await serverAxios.post("/friends/request", payload);
+    console.log("Friend request response:", response.data);
     return { success: true, data: response.data };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Send friend request failed:", error);
+
+    // Log chi tiết hơn về lỗi
+    if (error.response) {
+      console.error("Error response:", {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers,
+      });
+    }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
