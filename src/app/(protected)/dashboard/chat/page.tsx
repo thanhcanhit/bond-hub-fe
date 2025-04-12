@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import SimpleSearchHeader from "@/components/SimpleSearchHeader";
+import SearchHeader from "@/components/SearchHeader";
 
 export default function ChatPage() {
   // Use constants for values that don't change
@@ -27,7 +27,7 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col flex-1 h-full w-full overflow-hidden">
       <div className="flex border-b bg-white">
-        <SimpleSearchHeader />
+        <SearchHeader />
         <div className="flex-1 p-4">
           <h1 className="text-lg font-semibold">Chat</h1>
         </div>

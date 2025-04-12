@@ -6,7 +6,7 @@ import ContactList from "@/components/contact/ContactList";
 import GroupList from "@/components/contact/GroupList";
 import FriendRequests from "@/components/contact/FriendRequests";
 import GroupInvitations from "@/components/contact/GroupInvitations";
-import SimpleSearchHeader from "@/components/SimpleSearchHeader";
+import SearchHeader from "@/components/SearchHeader";
 import { useFriendStore } from "@/stores/friendStore";
 
 // Define types for UI components
@@ -153,7 +153,7 @@ export default function ContactPage() {
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden">
       <div className="flex bg-white ">
-        <SimpleSearchHeader />
+        <SearchHeader />
         <div className="flex-1 p-4 border-b">
           <div className="flex items-center pt-2 gap-2">
             {(() => {
