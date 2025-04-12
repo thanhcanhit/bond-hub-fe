@@ -22,7 +22,7 @@ import Link from "next/link";
 import SettingsDialog from "./SettingDialog";
 
 import { useState, useCallback, useMemo, memo } from "react";
-import ProfileDialog from "./ProfileDialog";
+import ProfileDialog from "./profile/ProfileDialog";
 import { LoadingWithMessage } from "./Loading";
 import { IconType } from "react-icons";
 import { LucideBookUser, LucideCircuitBoard } from "lucide-react";
@@ -112,9 +112,7 @@ function Sidebar() {
               <Avatar className="cursor-pointer h-12 w-12 border-2 border-white hover:border-blue-300 transition-all">
                 <AvatarImage
                   className="object-cover"
-                  src={user?.userInfo?.profilePictureUrl || ""}
-                  width={1200}
-                  height={1200}
+                  src={user?.userInfo?.profilePictureUrl || undefined}
                 />
                 <AvatarFallback className="text-gray">
                   {avatarFallback}

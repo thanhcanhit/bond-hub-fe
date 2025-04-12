@@ -1,7 +1,9 @@
 "use client";
-import { memo } from "react";
+import { memo, useState } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import { useFriendStore } from "@/stores/friendStore";
+import { toast } from "sonner";
 
 type FriendRequestProps = {
   id: string;
@@ -12,14 +14,52 @@ type FriendRequestProps = {
 };
 
 function FriendRequestItem({
-  // id is kept for future functionality
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   id,
   fullName,
   profilePictureUrl,
   message,
   timeAgo,
 }: FriendRequestProps) {
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
+  const { acceptRequest, rejectRequest } = useFriendStore();
+
+  const handleAccept = async () => {
+    setIsAccepting(true);
+    try {
+      const success = await acceptRequest(id);
+      if (success) {
+        toast.success(`Đã chấp nhận lời mời kết bạn từ ${fullName}`);
+      } else {
+        toast.error(
+          "Không thể chấp nhận lời mời kết bạn. Vui lòng thử lại sau.",
+        );
+      }
+    } catch (error) {
+      console.error("Error accepting friend request:", error);
+      toast.error("Đã xảy ra lỗi khi chấp nhận lời mời kết bạn");
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
+  const handleReject = async () => {
+    setIsRejecting(true);
+    try {
+      const success = await rejectRequest(id);
+      if (success) {
+        toast.success(`Đã từ chối lời mời kết bạn từ ${fullName}`);
+      } else {
+        toast.error("Không thể từ chối lời mời kết bạn. Vui lòng thử lại sau.");
+      }
+    } catch (error) {
+      console.error("Error rejecting friend request:", error);
+      toast.error("Đã xảy ra lỗi khi từ chối lời mời kết bạn");
+    } finally {
+      setIsRejecting(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-md p-4 mb-4 w-[302px] shadow-sm">
       <div className="flex items-start justify-between mb-2">
@@ -64,11 +104,17 @@ function FriendRequestItem({
         <Button
           variant="outline"
           className="flex-1 bg-[#e5e7eb] hover:bg-gray-300 border-gray-200 text-sm h-10 font-semibold"
+          onClick={handleReject}
+          disabled={isRejecting || isAccepting}
         >
-          Từ chối
+          {isRejecting ? "Đang từ chối..." : "Từ chối"}
         </Button>
-        <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-sm h-10 font-semibold">
-          Đồng ý
+        <Button
+          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-sm h-10 font-semibold"
+          onClick={handleAccept}
+          disabled={isAccepting || isRejecting}
+        >
+          {isAccepting ? "Đang chấp nhận..." : "Đồng ý"}
         </Button>
       </div>
     </div>
@@ -83,13 +129,31 @@ type SentRequestProps = {
 };
 
 function SentRequestItem({
-  // id is kept for future functionality
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   id,
   fullName,
   profilePictureUrl,
   timeAgo,
 }: SentRequestProps) {
+  const [isCanceling, setIsCanceling] = useState(false);
+  const { cancelRequest } = useFriendStore();
+
+  const handleCancel = async () => {
+    setIsCanceling(true);
+    try {
+      const success = await cancelRequest(id);
+      if (success) {
+        toast.success(`Đã thu hồi lời mời kết bạn đến ${fullName}`);
+      } else {
+        toast.error("Không thể thu hồi lời mời kết bạn. Vui lòng thử lại sau.");
+      }
+    } catch (error) {
+      console.error("Error canceling friend request:", error);
+      toast.error("Đã xảy ra lỗi khi thu hồi lời mời kết bạn");
+    } finally {
+      setIsCanceling(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-md p-4 mb-4 w-[302px] shadow-sm">
       <div className="flex items-start justify-between mb-2">
@@ -114,8 +178,10 @@ function SentRequestItem({
         <Button
           variant="outline"
           className="w-full bg-[#e5e7eb] hover:bg-gray-300 border-gray-200 text-sm h-10 font-semibold"
+          onClick={handleCancel}
+          disabled={isCanceling}
         >
-          Thu hồi lời mời
+          {isCanceling ? "Đang thu hồi..." : "Thu hồi lời mời"}
         </Button>
       </div>
     </div>

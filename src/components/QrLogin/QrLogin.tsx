@@ -405,7 +405,7 @@ export default function QrLogin() {
           <div className="mb-4 relative">
             <Avatar className="h-24 w-24">
               <AvatarImage
-                src={scannedUser.profilePictureUrl || ""}
+                src={scannedUser.profilePictureUrl || null}
                 alt="Profile"
               />
               <AvatarFallback className="text-3xl">

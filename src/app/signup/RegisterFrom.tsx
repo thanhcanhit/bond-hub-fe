@@ -10,7 +10,7 @@ import {
   Mars,
   VenusAndMars,
 } from "lucide-react";
-import DateOfBirthPicker from "@/components/DateOfBirthPicker";
+import DateOfBirthPicker from "@/components/profile/DateOfBirthPicker";
 import {
   InputOTP,
   InputOTPGroup,
