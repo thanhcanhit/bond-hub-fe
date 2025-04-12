@@ -7,6 +7,16 @@ import { formatMessageTime } from "@/utils/dateUtils";
 import { Message, Media } from "@/types/base";
 import MediaGrid from "./MediaGrid";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { useAuthStore } from "@/stores/authStore";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Separator } from "../ui/separator";
+import { deleteMessageForSelf, recallMessage } from "@/actions/message.action";
 import {
   Copy,
   Download,
@@ -21,15 +31,6 @@ import {
   Video,
   Image as ImageIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Separator } from "../ui/separator";
-import { deleteMessageForSelf, recallMessage } from "@/actions/message.action";
 
 interface MediaItemProps {
   media: Media;
@@ -161,6 +162,7 @@ export default function MessageItem({
 }: MessageItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const formattedTime = formatMessageTime(message.createdAt);
+  const currentUser = useAuthStore((state) => state.user);
 
   const handleCopyMessage = () => {
     if (message.content.text) {
@@ -247,8 +249,17 @@ export default function MessageItem({
               src={message.sender?.userInfo?.profilePictureUrl || undefined}
             />
             <AvatarFallback>
-              {message.sender?.userInfo?.fullName?.slice(0, 2).toUpperCase() ||
-                "??"}
+              {message.sender?.userInfo?.fullName
+                ? message.sender.userInfo.fullName
+                    .split(" ")
+                    .map((w) => w[0])
+                    .join("")
+                    .toUpperCase()
+                : message.sender?.email
+                  ? message.sender.email.slice(0, 2).toUpperCase()
+                  : message.sender?.id
+                    ? message.sender.id.slice(0, 2).toUpperCase()
+                    : "U"}
             </AvatarFallback>
           </Avatar>
         </div>
@@ -332,23 +343,23 @@ export default function MessageItem({
           </div>
         )}
         {/* Tin nhắn văn bản */}
-        {(message.recalled ||
-          (message.content.text &&
-            !(
-              message.content.media?.length ||
-              message.content.image ||
-              message.content.video
-            ))) && (
+        {(message.recalled || message.content.text) && (
           <div
-            className={`rounded-2xl px-3 py-2 break-words overflow-hidden ${
+            className={`rounded-2xl px-3 py-2 break-words w-fit overflow-hidden ${
               isCurrentUser
                 ? message.recalled
                   ? "bg-gray-100 text-gray-500 italic"
-                  : "bg-blue-500 text-white"
+                  : "bg-blue-500 text-white ml-auto"
                 : message.recalled
                   ? "bg-gray-100 text-gray-500 italic"
                   : "bg-gray-200 text-gray-800"
-            } ${!message.recalled ? "cursor-pointer hover:opacity-90" : ""}`}
+            } ${!message.recalled ? "cursor-pointer hover:opacity-90" : ""} ${
+              message.content.media?.length ||
+              message.content.image ||
+              message.content.video
+                ? "mb-2"
+                : ""
+            }`}
             onClick={!message.recalled ? handleMessageClick : undefined}
           >
             {message.recalled ? (
@@ -469,11 +480,18 @@ export default function MessageItem({
         <div className="ml-2 flex-shrink-0">
           <Avatar className="h-8 w-8">
             <AvatarImage
-              src={message.sender?.userInfo?.profilePictureUrl || undefined}
+              src={currentUser?.userInfo?.profilePictureUrl || undefined}
             />
             <AvatarFallback>
-              {message.sender?.userInfo?.fullName?.slice(0, 2).toUpperCase() ||
-                "??"}
+              {currentUser?.userInfo?.fullName
+                ? currentUser.userInfo.fullName
+                    .split(" ")
+                    .map((w) => w[0])
+                    .join("")
+                    .toUpperCase()
+                : currentUser?.email
+                  ? currentUser.email.slice(0, 2).toUpperCase()
+                  : "C"}
             </AvatarFallback>
           </Avatar>
         </div>

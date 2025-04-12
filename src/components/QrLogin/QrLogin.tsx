@@ -407,6 +407,7 @@ export default function QrLogin() {
               <AvatarImage
                 src={scannedUser.profilePictureUrl || ""}
                 alt="Profile"
+                className="object-cover"
               />
               <AvatarFallback className="text-3xl">
                 {scannedUser.fullName

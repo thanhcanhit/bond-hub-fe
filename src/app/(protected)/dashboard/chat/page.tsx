@@ -3,20 +3,28 @@ import { useEffect, useState } from "react";
 import ContactList from "@/components/chat/ContactList";
 import ChatArea from "@/components/chat/ChatArea";
 import ContactInfo from "@/components/chat/ContactInfo";
+import ChatSocketHandler from "@/components/chat/ChatSocketHandler";
 import { User, UserInfo } from "@/types/base";
 import { useAuthStore } from "@/stores/authStore";
+import { useChatStore } from "@/stores/chatStore";
+import { useConversationsStore } from "@/stores/conversationsStore";
 import { getUserDataById } from "@/actions/user.action";
 
 export default function ChatPage() {
   const [isTabContentVisible, setIsTabContentVisible] = useState(true);
-  const [selectedContactId, setSelectedContactId] = useState<string | null>(
-    null,
-  );
   const [showContactInfo, setShowContactInfo] = useState(false);
-  const [selectedContact, setSelectedContact] = useState<
-    (User & { userInfo: UserInfo }) | null
-  >(null);
+
+  // Get state from stores
   const currentUser = useAuthStore((state) => state.user);
+  const { selectedContact, setSelectedContact } = useChatStore();
+  const { loadConversations } = useConversationsStore();
+
+  // Load conversations when component mounts
+  useEffect(() => {
+    if (currentUser?.id) {
+      loadConversations(currentUser.id);
+    }
+  }, [currentUser?.id, loadConversations]);
 
   // Handle window resize for responsive layout
   useEffect(() => {
@@ -31,37 +39,45 @@ export default function ChatPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Fetch selected contact data when ID changes
-  useEffect(() => {
-    const fetchSelectedContact = async () => {
-      if (selectedContactId) {
-        const result = await getUserDataById(selectedContactId);
-        if (result.success && result.user) {
-          // Ensure userInfo exists
-          const user = result.user;
-          if (!user.userInfo) {
-            user.userInfo = {
-              id: user.id,
-              fullName: user.email || user.phoneNumber || "Unknown",
-              profilePictureUrl: null,
-              statusMessage: "No status",
-              blockStrangers: false,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              userAuth: user,
-            };
-          }
-          setSelectedContact(user as User & { userInfo: UserInfo });
-        } else {
-          setSelectedContact(null);
+  // Handle selecting a contact
+  const handleSelectContact = async (contactId: string | null) => {
+    if (contactId) {
+      // First, check if we already have this contact in our conversations store
+      const existingConversation = useConversationsStore
+        .getState()
+        .conversations.find((conv) => conv.contact.id === contactId);
+
+      if (existingConversation) {
+        // Use the contact from the conversations store
+        setSelectedContact(existingConversation.contact);
+      }
+
+      // Always fetch the latest user data to ensure we have the most up-to-date info
+      const result = await getUserDataById(contactId);
+      if (result.success && result.user) {
+        // Ensure userInfo exists
+        const user = result.user;
+        if (!user.userInfo) {
+          user.userInfo = {
+            id: user.id,
+            fullName: user.email || user.phoneNumber || "Unknown",
+            profilePictureUrl: null,
+            statusMessage: "No status",
+            blockStrangers: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            userAuth: user,
+          };
         }
-      } else {
+        setSelectedContact(user as User & { userInfo: UserInfo });
+      } else if (!existingConversation) {
+        // Only set to null if we don't have an existing conversation
         setSelectedContact(null);
       }
-    };
-
-    fetchSelectedContact();
-  }, [selectedContactId]);
+    } else {
+      setSelectedContact(null);
+    }
+  };
 
   // Toggle contact info sidebar
   const toggleContactInfo = () => {
@@ -70,23 +86,20 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full w-full bg-gray-100 overflow-hidden">
+      {/* Socket handler for real-time updates */}
+      <ChatSocketHandler />
+
       {/* Left Sidebar - Contact List */}
       <div
         className={`w-[340px] bg-white border-r flex flex-col overflow-hidden ${isTabContentVisible ? "flex" : "hidden"}`}
       >
-        <ContactList
-          onSelectContact={setSelectedContactId}
-          selectedContactId={selectedContactId}
-        />
+        <ContactList onSelectContact={handleSelectContact} />
       </div>
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <ChatArea
           currentUser={currentUser as User}
-          selectedContact={
-            selectedContact as (User & { userInfo: UserInfo }) | null
-          }
           onToggleInfo={toggleContactInfo}
         />
       </div>

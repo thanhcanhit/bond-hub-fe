@@ -1,77 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { Search, UserPlus, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { formatMessageTime } from "@/data/mockData";
-import { User, UserInfo } from "@/types/base";
-import { getAllUsers } from "@/actions/user.action";
-import { useAuthStore } from "@/stores/authStore";
-
-type UserWithLastMessage = User & {
-  userInfo: UserInfo;
-  lastMessage?: {
-    text: string;
-    time: string;
-  };
-};
+import { formatMessageTime } from "@/utils/dateUtils";
+import { getUserInitials, getUserDisplayName } from "@/utils/userUtils";
+import { useConversationsStore } from "@/stores/conversationsStore";
+import { useChatStore } from "@/stores/chatStore";
 
 interface ContactListProps {
-  onSelectContact: (contactId: string) => void;
-  selectedContactId: string | null;
+  onSelectContact: (contactId: string | null) => void;
 }
 
-export default function ContactList({
-  onSelectContact,
-  selectedContactId,
-}: ContactListProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [users, setUsers] = useState<UserWithLastMessage[]>([]);
-  const [loading, setLoading] = useState(true);
-  const currentUser = useAuthStore((state) => state.user);
+export default function ContactList({ onSelectContact }: ContactListProps) {
+  const selectedContact = useChatStore((state) => state.selectedContact);
+  const { isLoading, searchQuery, setSearchQuery, getFilteredConversations } =
+    useConversationsStore();
 
-  // Fetch all users
-  useEffect(() => {
-    const fetchUsers = async () => {
-      setLoading(true);
-      try {
-        const result = await getAllUsers();
-        if (result.success && result.users) {
-          // Filter out current user and transform to UserWithLastMessage
-          const otherUsers = result.users
-            .filter((user) => user.id !== currentUser?.id)
-            .map((user) => ({
-              ...user,
-              userInfo: user.userInfo || {
-                id: user.id,
-                fullName: user.email || user.phoneNumber || "Unknown",
-                profilePictureUrl: null,
-                statusMessage: "No status",
-                blockStrangers: false,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                userAuth: user,
-              },
-              // For now, no last message
-              lastMessage: undefined,
-            }));
-          setUsers(otherUsers);
-        }
-      } catch (error) {
-        console.error("Error fetching users:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUsers();
-  }, [currentUser?.id]);
-
-  // Filter users based on search query
-  const filteredUsers = users.filter((user) =>
-    user.userInfo?.fullName?.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  // Get filtered conversations based on search query
+  const filteredConversations = getFilteredConversations();
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -92,46 +39,62 @@ export default function ContactList({
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {loading ? (
+        {isLoading ? (
           <div className="flex justify-center items-center h-20">
             <p className="text-gray-500">Đang tải danh sách người dùng...</p>
           </div>
-        ) : filteredUsers.length > 0 ? (
-          filteredUsers.map((user) => (
+        ) : filteredConversations.length > 0 ? (
+          filteredConversations.map((conversation) => (
             <div
-              key={user.id}
+              key={conversation.contact.id}
               className={`flex items-center gap-3 p-3 hover:bg-gray-100 cursor-pointer ${
-                selectedContactId === user.id ? "bg-blue-50" : ""
+                selectedContact?.id === conversation.contact.id
+                  ? "bg-blue-50"
+                  : ""
               }`}
-              onClick={() => onSelectContact(user.id)}
+              onClick={() => onSelectContact(conversation.contact.id)}
             >
               <Avatar className="h-12 w-12 border">
-                <AvatarImage src={user.userInfo?.profilePictureUrl || ""} />
+                <AvatarImage
+                  src={conversation.contact.userInfo?.profilePictureUrl || ""}
+                  className="object-cover"
+                />
                 <AvatarFallback>
-                  {user.userInfo?.fullName?.slice(0, 2).toUpperCase() || "??"}
+                  {getUserInitials(conversation.contact)}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-center">
                   <p className="font-medium truncate">
-                    {user.userInfo?.fullName}
+                    {getUserDisplayName(conversation.contact)}
                   </p>
-                  {user.lastMessage && (
+                  {conversation.lastMessage && (
                     <span className="text-xs text-gray-500 whitespace-nowrap ml-1">
-                      {user.lastMessage.time}
+                      {formatMessageTime(conversation.lastMessage.createdAt)}
+                    </span>
+                  )}
+                  {conversation.unreadCount > 0 && (
+                    <span className="bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center ml-1">
+                      {conversation.unreadCount}
                     </span>
                   )}
                 </div>
-                {user.lastMessage && (
+                {conversation.lastMessage && (
                   <p className="text-sm text-gray-500 truncate">
-                    {user.lastMessage.text}
+                    {conversation.lastMessage.recalled
+                      ? "Tin nhắn đã được thu hồi"
+                      : conversation.lastMessage.content.text ||
+                        (conversation.lastMessage.content.media?.length
+                          ? "[Hình ảnh/Tệp đính kèm]"
+                          : "")}
                   </p>
                 )}
-                {!user.lastMessage && user.userInfo?.statusMessage && (
-                  <p className="text-sm text-gray-500 truncate">
-                    {user.userInfo.statusMessage}
-                  </p>
-                )}
+                {!conversation.lastMessage &&
+                  conversation.contact.userInfo?.statusMessage && (
+                    <p className="text-sm text-gray-500 truncate">
+                      {conversation.contact.userInfo.statusMessage}
+                    </p>
+                  )}
               </div>
             </div>
           ))

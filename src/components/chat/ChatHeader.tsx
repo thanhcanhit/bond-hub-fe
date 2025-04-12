@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { User, UserInfo } from "@/types/base";
 import { Phone, Video, Info } from "lucide-react";
+import { getUserInitials, getUserDisplayName } from "@/utils/userUtils";
 
 interface ChatHeaderProps {
   contact: (User & { userInfo: UserInfo }) | null;
@@ -24,12 +25,10 @@ export default function ChatHeader({ contact, onToggleInfo }: ChatHeaderProps) {
       <div className="flex items-center gap-3">
         <Avatar className="h-10 w-10 border">
           <AvatarImage src={contact.userInfo.profilePictureUrl || ""} />
-          <AvatarFallback>
-            {contact.userInfo.fullName?.slice(0, 2).toUpperCase() || "??"}
-          </AvatarFallback>
+          <AvatarFallback>{getUserInitials(contact)}</AvatarFallback>
         </Avatar>
         <div>
-          <h2 className="font-semibold">{contact.userInfo.fullName}</h2>
+          <h2 className="font-semibold">{getUserDisplayName(contact)}</h2>
           <p className="text-xs text-gray-500">
             {contact.userInfo.statusMessage}
           </p>

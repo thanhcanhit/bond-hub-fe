@@ -1,21 +1,26 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, DragEvent } from "react";
 import {
   Paperclip,
   Smile,
   Send,
-  Mic,
   X,
   Reply,
   ImageIcon,
   FileText,
   Play,
+  Sticker,
+  Gift,
+  MoreHorizontal,
+  Wand2,
+  Trash2,
 } from "lucide-react";
 import { Message } from "@/types/base";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import Image from "next/image";
 
 interface MessageInputProps {
   onSendMessage: (message: string, files?: File[]) => void;
@@ -36,31 +41,72 @@ export default function MessageInput({
   const [previewUrls, setPreviewUrls] = useState<
     { file: File; url: string; type: string }[]
   >([]);
+  const [isDragging, setIsDragging] = useState(false);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputContainerRef = useRef<HTMLDivElement>(null);
 
   // Xử lý khi chọn file
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
-      setSelectedFiles((prev) => [...prev, ...newFiles]);
+      addFiles(newFiles);
+    }
+  };
 
-      // Tạo preview URLs cho các file
-      newFiles.forEach((file) => {
-        const fileType = file.type.split("/")[0]; // image, video, application, etc.
+  // Hàm chung để xử lý thêm files
+  const addFiles = (newFiles: File[]) => {
+    setSelectedFiles((prev) => [...prev, ...newFiles]);
 
-        if (fileType === "image") {
-          const url = URL.createObjectURL(file);
-          setPreviewUrls((prev) => [...prev, { file, url, type: "image" }]);
-        } else if (fileType === "video") {
-          const url = URL.createObjectURL(file);
-          setPreviewUrls((prev) => [...prev, { file, url, type: "video" }]);
-        } else {
-          // For other file types (documents, etc.)
-          setPreviewUrls((prev) => [...prev, { file, url: "", type: "file" }]);
-        }
-      });
+    // Tạo preview URLs cho các file
+    newFiles.forEach((file) => {
+      const fileType = file.type.split("/")[0]; // image, video, application, etc.
+
+      if (fileType === "image") {
+        const url = URL.createObjectURL(file);
+        setPreviewUrls((prev) => [...prev, { file, url, type: "image" }]);
+      } else if (fileType === "video") {
+        const url = URL.createObjectURL(file);
+        setPreviewUrls((prev) => [...prev, { file, url, type: "video" }]);
+      } else {
+        // For other file types (documents, etc.)
+        setPreviewUrls((prev) => [...prev, { file, url: "", type: "file" }]);
+      }
+    });
+  };
+
+  // Xử lý khi kéo file vào
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (
+    e: DragEvent<HTMLDivElement>,
+    sendImmediately = false,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const newFiles = Array.from(e.dataTransfer.files);
+
+      if (sendImmediately) {
+        // Gửi ngay lập tức nếu thả vào khu vực xem tin nhắn
+        onSendMessage("", newFiles);
+      } else {
+        // Hiển thị preview nếu thả vào ô input
+        addFiles(newFiles);
+      }
     }
   };
 
@@ -224,9 +270,11 @@ export default function MessageInput({
               <div key={index} className="relative group">
                 {item.type === "image" ? (
                   <div className="w-16 h-16 rounded overflow-hidden border">
-                    <img
+                    <Image
                       src={item.url}
                       alt={item.file.name}
+                      width={500}
+                      height={500}
                       className="w-full h-full object-cover"
                     />
                   </div>
@@ -260,17 +308,22 @@ export default function MessageInput({
           {previewUrls.length > 0 && (
             <Button
               variant="ghost"
-              size="sm"
+              size="icon"
               className="text-red-500 hover:text-red-700 hover:bg-red-50"
               onClick={handleRemoveAllFiles}
             >
-              Xóa tất cả
+              <Trash2 />
             </Button>
           )}
         </div>
       )}
 
-      <div className="p-3 flex items-center gap-2">
+      <div
+        className="flex flex-col border-t"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => handleDrop(e)}
+      >
         {/* Hidden file input */}
         <input
           type="file"
@@ -280,84 +333,131 @@ export default function MessageInput({
           multiple
           accept="image/*,video/*,application/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
         />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-gray-500 hover:text-blue-500 hover:bg-blue-50"
-          disabled={disabled}
-          onClick={handleAttachClick}
-        >
-          <Paperclip className="h-5 w-5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-gray-500 hover:text-blue-500 hover:bg-blue-50"
-          disabled={disabled}
-          onClick={handleAttachClick}
-        >
-          <ImageIcon className="h-5 w-5" />
-        </Button>
-        <div className="flex-1 relative">
-          <input
-            type="text"
-            placeholder={
-              disabled ? "Chọn một cuộc trò chuyện" : "Nhập tin nhắn..."
-            }
-            className="w-full p-2 pl-3 pr-10 rounded-full border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={disabled}
-          />
+
+        {/* Toolbar buttons - now above the input */}
+        <div className="flex items-center px-2 py-1 border-b bg-gray-50">
           <Button
             variant="ghost"
             size="icon"
-            className={`absolute right-2 top-1/2 transform -translate-y-1/2 ${showEmojiPicker ? "text-blue-500" : "text-gray-500"} hover:text-blue-500 transition-colors`}
+            className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md h-9 w-9 mr-0.5"
             disabled={disabled}
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            ref={emojiButtonRef}
+            onClick={handleAttachClick}
           >
-            <Smile className="h-5 w-5" />
+            <Sticker className="h-5 w-5" />
           </Button>
 
-          {showEmojiPicker && (
-            <div
-              className="absolute bottom-12 right-0 z-50 shadow-lg rounded-lg overflow-hidden transition-all duration-200 transform origin-bottom-right"
-              ref={emojiPickerRef}
-            >
-              <EmojiPicker
-                onEmojiClick={handleEmojiClick}
-                width={320}
-                height={400}
-                searchPlaceHolder="Tìm kiếm emoji..."
-                previewConfig={{ showPreview: false }}
-                lazyLoadEmojis={true}
-                skinTonesDisabled
-              />
-            </div>
-          )}
-        </div>
-        {message.trim() ? (
           <Button
             variant="ghost"
             size="icon"
-            className="text-blue-500"
-            onClick={handleSendMessage}
+            className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md h-9 w-9 mr-0.5"
             disabled={disabled}
+            onClick={handleAttachClick}
+          >
+            <ImageIcon className="h-5 w-5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md h-9 w-9 mr-0.5"
+            disabled={disabled}
+            onClick={handleAttachClick}
+          >
+            <Paperclip className="h-5 w-5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md h-9 w-9 mr-0.5"
+            disabled={disabled}
+          >
+            <Gift className="h-5 w-5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md h-9 w-9"
+            disabled={disabled}
+          >
+            <Wand2 className="h-5 w-5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md h-9 w-9 ml-auto"
+            disabled={disabled}
+          >
+            <MoreHorizontal className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* Input field and send button */}
+        <div
+          className={`flex items-center p-2 ${isDragging ? "bg-blue-50 border border-dashed border-blue-300 rounded-md" : ""}`}
+          ref={inputContainerRef}
+        >
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              placeholder={
+                disabled ? "Chọn một cuộc trò chuyện" : "Nhập tin nhắn..."
+              }
+              className="w-full p-2 pl-3 pr-10 rounded-md focus:outline-none focus:ring-none"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={disabled}
+            />
+
+            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 rounded-full ${showEmojiPicker ? "text-blue-500" : "text-gray-500"} hover:text-blue-500 hover:bg-transparent`}
+                disabled={disabled}
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                ref={emojiButtonRef}
+              >
+                <Smile className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {showEmojiPicker && (
+              <div
+                className="absolute bottom-12 right-0 z-50 shadow-lg rounded-lg overflow-hidden transition-all duration-200 transform origin-bottom-right"
+                ref={emojiPickerRef}
+              >
+                <EmojiPicker
+                  onEmojiClick={handleEmojiClick}
+                  width={320}
+                  height={400}
+                  searchPlaceHolder="Tìm kiếm emoji..."
+                  previewConfig={{ showPreview: false }}
+                  lazyLoadEmojis={true}
+                  skinTonesDisabled
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Send button */}
+          <Button
+            variant={message.trim() ? "default" : "ghost"}
+            size="icon"
+            className={
+              message.trim()
+                ? "bg-blue-500 hover:bg-blue-600 text-white rounded-full h-9 w-9 ml-2"
+                : "text-gray-400 rounded-full h-9 w-9 ml-2"
+            }
+            onClick={handleSendMessage}
+            disabled={disabled || !message.trim()}
           >
             <Send className="h-5 w-5" />
           </Button>
-        ) : (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-gray-500"
-            disabled={disabled}
-          >
-            <Mic className="h-5 w-5" />
-          </Button>
-        )}
+        </div>
       </div>
     </div>
   );

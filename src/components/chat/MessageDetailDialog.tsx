@@ -12,8 +12,6 @@ import {
   ChevronRight,
   ChevronDown,
   Share2,
-  Minus,
-  Maximize2,
   ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -167,22 +165,6 @@ export default function MessageDetailDialog({
             className="text-white hover:bg-white/10 rounded-full h-8 w-8"
             onClick={onClose}
           >
-            <Minus className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:bg-white/10 rounded-full h-8 w-8"
-            onClick={() => document.documentElement.requestFullscreen()}
-          >
-            <Maximize2 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:bg-white/10 rounded-full h-8 w-8"
-            onClick={onClose}
-          >
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -194,14 +176,15 @@ export default function MessageDetailDialog({
           {currentMedia && (
             <>
               {currentMedia.type === "IMAGE" ? (
-                <div className="relative max-h-full max-w-full">
+                <div className="relative max-h-full max-w-full w-auto h-auto">
                   <Image
                     src={currentMedia.url}
                     alt={currentMedia.fileName}
-                    className="object-contain max-h-[80vh]"
+                    className="object-contain max-h-[80vh] w-auto h-auto"
                     width={1200}
                     height={800}
                     unoptimized
+                    style={{ maxWidth: "90vw" }}
                   />
                   <Button
                     variant="ghost"
@@ -213,12 +196,12 @@ export default function MessageDetailDialog({
                   </Button>
                 </div>
               ) : currentMedia.type === "VIDEO" ? (
-                <div className="relative max-h-full max-w-full">
+                <div className="relative max-h-full max-w-full w-auto h-auto">
                   <video
                     src={currentMedia.url}
                     controls
-                    className="max-h-[80vh]"
-                    style={{ maxWidth: "100%" }}
+                    className="max-h-[80vh] w-auto h-auto"
+                    style={{ maxWidth: "90vw" }}
                   />
                   <Button
                     variant="ghost"
@@ -314,7 +297,7 @@ export default function MessageDetailDialog({
       ) : (
         // Hiển thị grid tất cả media
         <div className="flex-1 overflow-y-auto p-4">
-          <div className="grid grid-cols-3 gap-1">
+          <div className="grid grid-cols-3 gap-1 max-w-4xl mx-auto">
             {message.content.media &&
               message.content.media.map((media, index) => (
                 <div
@@ -395,8 +378,8 @@ export default function MessageDetailDialog({
 
       {/* Phần nội dung tin nhắn */}
       {message.content.text && (
-        <div className="p-4 bg-white">
-          <p className="text-gray-800">{message.content.text}</p>
+        <div className="p-4 bg-white shadow-md mb-4 mx-auto rounded-lg max-w-4xl">
+          <p className="text-gray-800 font-medium">{message.content.text}</p>
         </div>
       )}
 

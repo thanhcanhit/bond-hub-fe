@@ -28,7 +28,10 @@ export default function ContactInfo({ contact, onClose }: ContactInfoProps) {
         {/* Contact Profile */}
         <div className="flex flex-col items-center text-center">
           <Avatar className="h-20 w-20 mb-2">
-            <AvatarImage src={contact.userInfo.profilePictureUrl || ""} />
+            <AvatarImage
+              src={contact.userInfo.profilePictureUrl || ""}
+              className="object-cover"
+            />
             <AvatarFallback>
               {contact.userInfo.fullName?.slice(0, 2).toUpperCase() || "??"}
             </AvatarFallback>

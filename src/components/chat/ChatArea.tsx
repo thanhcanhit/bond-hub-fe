@@ -1,75 +1,85 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Message, MessageType, User, UserInfo } from "@/types/base";
+import { useEffect, useRef } from "react";
+import { Message, User, UserInfo } from "@/types/base";
 import ChatHeader from "./ChatHeader";
 import MessageItem from "./MessageItem";
 import MessageInput from "./MessageInput";
 import MessageDetailDialog from "./MessageDetailDialog";
-import {
-  getMessagesBetweenUsers,
-  sendTextMessage,
-  sendMediaMessage,
-} from "@/actions/message.action";
+import ChatMessagesDropZone from "./ChatMessagesDropZone";
 import { formatMessageDate } from "@/utils/dateUtils";
-import { toast } from "sonner";
+import { useChatStore } from "@/stores/chatStore";
+import { useConversationsStore } from "@/stores/conversationsStore";
+import { getUserDataById } from "@/actions/user.action";
 
 interface ChatAreaProps {
   currentUser: User;
-  selectedContact: (User & { userInfo: UserInfo }) | null;
   onToggleInfo: () => void;
 }
 
-export default function ChatArea({
-  currentUser,
-  selectedContact,
-  onToggleInfo,
-}: ChatAreaProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
+  const {
+    messages,
+    selectedContact,
+    replyingTo,
+    selectedMessage,
+    isDialogOpen,
+    setReplyingTo,
+    setSelectedMessage,
+    setIsDialogOpen,
+    sendMessage,
+  } = useChatStore();
+
+  const { markAsRead, updateLastMessage } = useConversationsStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Fetch complete user data and mark messages as read when viewing a conversation
   useEffect(() => {
-    if (selectedContact) {
-      // Load messages for the selected contact from API
-      const fetchMessages = async () => {
-        try {
-          const result = await getMessagesBetweenUsers(selectedContact.id);
-          if (result.success && result.messages) {
-            // Sắp xếp tin nhắn theo thời gian tạo, từ cũ đến mới
-            const sortedMessages = [...result.messages].sort((a, b) => {
-              return (
-                new Date(a.createdAt).getTime() -
-                new Date(b.createdAt).getTime()
-              );
-            });
-            setMessages(sortedMessages);
+    if (selectedContact?.id) {
+      markAsRead(selectedContact.id);
 
-            // Cuộn xuống cuối sau khi tin nhắn được tải
-            setTimeout(() => {
-              messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-            }, 100);
-          } else {
-            setMessages([]);
+      // Fetch complete user data to ensure we have userInfo
+      const fetchCompleteUserData = async () => {
+        try {
+          const result = await getUserDataById(selectedContact.id);
+          if (result.success && result.user) {
+            // Update the selected contact with complete user data
+            const { setSelectedContact } = useChatStore.getState();
+            // Ensure userInfo exists
+            const user = result.user;
+            if (!user.userInfo) {
+              user.userInfo = {
+                id: user.id,
+                fullName: user.email || user.phoneNumber || "Unknown",
+                profilePictureUrl: null,
+                statusMessage: "No status",
+                blockStrangers: false,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                userAuth: user,
+              };
+            }
+            setSelectedContact(user as User & { userInfo: UserInfo });
           }
         } catch (error) {
-          console.error("Error fetching messages:", error);
-          setMessages([]);
+          console.error("Error fetching complete user data:", error);
         }
       };
 
-      fetchMessages();
-    } else {
-      setMessages([]);
+      fetchCompleteUserData();
     }
-  }, [selectedContact]);
+  }, [selectedContact?.id, markAsRead]);
 
   useEffect(() => {
     // Scroll to bottom when messages change
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+
+    // Update last message in conversations list when messages change
+    if (messages.length > 0 && selectedContact) {
+      const lastMessage = messages[messages.length - 1];
+      updateLastMessage(selectedContact.id, lastMessage);
+    }
+  }, [messages, selectedContact, updateLastMessage]);
 
   // Scroll to bottom when component mounts
   useEffect(() => {
@@ -94,7 +104,6 @@ export default function ChatArea({
       setIsDialogOpen(true);
     } else if (message.content.text) {
       // Nếu chỉ có text thì hiển thị toast
-      toast.info("Xem chi tiết tin nhắn: " + message.content.text);
     }
   };
 
@@ -102,98 +111,8 @@ export default function ChatArea({
     setReplyingTo(null);
   };
 
-  const handleSendMessage = async (text: string, files?: File[]) => {
-    if (
-      !selectedContact ||
-      (!text.trim() && !files?.length) ||
-      !currentUser ||
-      !currentUser.id
-    ) {
-      console.error(
-        "Cannot send message: Missing contact, message text, or current user",
-      );
-      return;
-    }
-
-    // Create a temporary message to show immediately
-    const tempMessage: Message = {
-      id: `temp-${Date.now()}`,
-      content: {
-        text,
-        // Add placeholder for files if they exist
-        media: files?.map((file) => ({
-          url: URL.createObjectURL(file),
-          type: file.type.startsWith("image/")
-            ? "IMAGE"
-            : file.type.startsWith("video/")
-              ? "VIDEO"
-              : "DOCUMENT",
-          fileId: `temp-${Date.now()}-${file.name}`,
-          fileName: file.name,
-          metadata: {
-            path: "",
-            size: file.size,
-            mimeType: file.type,
-            extension: file.name.split(".").pop() || "",
-            bucketName: "",
-            uploadedAt: new Date().toISOString(),
-            sizeFormatted: `${Math.round(file.size / 1024)} KB`,
-          },
-          thumbnailUrl: file.type.startsWith("image/")
-            ? URL.createObjectURL(file)
-            : undefined,
-        })),
-      },
-      senderId: currentUser.id,
-      sender: currentUser,
-      receiverId: selectedContact.id,
-      receiver: selectedContact,
-      recalled: false,
-      deletedBy: [],
-      reactions: [],
-      readBy: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      messageType: MessageType.USER,
-      repliedTo: replyingTo?.id,
-    };
-
-    // Add temporary message to UI - đảm bảo tin nhắn mới được thêm vào cuối danh sách
-    setMessages((prev) => [...prev, tempMessage]);
-
-    // Cuộn xuống cuối ngay lập tức sau khi gửi tin nhắn
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 50);
-
-    try {
-      // Send message to API
-      let result;
-      if (files && files.length > 0) {
-        // Use sendMediaMessage if we have files
-        result = await sendMediaMessage(selectedContact.id, text, files);
-      } else {
-        // Use sendTextMessage if we only have text
-        result = await sendTextMessage(selectedContact.id, text);
-      }
-
-      if (result.success && result.message) {
-        // Replace temporary message with real one from server
-        setMessages((prev) =>
-          prev.map((msg) => (msg.id === tempMessage.id ? result.message : msg)),
-        );
-      } else {
-        // If sending failed, mark the message as failed
-        console.error("Failed to send message:", result.error);
-        // You could add error handling here, like marking the message as failed
-      }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      // Handle error, maybe mark the message as failed
-    }
-
-    // Clear reply state
-    setReplyingTo(null);
+  const handleSendMessage = (text: string, files?: File[]) => {
+    sendMessage(text, files, currentUser);
   };
 
   // Group messages by date
@@ -242,47 +161,51 @@ export default function ChatArea({
     <div className="flex flex-col h-full w-full">
       <ChatHeader contact={selectedContact} onToggleInfo={onToggleInfo} />
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 p-4 custom-scrollbar">
-        {selectedContact ? (
-          messageGroups.length > 0 ? (
-            messageGroups.map((group, groupIndex) => (
-              <div key={groupIndex} className="mb-4">
-                <div className="flex justify-center mb-4">
-                  <div className="bg-white px-3 py-1 rounded-full text-xs text-gray-500 shadow-sm">
-                    {group.date}
+      <ChatMessagesDropZone
+        onFileDrop={(files) => handleSendMessage("", files)}
+      >
+        <div className="overflow-y-auto overflow-x-hidden bg-gray-50 p-4 custom-scrollbar h-full">
+          {selectedContact ? (
+            messageGroups.length > 0 ? (
+              messageGroups.map((group, groupIndex) => (
+                <div key={groupIndex} className="mb-4">
+                  <div className="flex justify-center mb-4">
+                    <div className="bg-white px-3 py-1 rounded-full text-xs text-gray-500 shadow-sm">
+                      {group.date}
+                    </div>
                   </div>
-                </div>
 
-                {processMessagesForDisplay(group.messages).map(
-                  ({ message, isCurrentUser, showAvatar }) => (
-                    <MessageItem
-                      key={message.id}
-                      message={message}
-                      isCurrentUser={isCurrentUser}
-                      showAvatar={showAvatar}
-                      onReply={handleReply}
-                      onMessageClick={handleMessageClick}
-                    />
-                  ),
-                )}
+                  {processMessagesForDisplay(group.messages).map(
+                    ({ message, isCurrentUser, showAvatar }) => (
+                      <MessageItem
+                        key={message.id}
+                        message={message}
+                        isCurrentUser={isCurrentUser}
+                        showAvatar={showAvatar}
+                        onReply={handleReply}
+                        onMessageClick={handleMessageClick}
+                      />
+                    ),
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <p className="text-gray-500">
+                  Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!
+                </p>
               </div>
-            ))
+            )
           ) : (
             <div className="h-full flex items-center justify-center">
               <p className="text-gray-500">
-                Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!
+                Chọn một liên hệ để bắt đầu trò chuyện
               </p>
             </div>
-          )
-        ) : (
-          <div className="h-full flex items-center justify-center">
-            <p className="text-gray-500">
-              Chọn một liên hệ để bắt đầu trò chuyện
-            </p>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      </ChatMessagesDropZone>
 
       <MessageInput
         onSendMessage={handleSendMessage}
