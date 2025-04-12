@@ -1,5 +1,20 @@
 "use server";
+import axios from "axios";
 import axiosInstance from "@/lib/axios";
+
+// Create a server-side axios instance
+const createServerAxiosInstance = (token?: string) => {
+  const instance = axios.create({
+    baseURL: process.env.NEXT_PUBLIC_BACKEND_URL,
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (token) {
+    instance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+  }
+
+  return instance;
+};
 
 // Define types based on the API response
 interface UserInfo {
@@ -45,9 +60,10 @@ export interface SimpleFriend {
 }
 
 // Lấy danh sách bạn bè của người dùng hiện tại
-export async function getFriendsList() {
+export async function getFriendsList(token?: string) {
   try {
-    const response = await axiosInstance.get("/friends/list");
+    const serverAxios = createServerAxiosInstance(token);
+    const response = await serverAxios.get("/friends/list");
     const friendships: FriendshipResponse[] = response.data;
 
     // Transform the API response to the format expected by UI components
@@ -72,9 +88,10 @@ export async function getFriendsList() {
 }
 
 // Lấy danh sách lời mời kết bạn đã nhận
-export async function getReceivedFriendRequests() {
+export async function getReceivedFriendRequests(token?: string) {
   try {
-    const response = await axiosInstance.get("/friends/requests/received");
+    const serverAxios = createServerAxiosInstance(token);
+    const response = await serverAxios.get("/friends/requests/received");
 
     // Transform the API response to the format expected by UI components
     const requests = response.data.map((request: FriendRequest) => ({
@@ -97,9 +114,10 @@ export async function getReceivedFriendRequests() {
 }
 
 // Lấy danh sách lời mời kết bạn đã gửi
-export async function getSentFriendRequests() {
+export async function getSentFriendRequests(token?: string) {
   try {
-    const response = await axiosInstance.get("/friends/requests/sent");
+    const serverAxios = createServerAxiosInstance(token);
+    const response = await serverAxios.get("/friends/requests/sent");
 
     // Transform the API response to the format expected by UI components
     const requests = response.data.map((request: FriendRequest) => ({
@@ -120,9 +138,10 @@ export async function getSentFriendRequests() {
 }
 
 // Gửi lời mời kết bạn
-export async function sendFriendRequest(userId: string) {
+export async function sendFriendRequest(userId: string, token?: string) {
   try {
-    const response = await axiosInstance.post("/friends/request", { userId });
+    const serverAxios = createServerAxiosInstance(token);
+    const response = await serverAxios.post("/friends/request", { userId });
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Send friend request failed:", error);
@@ -137,9 +156,11 @@ export async function sendFriendRequest(userId: string) {
 export async function respondToFriendRequest(
   requestId: string,
   status: "ACCEPTED" | "DECLINED" | "BLOCKED",
+  token?: string,
 ) {
   try {
-    const response = await axiosInstance.put("/friends/respond", {
+    const serverAxios = createServerAxiosInstance(token);
+    const response = await serverAxios.put("/friends/respond", {
       requestId,
       status,
     });
@@ -154,19 +175,20 @@ export async function respondToFriendRequest(
 }
 
 // Chấp nhận lời mời kết bạn (wrapper function for backward compatibility)
-export async function acceptFriendRequest(requestId: string) {
-  return respondToFriendRequest(requestId, "ACCEPTED");
+export async function acceptFriendRequest(requestId: string, token?: string) {
+  return respondToFriendRequest(requestId, "ACCEPTED", token);
 }
 
 // Từ chối lời mời kết bạn (wrapper function for backward compatibility)
-export async function rejectFriendRequest(requestId: string) {
-  return respondToFriendRequest(requestId, "DECLINED");
+export async function rejectFriendRequest(requestId: string, token?: string) {
+  return respondToFriendRequest(requestId, "DECLINED", token);
 }
 
 // Xóa bạn bè
-export async function removeFriend(friendId: string) {
+export async function removeFriend(friendId: string, token?: string) {
   try {
-    const response = await axiosInstance.delete(`/friends/${friendId}`);
+    const serverAxios = createServerAxiosInstance(token);
+    const response = await serverAxios.delete(`/friends/${friendId}`);
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Remove friend failed:", error);
@@ -178,11 +200,10 @@ export async function removeFriend(friendId: string) {
 }
 
 // Hủy lời mời kết bạn đã gửi
-export async function cancelFriendRequest(requestId: string) {
+export async function cancelFriendRequest(requestId: string, token?: string) {
   try {
-    const response = await axiosInstance.delete(
-      `/friends/request/${requestId}`,
-    );
+    const serverAxios = createServerAxiosInstance(token);
+    const response = await serverAxios.delete(`/friends/request/${requestId}`);
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Cancel friend request failed:", error);
@@ -194,9 +215,10 @@ export async function cancelFriendRequest(requestId: string) {
 }
 
 // Chặn người dùng
-export async function blockUser(userId: string) {
+export async function blockUser(userId: string, token?: string) {
   try {
-    const response = await axiosInstance.post(`/friends/block/${userId}`);
+    const serverAxios = createServerAxiosInstance(token);
+    const response = await serverAxios.post(`/friends/block/${userId}`);
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Block user failed:", error);
@@ -208,9 +230,10 @@ export async function blockUser(userId: string) {
 }
 
 // Bỏ chặn người dùng
-export async function unblockUser(userId: string) {
+export async function unblockUser(userId: string, token?: string) {
   try {
-    const response = await axiosInstance.delete(`/friends/block/${userId}`);
+    const serverAxios = createServerAxiosInstance(token);
+    const response = await serverAxios.delete(`/friends/block/${userId}`);
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Unblock user failed:", error);
@@ -233,9 +256,10 @@ interface BlockedUserResponse {
 }
 
 // Lấy danh sách người dùng đã chặn
-export async function getBlockedUsers() {
+export async function getBlockedUsers(token?: string) {
   try {
-    const response = await axiosInstance.get("/friends/blocked");
+    const serverAxios = createServerAxiosInstance(token);
+    const response = await serverAxios.get("/friends/blocked");
 
     // Transform the API response to the format expected by UI components
     const users: SimpleFriend[] = response.data.map(

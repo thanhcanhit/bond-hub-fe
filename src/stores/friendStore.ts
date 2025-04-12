@@ -11,6 +11,7 @@ import {
   getBlockedUsers,
   SimpleFriend,
 } from "@/actions/friend.action";
+import { useAuthStore } from "@/stores/authStore";
 
 // Define types for friend requests
 interface FriendRequest {
@@ -91,7 +92,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
     }));
 
     try {
-      const response = await getFriendsList();
+      const token = useAuthStore.getState().accessToken || undefined;
+      const response = await getFriendsList(token);
       if (response.success) {
         set((state) => ({
           friends: response.friends,
@@ -140,7 +142,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
     }));
 
     try {
-      const response = await getReceivedFriendRequests();
+      const token = useAuthStore.getState().accessToken || undefined;
+      const response = await getReceivedFriendRequests(token);
       if (response.success) {
         set((state) => ({
           receivedRequests: response.requests,
@@ -190,7 +193,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
     }));
 
     try {
-      const response = await getSentFriendRequests();
+      const token = useAuthStore.getState().accessToken || undefined;
+      const response = await getSentFriendRequests(token);
       if (response.success) {
         set((state) => ({
           sentRequests: response.requests,
@@ -239,7 +243,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
     }));
 
     try {
-      const response = await getBlockedUsers();
+      const token = useAuthStore.getState().accessToken || undefined;
+      const response = await getBlockedUsers(token);
       if (response.success) {
         set((state) => ({
           blockedUsers: response.users,
@@ -277,7 +282,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Accept a friend request
   acceptRequest: async (requestId: string) => {
     try {
-      const response = await acceptFriendRequest(requestId);
+      const token = useAuthStore.getState().accessToken || undefined;
+      const response = await acceptFriendRequest(requestId, token);
       if (response.success) {
         // Remove from received requests and refresh friends list
         set((state) => ({
@@ -298,7 +304,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Reject a friend request
   rejectRequest: async (requestId: string) => {
     try {
-      const response = await rejectFriendRequest(requestId);
+      const token = useAuthStore.getState().accessToken || undefined;
+      const response = await rejectFriendRequest(requestId, token);
       if (response.success) {
         // Remove from received requests
         set((state) => ({
@@ -318,7 +325,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Cancel a sent friend request
   cancelRequest: async (requestId: string) => {
     try {
-      const response = await cancelFriendRequest(requestId);
+      const token = useAuthStore.getState().accessToken || undefined;
+      const response = await cancelFriendRequest(requestId, token);
       if (response.success) {
         // Remove from sent requests
         set((state) => ({
@@ -338,7 +346,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Block a user
   blockFriend: async (userId: string) => {
     try {
-      const response = await blockUser(userId);
+      const token = useAuthStore.getState().accessToken || undefined;
+      const response = await blockUser(userId, token);
       if (response.success) {
         // Refresh friends list and blocked users
         await get().fetchFriends();
@@ -355,7 +364,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Unblock a user
   unblockFriend: async (userId: string) => {
     try {
-      const response = await unblockUser(userId);
+      const token = useAuthStore.getState().accessToken || undefined;
+      const response = await unblockUser(userId, token);
       if (response.success) {
         // Refresh blocked users
         await get().fetchBlockedUsers();
