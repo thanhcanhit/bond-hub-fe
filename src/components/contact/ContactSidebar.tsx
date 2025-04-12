@@ -5,7 +5,6 @@ import { Users, UserPlus, UsersRound, UserRoundPlus } from "lucide-react";
 type ContactSidebarProps = {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  contactCount: number;
 };
 
 // Define tabs outside component to prevent recreation on each render
@@ -21,11 +20,7 @@ const tabs = [
 ];
 
 // Use memo to prevent unnecessary re-renders
-function ContactSidebar({
-  activeTab,
-  setActiveTab,
-  contactCount,
-}: ContactSidebarProps) {
+function ContactSidebar({ activeTab, setActiveTab }: ContactSidebarProps) {
   // Memoize the tab click handler for each tab
   const handleTabClick = useMemo(() => {
     const handlers: Record<string, () => void> = {};

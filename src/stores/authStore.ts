@@ -6,8 +6,7 @@ import {
   logout as logoutAction,
 } from "@/actions/auth.action";
 import { getUserDataById } from "@/actions/user.action";
-// Không cần import socket nữa vì đã sử dụng hook
-// Custom storage that handles SSR
+
 const storage = {
   getItem: (name: string): string | null => {
     if (typeof window === "undefined") return null;
