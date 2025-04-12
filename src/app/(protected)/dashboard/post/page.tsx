@@ -1,9 +1,23 @@
 "use client";
-export default function PostPage() {
+import { memo } from "react";
+import SearchHeader from "@/components/SearchHeader";
+
+// Use memo to prevent unnecessary re-renders
+const PostPage = memo(function PostPage() {
   return (
-    <div>
-      <h1>POST</h1>
-      <p>Đây là trang liên hệ</p>
+    <div className="flex flex-col flex-1 h-full w-full overflow-hidden">
+      <div className="flex border-b bg-white">
+        <SearchHeader />
+        <div className="flex-1 p-4">
+          <h1 className="text-lg font-semibold">Posts</h1>
+        </div>
+      </div>
+
+      <div className="flex-1 p-4">
+        <p>Đây là trang bài viết</p>
+      </div>
     </div>
   );
-}
+});
+
+export default PostPage;

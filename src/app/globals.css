@@ -4,6 +4,7 @@
 
 body {
   font-family: "Roboto", sans-serif;
+  pointer-events: auto !important;
 }
 
 @layer base {
@@ -97,5 +98,19 @@ body {
   .no-scrollbar {
     -ms-overflow-style: none; /* IE and Edge */
     scrollbar-width: none; /* Firefox */
+  }
+
+  /* Fix for Radix UI dialogs */
+  [data-radix-popper-content-wrapper] {
+    pointer-events: auto !important;
+  }
+
+  [role="dialog"] {
+    pointer-events: auto !important;
+  }
+
+  /* Force pointer events to be auto for all elements */
+  .force-pointer-events * {
+    pointer-events: auto !important;
   }
 }

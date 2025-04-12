@@ -6,6 +6,7 @@ const NEXT_PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const axiosInstance = axios.create({
   baseURL: NEXT_PUBLIC_BACKEND_URL,
   headers: { "Content-Type": "application/json" },
+  timeout: 15000, // 15 seconds timeout
 });
 
 axiosInstance.interceptors.request.use(
@@ -28,6 +29,19 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Handle network errors
+    if (error.code === "ECONNABORTED") {
+      console.error("Request timeout:", error);
+      return Promise.reject(new Error("Request timeout. Please try again."));
+    }
+
+    if (!error.response) {
+      console.error("Network error:", error);
+      return Promise.reject(
+        new Error("Network error. Please check your connection."),
+      );
+    }
+
     const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;

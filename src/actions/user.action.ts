@@ -1,4 +1,4 @@
-// "use server";
+//"use server";
 import axiosInstance from "@/lib/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { User } from "@/types/base";
@@ -115,18 +115,47 @@ export async function updateProfilePicture(file: File) {
 
     const { message, url } = response.data;
 
-    // Update user in store
+    // Lấy dữ liệu user mới nhất từ database
     const currentUser = useAuthStore.getState().user;
-    if (currentUser && currentUser.userInfo) {
-      // Cập nhật URL ảnh đại diện mới trong store
-      const updatedUser = {
-        ...currentUser,
-        userInfo: {
-          ...currentUser.userInfo,
-          profilePictureUrl: url,
-        },
-      };
-      useAuthStore.getState().updateUser(updatedUser);
+    if (currentUser && currentUser.id) {
+      try {
+        // Gọi API lấy dữ liệu user mới nhất
+        const userResponse = await getUserDataById(currentUser.id);
+
+        if (userResponse.success && userResponse.user) {
+          // Cập nhật toàn bộ dữ liệu user trong store
+          useAuthStore.getState().updateUser(userResponse.user);
+          console.log(
+            "User data updated from database after profile picture change",
+          );
+        } else {
+          // Nếu không lấy được dữ liệu mới, chỉ cập nhật URL ảnh
+          if (currentUser.userInfo) {
+            const updatedUser = {
+              ...currentUser,
+              userInfo: {
+                ...currentUser.userInfo,
+                profilePictureUrl: url,
+              },
+            };
+            useAuthStore.getState().updateUser(updatedUser);
+            console.log("Only profile picture URL updated in store");
+          }
+        }
+      } catch (fetchError) {
+        console.error("Error fetching updated user data:", fetchError);
+        // Nếu có lỗi khi lấy dữ liệu mới, chỉ cập nhật URL ảnh
+        if (currentUser.userInfo) {
+          const updatedUser = {
+            ...currentUser,
+            userInfo: {
+              ...currentUser.userInfo,
+              profilePictureUrl: url,
+            },
+          };
+          useAuthStore.getState().updateUser(updatedUser);
+        }
+      }
     }
 
     return { success: true, message, url };
@@ -163,18 +192,47 @@ export async function updateCoverImage(file: File) {
 
     const { message, url } = response.data;
 
-    // Update user in store
+    // Lấy dữ liệu user mới nhất từ database
     const currentUser = useAuthStore.getState().user;
-    if (currentUser && currentUser.userInfo) {
-      // Cập nhật URL ảnh bìa mới trong store
-      const updatedUser = {
-        ...currentUser,
-        userInfo: {
-          ...currentUser.userInfo,
-          coverImgUrl: url,
-        },
-      };
-      useAuthStore.getState().updateUser(updatedUser);
+    if (currentUser && currentUser.id) {
+      try {
+        // Gọi API lấy dữ liệu user mới nhất
+        const userResponse = await getUserDataById(currentUser.id);
+
+        if (userResponse.success && userResponse.user) {
+          // Cập nhật toàn bộ dữ liệu user trong store
+          useAuthStore.getState().updateUser(userResponse.user);
+          console.log(
+            "User data updated from database after cover image change",
+          );
+        } else {
+          // Nếu không lấy được dữ liệu mới, chỉ cập nhật URL ảnh bìa
+          if (currentUser.userInfo) {
+            const updatedUser = {
+              ...currentUser,
+              userInfo: {
+                ...currentUser.userInfo,
+                coverImgUrl: url,
+              },
+            };
+            useAuthStore.getState().updateUser(updatedUser);
+            console.log("Only cover image URL updated in store");
+          }
+        }
+      } catch (fetchError) {
+        console.error("Error fetching updated user data:", fetchError);
+        // Nếu có lỗi khi lấy dữ liệu mới, chỉ cập nhật URL ảnh bìa
+        if (currentUser.userInfo) {
+          const updatedUser = {
+            ...currentUser,
+            userInfo: {
+              ...currentUser.userInfo,
+              coverImgUrl: url,
+            },
+          };
+          useAuthStore.getState().updateUser(updatedUser);
+        }
+      }
     }
 
     return { success: true, message, url };
@@ -207,25 +265,59 @@ export async function updateUserBasicInfo(userData: {
     );
     const updatedUser = response.data;
 
-    // Cập nhật lại thông tin trong store
-    // Đảm bảo cập nhật đầy đủ thông tin userInfo
-    if (currentUser.userInfo) {
-      const updatedUserInfo = {
-        ...currentUser.userInfo,
-        fullName: userData.fullName || currentUser.userInfo.fullName,
-        gender: userData.gender || currentUser.userInfo.gender,
-        dateOfBirth: userData.dateOfBirth || currentUser.userInfo.dateOfBirth,
-        bio: userData.bio || currentUser.userInfo.bio,
-      };
+    // Lấy dữ liệu user mới nhất từ database
+    try {
+      // Gọi API lấy dữ liệu user mới nhất
+      const userResponse = await getUserDataById(currentUser.id);
 
-      const userToUpdate = {
-        ...updatedUser,
-        userInfo: updatedUserInfo,
-      };
+      if (userResponse.success && userResponse.user) {
+        // Cập nhật toàn bộ dữ liệu user trong store
+        useAuthStore.getState().updateUser(userResponse.user);
+        console.log("User data updated from database after basic info change");
+      } else {
+        // Nếu không lấy được dữ liệu mới, cập nhật dựa trên dữ liệu hiện tại
+        if (currentUser.userInfo) {
+          const updatedUserInfo = {
+            ...currentUser.userInfo,
+            fullName: userData.fullName || currentUser.userInfo.fullName,
+            gender: userData.gender || currentUser.userInfo.gender,
+            dateOfBirth:
+              userData.dateOfBirth || currentUser.userInfo.dateOfBirth,
+            bio: userData.bio || currentUser.userInfo.bio,
+          };
 
-      useAuthStore.getState().updateUser(userToUpdate);
-    } else {
-      useAuthStore.getState().updateUser(updatedUser);
+          const userToUpdate = {
+            ...updatedUser,
+            userInfo: updatedUserInfo,
+          };
+
+          useAuthStore.getState().updateUser(userToUpdate);
+          console.log("Basic info updated in store using local data");
+        } else {
+          useAuthStore.getState().updateUser(updatedUser);
+        }
+      }
+    } catch (fetchError) {
+      console.error("Error fetching updated user data:", fetchError);
+      // Nếu có lỗi khi lấy dữ liệu mới, cập nhật dựa trên dữ liệu hiện tại
+      if (currentUser.userInfo) {
+        const updatedUserInfo = {
+          ...currentUser.userInfo,
+          fullName: userData.fullName || currentUser.userInfo.fullName,
+          gender: userData.gender || currentUser.userInfo.gender,
+          dateOfBirth: userData.dateOfBirth || currentUser.userInfo.dateOfBirth,
+          bio: userData.bio || currentUser.userInfo.bio,
+        };
+
+        const userToUpdate = {
+          ...updatedUser,
+          userInfo: updatedUserInfo,
+        };
+
+        useAuthStore.getState().updateUser(userToUpdate);
+      } else {
+        useAuthStore.getState().updateUser(updatedUser);
+      }
     }
 
     return { success: true, user: updatedUser };
@@ -236,4 +328,31 @@ export async function updateUserBasicInfo(userData: {
       error: error instanceof Error ? error.message : "Unknown error",
     };
   }
+}
+
+// Tìm kiếm người dùng theo email hoặc số điện thoại
+export async function searchUser(searchValue: string) {
+  try {
+    // Kiểm tra xem searchValue có phải là email không
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(searchValue);
+
+    // Tạo payload phù hợp dựa trên loại tìm kiếm
+    const payload = isEmail
+      ? { email: searchValue }
+      : { phoneNumber: searchValue };
+
+    const response = await axiosInstance.post("/users/search", payload);
+    return { success: true, user: response.data };
+  } catch (error) {
+    console.error("Search user failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// Tìm kiếm người dùng theo số điện thoại (giữ lại để tương thích ngược)
+export async function searchUserByPhoneNumber(phoneNumber: string) {
+  return searchUser(phoneNumber);
 }

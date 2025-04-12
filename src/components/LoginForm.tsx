@@ -5,7 +5,7 @@ import { Button } from "./ui/button";
 import { Smartphone, Lock } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
-import ForgotPasswordFlow from "./ForgotPasswordFlow";
+import ForgotPasswordFlow from "./password/ForgotPasswordFlow";
 import { getDeviceInfo } from "@/utils/helpers";
 import Loading from "./Loading";
 import {
