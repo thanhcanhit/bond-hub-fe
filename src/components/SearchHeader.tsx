@@ -19,6 +19,7 @@ import { isEmail, isPhoneNumber } from "@/utils/helpers";
 import { useAuthStore } from "@/stores/authStore";
 import { User } from "@/types/base";
 import ProfileDialog from "./profile/ProfileDialog";
+import QRCodeDialog from "./QRCodeDialog";
 
 type Friend = {
   id: string;
@@ -65,6 +66,7 @@ export default function SearchHeader() {
   const [showProfileDialog, setShowProfileDialog] = useState<boolean>(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isAddFriendMode, setIsAddFriendMode] = useState<boolean>(false);
+  const [showQRCodeDialog, setShowQRCodeDialog] = useState<boolean>(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const { accessToken, user: currentUser } = useAuthStore();
@@ -229,10 +231,8 @@ export default function SearchHeader() {
 
   // Handle add friend mode
   const activateAddFriendMode = () => {
-    setIsAddFriendMode(true);
-    setIsSearchActive(true);
-    setShowSuggestions(false);
-    setSearchQuery("");
+    // Thay vì focus vào input, hiển thị dialog QR code
+    setShowQRCodeDialog(true);
   };
 
   // Handle user profile click
@@ -428,6 +428,15 @@ export default function SearchHeader() {
             // Xử lý khi nhấn nút nhắn tin
             setShowProfileDialog(false);
           }}
+        />
+      )}
+
+      {/* QR Code Dialog */}
+      {currentUser && (
+        <QRCodeDialog
+          isOpen={showQRCodeDialog}
+          onClose={() => setShowQRCodeDialog(false)}
+          userId={currentUser.id}
         />
       )}
 
