@@ -248,14 +248,59 @@ export async function respondToFriendRequest(
   token?: string,
 ) {
   try {
+    console.log(
+      `respondToFriendRequest: requestId=${requestId}, status=${status}, hasToken=${!!token}`,
+    );
     const serverAxios = createServerAxiosInstance(token);
-    const response = await serverAxios.put("/friends/respond", {
+    const payload = {
       requestId,
       status,
-    });
+    };
+    console.log("Request payload:", payload);
+    const response = await serverAxios.put("/friends/respond", payload);
+    console.log("API response:", response.data);
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Respond to friend request failed:", error);
+
+    // Log chi tiết hơn về lỗi
+    if (axios.isAxiosError(error) && error.response) {
+      console.error("Error response:", {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers,
+      });
+
+      // Return specific error message based on status code
+      if (error.response.status === 401) {
+        return {
+          success: false,
+          error: "Bạn cần đăng nhập để thực hiện hành động này",
+        };
+      }
+
+      if (error.response.status === 403) {
+        return {
+          success: false,
+          error: "Bạn không có quyền thực hiện hành động này",
+        };
+      }
+
+      if (error.response.status === 404) {
+        return {
+          success: false,
+          error: "Không tìm thấy lời mời kết bạn",
+        };
+      }
+
+      if (error.response.data?.message) {
+        return {
+          success: false,
+          error: error.response.data.message,
+        };
+      }
+    }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -270,7 +315,15 @@ export async function acceptFriendRequest(requestId: string, token?: string) {
 
 // Từ chối lời mời kết bạn (wrapper function for backward compatibility)
 export async function rejectFriendRequest(requestId: string, token?: string) {
-  return respondToFriendRequest(requestId, "DECLINED", token);
+  console.log(
+    "rejectFriendRequest called with requestId:",
+    requestId,
+    "and token:",
+    !!token,
+  );
+  const result = await respondToFriendRequest(requestId, "DECLINED", token);
+  console.log("respondToFriendRequest result:", result);
+  return result;
 }
 
 // Xóa bạn bè

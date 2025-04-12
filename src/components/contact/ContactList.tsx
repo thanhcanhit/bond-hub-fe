@@ -7,6 +7,8 @@ type Friend = {
   id: string;
   fullName: string;
   profilePictureUrl: string;
+  email?: string;
+  phoneNumber?: string;
 };
 
 type FriendsByLetter = {
@@ -161,6 +163,8 @@ function ContactList({ friends: initialFriends }: ContactListProps) {
                   id={friend.id}
                   fullName={friend.fullName}
                   profilePictureUrl={friend.profilePictureUrl}
+                  email={friend.email}
+                  phoneNumber={friend.phoneNumber}
                   onRemove={handleRemoveFriend}
                 />
               ))}

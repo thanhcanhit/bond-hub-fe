@@ -87,16 +87,30 @@ export default function ProfileDialog({
         setIsLoadingRelationship(true);
         const accessToken = useAuthStore.getState().accessToken || undefined;
         const result = await getRelationship(user.id, accessToken);
+        console.log("Full relationship response:", result);
+
         if (result.success && result.data) {
           console.log("Setting relationship to:", result.data.status);
           setRelationship(result.data.status || "NONE");
 
           // Lưu lại ID của lời mời kết bạn nếu có
-          if (
-            result.data.status === "PENDING_RECEIVED" &&
-            result.data.requestId
-          ) {
-            setRequestId(result.data.requestId);
+          if (result.data.status === "PENDING_RECEIVED") {
+            console.log(
+              "Found PENDING_RECEIVED relationship with data:",
+              result.data,
+            );
+            if (result.data.requestId) {
+              console.log("Setting requestId to:", result.data.requestId);
+              setRequestId(result.data.requestId);
+            } else if (result.data.id) {
+              // Nếu API trả về id thay vì requestId
+              console.log("Setting requestId to id:", result.data.id);
+              setRequestId(result.data.id);
+            } else {
+              console.error(
+                "No requestId or id found in PENDING_RECEIVED relationship",
+              );
+            }
           }
         } else {
           setRelationship("NONE");
@@ -236,11 +250,17 @@ export default function ProfileDialog({
 
   // Handle reject friend request
   const handleRejectRequest = async () => {
-    if (!user?.id || !requestId) return;
+    console.log("handleRejectRequest called with requestId:", requestId);
+    if (!user?.id || !requestId) {
+      console.error("Cannot reject request: missing user.id or requestId");
+      return;
+    }
 
     setIsRejectingRequest(true);
     try {
+      console.log("Calling rejectRequest with requestId:", requestId);
       const success = await rejectRequest(requestId);
+      console.log("rejectRequest result:", success);
       if (success) {
         toast.success(
           `Đã từ chối lời mời kết bạn từ ${user.userInfo?.fullName || "người dùng"}`,

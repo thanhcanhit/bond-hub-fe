@@ -303,18 +303,28 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
 
   // Reject a friend request
   rejectRequest: async (requestId: string) => {
+    console.log("friendStore.rejectRequest called with requestId:", requestId);
     try {
       const token = useAuthStore.getState().accessToken || undefined;
+      console.log("Calling rejectFriendRequest with token:", !!token);
       const response = await rejectFriendRequest(requestId, token);
+      console.log("rejectFriendRequest response:", response);
       if (response.success) {
         // Remove from received requests
-        set((state) => ({
-          receivedRequests: state.receivedRequests.filter(
-            (req) => req.id !== requestId,
-          ),
-        }));
+        set((state) => {
+          console.log(
+            "Removing request from state, current requests:",
+            state.receivedRequests,
+          );
+          return {
+            receivedRequests: state.receivedRequests.filter(
+              (req) => req.id !== requestId,
+            ),
+          };
+        });
         return true;
       }
+      console.error("rejectFriendRequest failed:", response.error);
       return false;
     } catch (error) {
       console.error("Failed to reject friend request:", error);
