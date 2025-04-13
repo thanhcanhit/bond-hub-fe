@@ -24,24 +24,38 @@ export default function ChatSocketHandler() {
       if (message.sender) {
         // If sender is current user, always use current user's userInfo
         if (message.senderId === currentUser.id) {
-          message.sender = { ...currentUser };
+          message.sender = {
+            ...currentUser,
+            userInfo: currentUser.userInfo,
+          };
         }
         // If sender is selected contact, always use selected contact's data
         else if (selectedContact && message.senderId === selectedContact.id) {
-          message.sender = { ...selectedContact };
+          message.sender = {
+            ...selectedContact,
+            userInfo: selectedContact.userInfo,
+          };
         }
-        // If sender doesn't have userInfo
-        else if (!message.sender.userInfo) {
+        // If sender doesn't have userInfo or has incomplete userInfo
+        else if (
+          !message.sender.userInfo ||
+          !message.sender.userInfo.fullName
+        ) {
           // Create a fallback userInfo
           message.sender.userInfo = {
             id: message.sender.id,
             fullName:
-              message.sender.email || message.sender.phoneNumber || "Unknown",
-            profilePictureUrl: null,
-            statusMessage: "No status",
-            blockStrangers: false,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+              message.sender.userInfo?.fullName ||
+              message.sender.email ||
+              message.sender.phoneNumber ||
+              "Unknown",
+            profilePictureUrl:
+              message.sender.userInfo?.profilePictureUrl || null,
+            statusMessage:
+              message.sender.userInfo?.statusMessage || "No status",
+            blockStrangers: message.sender.userInfo?.blockStrangers || false,
+            createdAt: message.sender.userInfo?.createdAt || new Date(),
+            updatedAt: message.sender.userInfo?.updatedAt || new Date(),
             userAuth: message.sender,
           };
         }

@@ -183,7 +183,10 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
       const showAvatar =
         !prevMessage || prevMessage.senderId !== message.senderId;
 
-      return { message, isCurrentUser, showAvatar };
+      // Ensure we have userInfo for the sender
+      const userInfo = message.sender?.userInfo || selectedContact?.userInfo;
+
+      return { message, isCurrentUser, showAvatar, userInfo };
     });
   };
 
@@ -211,7 +214,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
           </div>
 
           {processMessagesForDisplay(searchResults).map(
-            ({ message, isCurrentUser, showAvatar }) => (
+            ({ message, isCurrentUser, showAvatar, userInfo }) => (
               <MessageItem
                 key={message.id}
                 message={message}
@@ -220,6 +223,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
                 onReply={handleReply}
                 onMessageClick={handleMessageClick}
                 highlight={searchText}
+                userInfo={userInfo}
               />
             ),
           )}
@@ -238,7 +242,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
           </div>
 
           {processMessagesForDisplay(group.messages).map(
-            ({ message, isCurrentUser, showAvatar }) => (
+            ({ message, isCurrentUser, showAvatar, userInfo }) => (
               <MessageItem
                 key={message.id}
                 message={message}
@@ -246,6 +250,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
                 showAvatar={showAvatar}
                 onReply={handleReply}
                 onMessageClick={handleMessageClick}
+                userInfo={userInfo}
               />
             ),
           )}

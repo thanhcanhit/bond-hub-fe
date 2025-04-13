@@ -194,7 +194,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         })),
       },
       senderId: currentUser.id,
-      sender: currentUser,
+      sender: {
+        ...currentUser,
+        userInfo: currentUser.userInfo,
+      },
       receiverId: currentChatType === "USER" ? recipientId : undefined,
       receiver: currentChatType === "USER" ? selectedContact : undefined,
       groupId: currentChatType === "GROUP" ? recipientId : undefined,
