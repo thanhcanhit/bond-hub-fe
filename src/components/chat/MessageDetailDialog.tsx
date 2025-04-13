@@ -576,7 +576,7 @@ export default function MessageDetailDialog({
                   {currentMedia.type === "IMAGE" ? (
                     <div
                       ref={containerRef}
-                      className="relative max-h-full max-w-full w-auto h-auto overflow-hidden"
+                      className="relative max-h-full max-w-full w-auto h-auto "
                       onWheel={handleWheel}
                       onMouseDown={handleMouseDown}
                       onMouseMove={handleMouseMove}

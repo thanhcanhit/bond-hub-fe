@@ -21,6 +21,8 @@ import {
   searchGroupMessages,
   addReactionToMessage,
   removeReactionFromMessage,
+  markMessageAsRead,
+  markMessageAsUnread,
 } from "@/actions/message.action";
 
 interface ChatState {
@@ -69,6 +71,8 @@ interface ChatState {
     reaction: ReactionType,
   ) => Promise<boolean>;
   removeReactionFromMessageById: (messageId: string) => Promise<boolean>;
+  markMessageAsReadById: (messageId: string) => Promise<boolean>;
+  markMessageAsUnreadById: (messageId: string) => Promise<boolean>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -425,6 +429,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return result.success;
     } catch (error) {
       console.error("Error removing reaction from message:", error);
+      return false;
+    }
+  },
+
+  markMessageAsReadById: async (messageId) => {
+    try {
+      const result = await markMessageAsRead(messageId);
+      if (result.success && result.message) {
+        set((state) => ({
+          messages: state.messages.map((msg) =>
+            msg.id === messageId ? result.message : msg,
+          ),
+        }));
+      }
+      return result.success;
+    } catch (error) {
+      console.error("Error marking message as read:", error);
+      return false;
+    }
+  },
+
+  markMessageAsUnreadById: async (messageId) => {
+    try {
+      const result = await markMessageAsUnread(messageId);
+      if (result.success && result.message) {
+        set((state) => ({
+          messages: state.messages.map((msg) =>
+            msg.id === messageId ? result.message : msg,
+          ),
+        }));
+      }
+      return result.success;
+    } catch (error) {
+      console.error("Error marking message as unread:", error);
       return false;
     }
   },

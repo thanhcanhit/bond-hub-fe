@@ -42,6 +42,17 @@ export default function MessageInput({
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Tự động điều chỉnh chiều cao của textarea
+  const adjustTextareaHeight = () => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      const newHeight = Math.min(textarea.scrollHeight, 100); // Giới hạn chiều cao tối đa là 100px (khoảng 4 dòng)
+      textarea.style.height = `${newHeight}px`;
+    }
+  };
 
   // Xử lý khi chọn file
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -146,7 +157,7 @@ export default function MessageInput({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -175,6 +186,11 @@ export default function MessageInput({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  // Điều chỉnh chiều cao của textarea khi component mount và khi message thay đổi
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [message]);
 
   // Helper function to get a preview of the message content
   const getMessagePreview = (message: Message): string => {
@@ -357,16 +373,22 @@ export default function MessageInput({
           ref={inputContainerRef}
         >
           <div className="flex-1 relative">
-            <input
-              type="text"
+            <textarea
+              ref={textareaRef}
               placeholder={
                 disabled ? "Chọn một cuộc trò chuyện" : "Nhập tin nhắn..."
               }
-              className="w-full p-2 pl-3 pr-10 rounded-md focus:outline-none focus:ring-none"
+              className="w-full p-2 pl-3 pr-10 rounded-md focus:outline-none focus:ring-none resize-none overflow-auto"
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                // Điều chỉnh chiều cao sau khi nội dung thay đổi
+                setTimeout(adjustTextareaHeight, 0);
+              }}
               onKeyDown={handleKeyDown}
               disabled={disabled}
+              rows={1}
+              style={{ maxHeight: "100px", minHeight: "40px" }}
             />
 
             <div className="absolute right-2 top-1/2 -translate-y-1/2">

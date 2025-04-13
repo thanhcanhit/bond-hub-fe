@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
 import { formatMessageTime } from "@/utils/dateUtils";
@@ -28,6 +28,7 @@ import {
   Info,
   FileText,
   File,
+  Mail,
   Video,
   Image as ImageIcon,
   ThumbsUp,
@@ -105,12 +106,11 @@ function MediaItem({ media, onClick }: MediaItemProps) {
         >
           <video
             src={media.url}
-            controls
             className="w-full rounded-lg max-h-[300px]"
             style={{ maxWidth: "100%" }}
           />
           <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded z-10">
-            HD
+            Video
           </div>
           <button
             className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full shadow-sm hover:bg-white/100 transition-opacity opacity-0 hover:opacity-100 z-10"
@@ -252,6 +252,18 @@ export default function MessageItem({
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const chatStore = useChatStore();
 
+  // Biến để tái sử dụng về sau
+  const isRead = message.readBy.includes(message.receiverId || "");
+  const isSent = message.id && !message.id.startsWith("temp-");
+
+  // Đánh dấu tin nhắn đã đọc khi hiển thị (nếu chưa đọc và không phải tin nhắn của người dùng hiện tại)
+  useEffect(() => {
+    if (!isCurrentUser && !isRead && isSent && message.id) {
+      // Chỉ đánh dấu đã đọc nếu tin nhắn không phải của người dùng hiện tại và chưa được đọc
+      chatStore.markMessageAsReadById(message.id);
+    }
+  }, [isCurrentUser, isRead, isSent, message.id, chatStore]);
+
   // Get current user's reaction
   const getUserReaction = () => {
     return message.reactions?.find((r) => r.userId === currentUser?.id);
@@ -268,6 +280,16 @@ export default function MessageItem({
       await chatStore.deleteMessageById(message.id);
     } catch (error) {
       console.error("Error deleting message:", error);
+    }
+  };
+
+  const handleMarkAsUnread = async () => {
+    try {
+      if (message.id) {
+        await chatStore.markMessageAsUnreadById(message.id);
+      }
+    } catch (error) {
+      console.error("Error marking message as unread:", error);
     }
   };
 
@@ -457,10 +479,19 @@ export default function MessageItem({
                   <Info className="h-4 w-4 mr-2" />
                   <span>Xem chi tiết</span>
                 </DropdownMenuItem>
+                {!message.recalled && (
+                  <DropdownMenuItem onClick={handleMarkAsUnread}>
+                    <Mail className="h-4 w-4 mr-2" />
+                    <span>Đánh dấu chưa đọc</span>
+                  </DropdownMenuItem>
+                )}
                 <Separator />
                 {isCurrentUser && !message.recalled && (
                   <>
-                    <DropdownMenuItem onClick={handleRecallMessage}>
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={handleRecallMessage}
+                    >
                       <RotateCcw className="h-4 w-4 mr-2" />
                       <span>Thu hồi</span>
                     </DropdownMenuItem>
@@ -626,9 +657,63 @@ export default function MessageItem({
         )}
         <div className="flex justify-between items-center mt-1">
           <div
-            className={`text-xs text-gray-500 ${isCurrentUser ? "text-right" : "text-left"}`}
+            className={`text-xs text-gray-500 ${isCurrentUser ? "text-right" : "text-left"} flex items-center gap-1`}
           >
             {formattedTime}
+            {isCurrentUser && (
+              <span className="ml-1">
+                {isRead ? (
+                  <span title="Đã đọc" className="text-blue-500">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M18 6 7 17l-5-5" />
+                      <path d="m22 10-7.5 7.5L13 16" />
+                    </svg>
+                  </span>
+                ) : isSent ? (
+                  <span title="Đã gửi" className="text-gray-400">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="m5 12 5 5L20 7" />
+                    </svg>
+                  </span>
+                ) : (
+                  <span title="Đang gửi" className="text-gray-300">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                    </svg>
+                  </span>
+                )}
+              </span>
+            )}
           </div>
 
           {/* Reaction summary and buttons */}
@@ -802,6 +887,7 @@ export default function MessageItem({
                 currentUser?.userInfo?.profilePictureUrl ||
                 "/placeholder-avatar.svg"
               }
+              className="object-cover"
             />
             <AvatarFallback>
               {getInitialsFromName(
