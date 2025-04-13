@@ -1,5 +1,5 @@
 "use server";
-import axiosInstance from "@/lib/axios";
+import { createAxiosInstance } from "@/lib/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { DeviceType } from "@/types/base";
 import { isEmail } from "@/utils/helpers";
@@ -9,7 +9,8 @@ export async function initiateRegistration(identifier: string) {
     // Determine if the identifier is an email or phone number
     const isEmailFormat = isEmail(identifier);
 
-    const response = await axiosInstance.post("/auth/register/initiate", {
+    const serverAxios = createAxiosInstance();
+    const response = await serverAxios.post("/auth/register/initiate", {
       [isEmailFormat ? "email" : "phoneNumber"]: identifier,
     });
     const { registrationId } = response.data;
@@ -26,7 +27,8 @@ export async function initiateRegistration(identifier: string) {
 
 export async function verifyOtp(registrationId: string, otp: string) {
   try {
-    const response = await axiosInstance.post("/auth/register/verify", {
+    const serverAxios = createAxiosInstance();
+    const response = await serverAxios.post("/auth/register/verify", {
       registrationId,
       otp,
     });
@@ -48,7 +50,8 @@ export async function completeRegistration(
   gender: string,
 ) {
   try {
-    const response = await axiosInstance.post("/auth/register/complete", {
+    const serverAxios = createAxiosInstance();
+    const response = await serverAxios.post("/auth/register/complete", {
       registrationId,
       password,
       fullName,
@@ -73,7 +76,10 @@ export async function login(
   deviceType: DeviceType,
 ) {
   try {
-    const response = await axiosInstance.post("/auth/login", {
+    console.log("Login action called");
+    // Không cần token cho login
+    const serverAxios = createAxiosInstance();
+    const response = await serverAxios.post("/auth/login", {
       [isEmail(identifier) ? "email" : "phoneNumber"]: identifier,
       password,
       deviceName,
@@ -96,8 +102,10 @@ export async function login(
 export async function logout() {
   try {
     const refreshToken = useAuthStore.getState().refreshToken;
+    const accessToken = useAuthStore.getState().accessToken || "";
     if (refreshToken) {
-      await axiosInstance.post(
+      const serverAxios = createAxiosInstance(accessToken);
+      await serverAxios.post(
         "/auth/logout",
         {},
         {
@@ -130,7 +138,9 @@ export async function refreshToken() {
     }
 
     // Send both refreshToken and deviceId in the request body as required by backend
-    const response = await axiosInstance.post("/auth/refresh", {
+    // Không cần token cho refresh token
+    const serverAxios = createAxiosInstance();
+    const response = await serverAxios.post("/auth/refresh", {
       refreshToken,
       deviceId,
     });
@@ -170,7 +180,8 @@ export async function initiateForgotPassword(identifier: string) {
     // Kiểm tra xem identifier là email hay số điện thoại
     const isEmailFormat = isEmail(identifier);
 
-    const response = await axiosInstance.post("/auth/forgot-password", {
+    const serverAxios = createAxiosInstance();
+    const response = await serverAxios.post("/auth/forgot-password", {
       [isEmailFormat ? "email" : "phoneNumber"]: identifier,
     });
     const { resetId } = response.data;
@@ -187,7 +198,8 @@ export async function initiateForgotPassword(identifier: string) {
 
 export async function verifyForgotPasswordOtp(resetId: string, otp: string) {
   try {
-    const response = await axiosInstance.post("/auth/forgot-password/verify", {
+    const serverAxios = createAxiosInstance();
+    const response = await serverAxios.post("/auth/forgot-password/verify", {
       resetId,
       otp,
     });
@@ -203,7 +215,8 @@ export async function verifyForgotPasswordOtp(resetId: string, otp: string) {
 
 export async function resetPassword(resetId: string, newPassword: string) {
   try {
-    const response = await axiosInstance.post("/auth/forgot-password/reset", {
+    const serverAxios = createAxiosInstance();
+    const response = await serverAxios.post("/auth/forgot-password/reset", {
       resetId,
       newPassword,
     });
@@ -223,7 +236,9 @@ export async function changePassword(
   newPassword: string,
 ) {
   try {
-    const response = await axiosInstance.post("/auth/change-password", {
+    const accessToken = useAuthStore.getState().accessToken || "";
+    const serverAxios = createAxiosInstance(accessToken);
+    const response = await serverAxios.post("/auth/change-password", {
       currentPassword,
       newPassword,
     });

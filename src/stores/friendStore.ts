@@ -84,6 +84,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
 
   // Fetch friends list
   fetchFriends: async () => {
+    console.log("fetchFriends called");
     set((state) => ({
       isLoading: {
         ...state.isLoading,
@@ -96,7 +97,11 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
     }));
 
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
+      console.log(
+        "Token in friendStore.fetchFriends:",
+        token ? `Token exists: ${token.substring(0, 10)}...` : "No token",
+      );
       const response = await getFriendsList(token);
       if (response.success) {
         set((state) => ({
@@ -146,7 +151,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
     }));
 
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await getReceivedFriendRequests(token);
       if (response.success) {
         // Get current count of received requests
@@ -208,7 +213,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
     }));
 
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await getSentFriendRequests(token);
       if (response.success) {
         set((state) => ({
@@ -258,7 +263,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
     }));
 
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await getBlockedUsers(token);
       if (response.success) {
         set((state) => ({
@@ -315,7 +320,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Accept a friend request
   acceptRequest: async (requestId: string) => {
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await acceptFriendRequest(requestId, token);
       if (response.success) {
         // Remove from received requests and refresh friends list
@@ -338,7 +343,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   rejectRequest: async (requestId: string) => {
     console.log("friendStore.rejectRequest called with requestId:", requestId);
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       console.log("Calling rejectFriendRequest with token:", !!token);
       const response = await rejectFriendRequest(requestId, token);
       console.log("rejectFriendRequest response:", response);
@@ -368,7 +373,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Cancel a sent friend request
   cancelRequest: async (requestId: string) => {
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await cancelFriendRequest(requestId, token);
       if (response.success) {
         // Remove from sent requests
@@ -389,7 +394,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Block a user
   blockFriend: async (userId: string) => {
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await blockUser(userId, token);
       if (response.success) {
         // Refresh friends list and blocked users
@@ -407,7 +412,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Unblock a user
   unblockFriend: async (userId: string) => {
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await unblockUser(userId, token);
       if (response.success) {
         // Refresh blocked users

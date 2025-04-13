@@ -3,6 +3,48 @@ import { useAuthStore } from "@/stores/authStore";
 
 const NEXT_PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
+// Tạo một instance axios cơ bản với token được truyền vào
+export const createAxiosInstance = (token?: string) => {
+  const instance = axios.create({
+    baseURL: NEXT_PUBLIC_BACKEND_URL,
+    headers: { "Content-Type": "application/json" },
+    timeout: 15000, // 15 seconds timeout
+  });
+
+  // Nếu có token được truyền vào và không rỗng, sử dụng nó
+  if (token && token.trim() !== "") {
+    instance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    console.log(
+      `Setting Authorization header with token: ${token.substring(0, 10)}...`,
+    );
+  } else {
+    console.log("No valid token provided");
+  }
+
+  // Xử lý lỗi mạng
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      // Handle network errors
+      if (error.code === "ECONNABORTED") {
+        console.error("Request timeout:", error);
+        return Promise.reject(new Error("Request timeout. Please try again."));
+      }
+
+      if (!error.response) {
+        console.error("Network error:", error);
+        return Promise.reject(
+          new Error("Network error. Please check your connection."),
+        );
+      }
+
+      return Promise.reject(error);
+    },
+  );
+
+  return instance;
+};
+
 const axiosInstance = axios.create({
   baseURL: NEXT_PUBLIC_BACKEND_URL,
   headers: { "Content-Type": "application/json" },

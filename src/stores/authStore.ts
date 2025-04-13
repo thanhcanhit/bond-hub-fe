@@ -85,6 +85,10 @@ export const useAuthStore = create<AuthState>()(
           if (!result.success) return false;
 
           // First set the tokens and basic user data
+          console.log(
+            "Login successful, setting tokens. accessToken:",
+            result.accessToken ? "Token exists" : "No token",
+          );
           set({
             accessToken: result.accessToken,
             refreshToken: result.refreshToken,
@@ -92,6 +96,10 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
+          console.log(
+            "After login, accessToken in store:",
+            useAuthStore.getState().accessToken ? "Token exists" : "No token",
+          );
 
           // Socket sẽ được khởi tạo tự động bởi SocketProvider
           // Then try to get additional user data
@@ -156,6 +164,10 @@ export const useAuthStore = create<AuthState>()(
         return true; // Always return true to ensure UI updates
       },
       setTokens: (accessToken, refreshToken) => {
+        console.log(
+          "setTokens called with accessToken:",
+          accessToken ? "Token exists" : "No token",
+        );
         set({
           accessToken,
           refreshToken,
@@ -163,6 +175,10 @@ export const useAuthStore = create<AuthState>()(
           // Keep existing deviceId
         });
         // Socket sẽ được cập nhật tự động bởi SocketProvider khi accessToken thay đổi
+        console.log(
+          "After setTokens, accessToken in store:",
+          useAuthStore.getState().accessToken ? "Token exists" : "No token",
+        );
       },
     }),
 

@@ -1,41 +1,6 @@
 "use server";
 import axios from "axios";
-
-// Create a server-side axios instance
-const createServerAxiosInstance = (token?: string) => {
-  const instance = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_BACKEND_URL,
-    headers: { "Content-Type": "application/json" },
-    timeout: 10000, // 10 seconds timeout
-  });
-
-  if (token) {
-    instance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-  }
-
-  // Add response interceptor to handle network errors
-  instance.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      // Handle network errors
-      if (error.code === "ECONNABORTED") {
-        console.error("Request timeout:", error);
-        return Promise.reject(new Error("Request timeout. Please try again."));
-      }
-
-      if (!error.response) {
-        console.error("Network error:", error);
-        return Promise.reject(
-          new Error("Network error. Please check your connection."),
-        );
-      }
-
-      return Promise.reject(error);
-    },
-  );
-
-  return instance;
-};
+import { createAxiosInstance } from "@/lib/axios";
 
 // Define types based on the API response
 interface UserInfo {
@@ -90,7 +55,15 @@ export interface SimpleFriend {
 // Lấy danh sách bạn bè của người dùng hiện tại
 export async function getFriendsList(token?: string) {
   try {
-    const serverAxios = createServerAxiosInstance(token);
+    console.log(
+      "Token received in getFriendsList:",
+      token ? `Token exists: ${token.substring(0, 10)}...` : "No token",
+    );
+    const serverAxios = createAxiosInstance(token);
+    console.log(
+      "Authorization header:",
+      serverAxios.defaults.headers.common["Authorization"],
+    );
     const response = await serverAxios.get("/friends/list");
     const friendships: FriendshipResponse[] = response.data;
 
@@ -121,7 +94,7 @@ export async function getFriendsList(token?: string) {
 // Lấy danh sách lời mời kết bạn đã nhận
 export async function getReceivedFriendRequests(token?: string) {
   try {
-    const serverAxios = createServerAxiosInstance(token);
+    const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.get("/friends/requests/received");
 
     // Transform the API response to the format expected by UI components
@@ -147,7 +120,7 @@ export async function getReceivedFriendRequests(token?: string) {
 // Lấy danh sách lời mời kết bạn đã gửi
 export async function getSentFriendRequests(token?: string) {
   try {
-    const serverAxios = createServerAxiosInstance(token);
+    const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.get("/friends/requests/sent");
 
     // Transform the API response to the format expected by UI components
@@ -178,7 +151,7 @@ export async function sendFriendRequest(
     console.log(
       `Sending friend request to user ${userId} with token: ${!!token}`,
     );
-    const serverAxios = createServerAxiosInstance(token);
+    const serverAxios = createAxiosInstance(token);
 
     // Tạo payload theo đúng format API yêu cầu
     const payload: { receiverId: string; introduce?: string } = {
@@ -260,7 +233,7 @@ export async function respondToFriendRequest(
     console.log(
       `respondToFriendRequest: requestId=${requestId}, status=${status}, hasToken=${!!token}`,
     );
-    const serverAxios = createServerAxiosInstance(token);
+    const serverAxios = createAxiosInstance(token);
     const payload = {
       requestId,
       status,
@@ -338,7 +311,7 @@ export async function rejectFriendRequest(requestId: string, token?: string) {
 // Xóa bạn bè
 export async function removeFriend(friendId: string, token?: string) {
   try {
-    const serverAxios = createServerAxiosInstance(token);
+    const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.delete(`/friends/${friendId}`);
     return { success: true, data: response.data };
   } catch (error) {
@@ -400,7 +373,7 @@ export async function removeFriend(friendId: string, token?: string) {
 // Hủy lời mời kết bạn đã gửi
 export async function cancelFriendRequest(requestId: string, token?: string) {
   try {
-    const serverAxios = createServerAxiosInstance(token);
+    const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.delete(`/friends/request/${requestId}`);
     return { success: true, data: response.data };
   } catch (error) {
@@ -415,7 +388,7 @@ export async function cancelFriendRequest(requestId: string, token?: string) {
 // Chặn người dùng
 export async function blockUser(userId: string, token?: string) {
   try {
-    const serverAxios = createServerAxiosInstance(token);
+    const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.post(`/friends/block/${userId}`);
     return { success: true, data: response.data };
   } catch (error) {
@@ -430,7 +403,7 @@ export async function blockUser(userId: string, token?: string) {
 // Bỏ chặn người dùng
 export async function unblockUser(userId: string, token?: string) {
   try {
-    const serverAxios = createServerAxiosInstance(token);
+    const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.delete(`/friends/block/${userId}`);
     return { success: true, data: response.data };
   } catch (error) {
@@ -456,7 +429,7 @@ interface BlockedUserResponse {
 // Lấy danh sách người dùng đã chặn
 export async function getBlockedUsers(token?: string) {
   try {
-    const serverAxios = createServerAxiosInstance(token);
+    const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.get("/friends/blocked");
 
     // Transform the API response to the format expected by UI components
@@ -484,7 +457,7 @@ export async function getBlockedUsers(token?: string) {
 export async function getRelationship(targetId: string, token?: string) {
   try {
     // Sử dụng serverAxios để gửi token xác thực
-    const serverAxios = createServerAxiosInstance(token);
+    const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.get(`/friends/relationship/${targetId}`);
     console.log("Relationship response:", response.data);
     return { success: true, data: response.data };
