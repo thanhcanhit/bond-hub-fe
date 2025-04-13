@@ -5,13 +5,14 @@ import { useSocketConnection } from "@/hooks/useSocketConnection";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { useAuthStore } from "@/stores/authStore";
-import { Message } from "@/types/base";
+import { Message, User, UserInfo } from "@/types/base";
 
 export default function ChatSocketHandler() {
   const socket = useSocketConnection(true);
   const currentUser = useAuthStore((state) => state.user);
   const { addMessage, updateMessage, selectedContact } = useChatStore();
-  const { updateLastMessage, incrementUnread } = useConversationsStore();
+  const { updateLastMessage, incrementUnread, addConversation, conversations } =
+    useConversationsStore();
 
   useEffect(() => {
     if (!socket || !currentUser) return;
@@ -77,15 +78,33 @@ export default function ChatSocketHandler() {
         message.senderId === currentUser.id
           ? message.receiverId
           : message.senderId;
-      if (contactId) {
-        updateLastMessage(contactId, message);
 
-        // Increment unread count if message is not from current user and not from selected contact
-        if (
-          message.senderId !== currentUser.id &&
-          message.senderId !== selectedContact?.id
-        ) {
-          incrementUnread(message.senderId);
+      if (contactId) {
+        // Check if conversation exists
+        const existingConversation = conversations.find(
+          (conv) => conv.contact.id === contactId,
+        );
+
+        if (existingConversation) {
+          // Update existing conversation
+          updateLastMessage(contactId, message);
+
+          // Increment unread count if message is not from current user and not from selected contact
+          if (
+            message.senderId !== currentUser.id &&
+            message.senderId !== selectedContact?.id
+          ) {
+            incrementUnread(message.senderId);
+          }
+        } else if (message.sender && message.sender.userInfo) {
+          // Create new conversation if it doesn't exist
+          addConversation({
+            contact: message.sender as User & { userInfo: UserInfo },
+            lastMessage: message,
+            unreadCount: message.senderId !== currentUser.id ? 1 : 0,
+            lastActivity: new Date(message.createdAt),
+            type: "USER",
+          });
         }
       }
     };
@@ -122,6 +141,8 @@ export default function ChatSocketHandler() {
     updateMessage,
     updateLastMessage,
     incrementUnread,
+    addConversation,
+    conversations,
   ]);
 
   // This component doesn't render anything

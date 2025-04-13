@@ -24,6 +24,8 @@ import {
   markMessageAsRead,
   markMessageAsUnread,
 } from "@/actions/message.action";
+import { getUserDataById } from "@/actions/user.action";
+import { useConversationsStore } from "./conversationsStore";
 
 interface ChatState {
   // Current chat state
@@ -73,6 +75,7 @@ interface ChatState {
   removeReactionFromMessageById: (messageId: string) => Promise<boolean>;
   markMessageAsReadById: (messageId: string) => Promise<boolean>;
   markMessageAsUnreadById: (messageId: string) => Promise<boolean>;
+  openChat: (userId: string) => Promise<boolean>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -223,6 +226,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
       replyingTo: null, // Clear reply state after sending
     }));
 
+    // Update conversation list with temporary message
+    if (currentChatType === "USER" && selectedContact) {
+      // Get the conversations store
+      const conversationsStore = useConversationsStore.getState();
+
+      // Check if conversation exists
+      const existingConversation = conversationsStore.conversations.find(
+        (conv) => conv.contact.id === selectedContact.id,
+      );
+
+      if (existingConversation) {
+        // Update existing conversation
+        conversationsStore.updateLastMessage(selectedContact.id, tempMessage);
+      } else {
+        // Create new conversation
+        conversationsStore.addConversation({
+          contact: selectedContact,
+          lastMessage: tempMessage,
+          unreadCount: 0,
+          lastActivity: new Date(),
+          type: "USER",
+        });
+      }
+    }
+
     try {
       // Send message to API
       let result;
@@ -251,6 +279,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
             msg.id === tempMessage.id ? result.message : msg,
           ),
         }));
+
+        // Update conversation list with real message
+        if (currentChatType === "USER" && selectedContact) {
+          useConversationsStore
+            .getState()
+            .updateLastMessage(selectedContact.id, result.message);
+        }
       } else {
         // If sending failed, mark the message as failed
         console.error("Failed to send message:", result.error);
@@ -463,6 +498,58 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return result.success;
     } catch (error) {
       console.error("Error marking message as unread:", error);
+      return false;
+    }
+  },
+
+  openChat: async (userId) => {
+    try {
+      // Fetch user data
+      const result = await getUserDataById(userId);
+
+      if (result.success && result.user) {
+        // Ensure userInfo exists
+        const user = result.user;
+        if (!user.userInfo) {
+          user.userInfo = {
+            id: user.id,
+            fullName: user.email || user.phoneNumber || "Unknown",
+            profilePictureUrl: null,
+            statusMessage: "No status",
+            blockStrangers: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            userAuth: user,
+          };
+        }
+
+        // Set the selected contact
+        get().setSelectedContact(user as User & { userInfo: UserInfo });
+
+        // Get the conversations store
+        const conversationsStore = useConversationsStore.getState();
+
+        // Check if conversation exists
+        const existingConversation = conversationsStore.conversations.find(
+          (conv) => conv.contact.id === userId,
+        );
+
+        // If conversation doesn't exist, create it
+        if (!existingConversation) {
+          conversationsStore.addConversation({
+            contact: user as User & { userInfo: UserInfo },
+            lastMessage: undefined,
+            unreadCount: 0,
+            lastActivity: new Date(),
+            type: "USER",
+          });
+        }
+
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error opening chat:", error);
       return false;
     }
   },

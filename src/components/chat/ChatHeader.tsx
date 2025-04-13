@@ -34,14 +34,14 @@ export default function ChatHeader({ contact, onToggleInfo }: ChatHeaderProps) {
 
   if (!contact) {
     return (
-      <div className="border-b bg-white p-4 flex items-center justify-between">
+      <div className="border-b bg-white p-3 h-[69px] flex items-center justify-between">
         <h2 className="font-semibold">Chọn một cuộc trò chuyện</h2>
       </div>
     );
   }
 
   return (
-    <div className="bg-white border-b border-gray-200 p-3 flex items-center justify-between">
+    <div className="bg-white border-b border-gray-200 p-3 h-[69px] flex items-center justify-between">
       <div className="flex items-center">
         <Avatar className="h-10 w-10 mr-3">
           <AvatarImage src={contact.userInfo?.profilePictureUrl || undefined} />
