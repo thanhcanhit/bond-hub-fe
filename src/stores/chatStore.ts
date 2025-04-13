@@ -95,28 +95,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // Actions
   setSelectedContact: (contact) => {
+    // Clear messages immediately to prevent showing previous conversation's messages
     set({
       selectedContact: contact,
       selectedGroup: null,
       currentChatType: contact ? "USER" : null,
+      messages: [], // Clear messages immediately
+      isLoading: contact ? true : false, // Set loading state if we're selecting a contact
     });
+
     if (contact) {
       get().loadMessages(contact.id, "USER");
-    } else {
-      set({ messages: [] });
     }
   },
 
   setSelectedGroup: (group) => {
+    // Clear messages immediately to prevent showing previous conversation's messages
     set({
       selectedGroup: group,
       selectedContact: null,
       currentChatType: group ? "GROUP" : null,
+      messages: [], // Clear messages immediately
+      isLoading: group ? true : false, // Set loading state if we're selecting a group
     });
+
     if (group) {
       get().loadMessages(group.id, "GROUP");
-    } else {
-      set({ messages: [] });
     }
   },
 

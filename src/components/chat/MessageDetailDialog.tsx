@@ -19,6 +19,7 @@ import {
   ZoomOut,
   PanelRightClose,
   PanelRightOpen,
+  RefreshCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createPortal } from "react-dom";
@@ -614,7 +615,7 @@ export default function MessageDetailDialog({
                           className="absolute bottom-4 left-4 bg-white/20 text-white hover:bg-white/40 rounded-full"
                           onClick={resetZoom}
                         >
-                          <X className="h-5 w-5" />
+                          <RefreshCcw className="h-5 w-5" />
                         </Button>
                       )}
                     </div>
@@ -702,7 +703,7 @@ export default function MessageDetailDialog({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-10 w-10"
+                    className="absolute left-12 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-10 w-10"
                     onClick={handlePrevMedia}
                   >
                     <ChevronLeft className="h-6 w-6" />
@@ -710,7 +711,7 @@ export default function MessageDetailDialog({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-10 w-10"
+                    className="absolute right-12 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-10 w-10"
                     onClick={handleNextMedia}
                   >
                     <ChevronRight className="h-6 w-6" />

@@ -797,7 +797,7 @@ export default function MessageItem({
                           onClick={handleRemoveReaction}
                           title="Xóa biểu cảm"
                         >
-                          <X className="h-3 w-3 text-red-500" />
+                          <X className="h-3 w-3 text-gray-500" />
                         </Button>
                       </div>
                     );

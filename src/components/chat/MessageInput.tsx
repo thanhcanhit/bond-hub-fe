@@ -12,7 +12,9 @@ import {
   FileText,
   Play,
   Trash2,
+  AlertCircle,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Message } from "@/types/base";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -40,9 +42,27 @@ export default function MessageInput({
   const [isDragging, setIsDragging] = useState(false);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Danh sách các định dạng file an toàn được chấp nhận
+  const safeDocumentTypes = [
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
+    ".txt",
+    ".csv",
+    ".rtf",
+    ".odt",
+    ".ods",
+    ".odp",
+  ];
 
   // Tự động điều chỉnh chiều cao của textarea
   const adjustTextareaHeight = () => {
@@ -58,8 +78,41 @@ export default function MessageInput({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
-      addFiles(newFiles);
+      // Kiểm tra xem có phải là file an toàn không
+      const safeFiles = newFiles.filter((file) => isSafeFile(file));
+
+      if (safeFiles.length !== newFiles.length) {
+        const rejectedCount = newFiles.length - safeFiles.length;
+        toast.error(
+          `${rejectedCount} file không được chấp nhận do không an toàn`,
+          {
+            description:
+              "Chỉ chấp nhận hình ảnh, video và các tài liệu văn phòng phổ biến",
+            icon: <AlertCircle className="h-5 w-5" />,
+          },
+        );
+      }
+
+      addFiles(safeFiles);
     }
+  };
+
+  // Kiểm tra xem file có an toàn không
+  const isSafeFile = (file: File): boolean => {
+    const fileType = file.type.split("/")[0]; // image, video, application, etc.
+    const fileExtension = `.${file.name.split(".").pop()?.toLowerCase() || ""}`;
+
+    // Chấp nhận hình ảnh và video
+    if (fileType === "image" || fileType === "video") {
+      return true;
+    }
+
+    // Kiểm tra các định dạng tài liệu an toàn
+    if (safeDocumentTypes.includes(fileExtension)) {
+      return true;
+    }
+
+    return false;
   };
 
   // Hàm chung để xử lý thêm files
@@ -106,13 +159,27 @@ export default function MessageInput({
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const newFiles = Array.from(e.dataTransfer.files);
+      // Lọc các file an toàn
+      const safeFiles = newFiles.filter((file) => isSafeFile(file));
+
+      if (safeFiles.length !== newFiles.length) {
+        const rejectedCount = newFiles.length - safeFiles.length;
+        toast.error(
+          `${rejectedCount} file không được chấp nhận do không an toàn`,
+          {
+            description:
+              "Chỉ chấp nhận hình ảnh, video và các tài liệu văn phòng phổ biến",
+            icon: <AlertCircle className="h-5 w-5" />,
+          },
+        );
+      }
 
       if (sendImmediately) {
         // Gửi ngay lập tức nếu thả vào khu vực xem tin nhắn
-        onSendMessage("", newFiles);
+        onSendMessage("", safeFiles);
       } else {
         // Hiển thị preview nếu thả vào ô input
-        addFiles(newFiles);
+        addFiles(safeFiles);
       }
     }
   };
@@ -141,9 +208,14 @@ export default function MessageInput({
     setPreviewUrls([]);
   };
 
-  // Xử lý khi nhấn nút đính kèm file
-  const handleAttachClick = () => {
-    fileInputRef.current?.click();
+  // Xử lý khi nhấn nút đính kèm hình ảnh/video
+  const handleImageAttachClick = () => {
+    imageInputRef.current?.click();
+  };
+
+  // Xử lý khi nhấn nút đính kèm tài liệu
+  const handleDocumentAttachClick = () => {
+    documentInputRef.current?.click();
   };
 
   const handleSendMessage = () => {
@@ -336,14 +408,22 @@ export default function MessageInput({
         onDragLeave={handleDragLeave}
         onDrop={(e) => handleDrop(e)}
       >
-        {/* Hidden file input */}
+        {/* Hidden file inputs */}
         <input
           type="file"
-          ref={fileInputRef}
+          ref={imageInputRef}
           className="hidden"
           onChange={handleFileChange}
           multiple
-          accept="image/*,video/*,application/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+          accept="image/*,video/*"
+        />
+        <input
+          type="file"
+          ref={documentInputRef}
+          className="hidden"
+          onChange={handleFileChange}
+          multiple
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp"
         />
 
         {/* Toolbar buttons - now above the input */}
@@ -352,7 +432,8 @@ export default function MessageInput({
             variant="ghost"
             size="icon"
             disabled={disabled}
-            onClick={handleAttachClick}
+            onClick={handleImageAttachClick}
+            title="Đính kèm hình ảnh hoặc video"
           >
             <ImageIcon className="h-5 w-5" />
           </Button>
@@ -361,7 +442,8 @@ export default function MessageInput({
             variant="ghost"
             size="icon"
             disabled={disabled}
-            onClick={handleAttachClick}
+            onClick={handleDocumentAttachClick}
+            title="Đính kèm tài liệu"
           >
             <Paperclip className="h-5 w-5" />
           </Button>
@@ -434,7 +516,7 @@ export default function MessageInput({
             onClick={handleSendMessage}
             disabled={disabled || !message.trim()}
           >
-            <Send className="h-5 w-5" />
+            <Send className="h-4 w-4" />
           </Button>
         </div>
       </div>

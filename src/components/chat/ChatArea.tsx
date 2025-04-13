@@ -29,6 +29,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     searchText,
     searchResults,
     isSearching,
+    isLoading,
     clearSearch,
     setReplyingTo,
     setSelectedMessage,
@@ -274,7 +275,16 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
       >
         <div className="overflow-y-auto overflow-x-hidden bg-gray-50 p-4 custom-scrollbar h-full">
           {selectedContact ? (
-            renderMessageContent()
+            isLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="flex flex-col items-center">
+                  <div className="w-8 h-8 border-4 border-t-blue-500 border-b-blue-300 border-l-blue-300 border-r-blue-300 rounded-full animate-spin mb-2"></div>
+                  <p className="text-gray-500">Đang tải tin nhắn...</p>
+                </div>
+              </div>
+            ) : (
+              renderMessageContent()
+            )
           ) : (
             <div className="h-full flex items-center justify-center">
               <p className="text-gray-500">
