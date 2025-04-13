@@ -4,6 +4,7 @@ export interface UserData {
   phoneNumber: string | null;
   fullName: string | null;
   profilePictureUrl?: string | null;
+  coverImgUrl?: string | null;
 }
 
 export interface LoginData {
