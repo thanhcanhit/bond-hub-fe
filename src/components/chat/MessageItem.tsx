@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
 import { formatMessageTime } from "@/utils/dateUtils";
-import { Message, Media } from "@/types/base";
+import { Message, Media, ReactionType } from "@/types/base";
 import MediaGrid from "./MediaGrid";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "../ui/separator";
-import { deleteMessageForSelf, recallMessage } from "@/actions/message.action";
+import {
+  deleteMessageForSelf,
+  recallMessage,
+  addReactionToMessage,
+} from "@/actions/message.action";
 import {
   Copy,
   Download,
@@ -30,6 +34,8 @@ import {
   File,
   Video,
   Image as ImageIcon,
+  ThumbsUp,
+  Forward,
 } from "lucide-react";
 
 interface MediaItemProps {
@@ -218,6 +224,25 @@ export default function MessageItem({
     }
   };
 
+  const handleLikeMessage = async () => {
+    try {
+      const result = await addReactionToMessage(message.id, ReactionType.LIKE);
+      if (result.success) {
+        toast.success("Đã thích tin nhắn");
+      } else {
+        toast.error(`Lỗi: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error liking message:", error);
+      toast.error("Có lỗi xảy ra khi thích tin nhắn");
+    }
+  };
+
+  const handleForwardMessage = () => {
+    // For now, we'll just show a toast. In a real implementation, you would open a dialog to select recipients
+    toast.success("Chức năng chuyển tiếp sẽ được mở rộng sau");
+  };
+
   // Function to highlight search text in message content
   const renderHighlightedText = (text: string, searchText: string) => {
     if (!searchText || !text) return text;
@@ -251,30 +276,8 @@ export default function MessageItem({
 
   return (
     <div
-      className={`flex ${isCurrentUser ? "justify-end" : "justify-start"} mb-2 group relative`}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      className={`flex ${isCurrentUser ? "justify-end" : "justify-start"} mb-2 relative`}
     >
-      {/* Reply button that appears on hover - only for messages not from current user */}
-      {!isCurrentUser && (
-        <div
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-20 transition-opacity duration-200 ease-in-out"
-          style={{
-            opacity: isHovered ? 1 : 0,
-            pointerEvents: isHovered ? "auto" : "none",
-          }}
-        >
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-full bg-white shadow-sm hover:bg-gray-100"
-            onClick={handleReply}
-          >
-            <Reply className="h-4 w-4 text-gray-600" />
-          </Button>
-        </div>
-      )}
-
       {!isCurrentUser && showAvatar && (
         <div className="mr-2 flex-shrink-0">
           <Avatar className="h-8 w-8">
@@ -299,69 +302,107 @@ export default function MessageItem({
       )}
 
       <div
-        className={`max-w-[70%] ${!isCurrentUser && !showAvatar ? "ml-10" : ""} relative overflow-hidden`}
+        className={`max-w-[70%] ${!isCurrentUser && !showAvatar ? "ml-10" : ""} relative overflow-visible group before:content-[''] before:absolute before:top-[-10px] before:h-[calc(100%+20px)] ${isCurrentUser ? "before:right-full before:w-12" : 'after:content-[""] after:absolute after:top-[-10px] after:h-[calc(100%+20px)] after:left-full after:w-12'}`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
-        {/* Message options dropdown */}
-        <div
-          className="absolute -right-6 z-20 transition-opacity duration-200 ease-in-out"
-          style={{
-            opacity: isHovered ? 1 : 0,
-            pointerEvents: isHovered ? "auto" : "none",
-          }}
-        >
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+        {/* Hover action buttons */}
+        {!message.recalled && (
+          <div
+            className={`absolute ${isCurrentUser ? "right-full mr-1" : "left-full ml-1"} top-1/2 -translate-y-1/2 z-30 transition-opacity duration-200 ease-in-out flex ${isCurrentUser ? "flex-row" : "flex-row-reverse"} gap-0.5 before:content-[''] before:absolute before:top-[-10px] before:bottom-[-10px] ${isCurrentUser ? "before:right-[-5px] before:left-[-5px]" : "before:left-[-5px] before:right-[-5px]"} before:w-2 before:z-20`}
+            style={{
+              opacity: isHovered ? 1 : 0,
+              pointerEvents: isHovered ? "auto" : "none",
+            }}
+            onMouseEnter={() => setIsHovered(true)}
+          >
+            {/* Reply button - only for messages not from current user */}
+            {!isCurrentUser && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 rounded-full bg-white shadow-sm hover:bg-gray-100"
+                className="h-7 w-7 rounded-full bg-white shadow-sm hover:bg-gray-100"
+                onClick={handleReply}
               >
-                <MoreHorizontal className="h-4 w-4 text-gray-600" />
+                <Reply className="h-4 w-4 text-gray-600" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="">
-              {!message.recalled && (
-                <>
-                  <DropdownMenuItem onClick={handleCopyMessage}>
-                    <Copy className="h-4 w-4 mr-2" />
-                    <span>Sao chép</span>
+            )}
+
+            {/* Forward button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-full bg-white shadow-sm hover:bg-gray-100"
+              onClick={handleForwardMessage}
+            >
+              <Forward className="h-4 w-4 text-gray-600" />
+            </Button>
+
+            {/* Like button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-full bg-white shadow-sm hover:bg-gray-100"
+              onClick={handleLikeMessage}
+            >
+              <ThumbsUp className="h-4 w-4 text-gray-600" />
+            </Button>
+
+            {/* Options button */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full bg-white shadow-sm hover:bg-gray-100"
+                >
+                  <MoreHorizontal className="h-4 w-4 text-gray-600" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="">
+                {!message.recalled && (
+                  <>
+                    <DropdownMenuItem onClick={handleCopyMessage}>
+                      <Copy className="h-4 w-4 mr-2" />
+                      <span>Sao chép</span>
+                    </DropdownMenuItem>
+                    <Separator />
+                  </>
+                )}
+                {!isCurrentUser && !message.recalled && (
+                  <DropdownMenuItem onClick={handleReply}>
+                    <Reply className="h-4 w-4 mr-2" />
+                    <span>Trả lời</span>
                   </DropdownMenuItem>
-                  <Separator />
-                </>
-              )}
-              {!isCurrentUser && !message.recalled && (
-                <DropdownMenuItem onClick={handleReply}>
-                  <Reply className="h-4 w-4 mr-2" />
-                  <span>Trả lời</span>
+                )}
+                <DropdownMenuItem>
+                  <Pin className="h-4 w-4 mr-2" />
+                  <span>Ghim tin nhắn</span>
                 </DropdownMenuItem>
-              )}
-              <DropdownMenuItem>
-                <Pin className="h-4 w-4 mr-2" />
-                <span>Ghim tin nhắn</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Info className="h-4 w-4 mr-2" />
-                <span>Xem chi tiết</span>
-              </DropdownMenuItem>
-              <Separator />
-              {isCurrentUser && !message.recalled && (
-                <>
-                  <DropdownMenuItem onClick={handleRecallMessage}>
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    <span>Thu hồi</span>
-                  </DropdownMenuItem>
-                </>
-              )}
-              <DropdownMenuItem
-                onClick={handleDeleteMessage}
-                className="text-red-500 focus:text-red-500"
-              >
-                <Trash className="h-4 w-4 mr-2" />
-                <span>Xóa chỉ ở phía tôi</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+                <DropdownMenuItem>
+                  <Info className="h-4 w-4 mr-2" />
+                  <span>Xem chi tiết</span>
+                </DropdownMenuItem>
+                <Separator />
+                {isCurrentUser && !message.recalled && (
+                  <>
+                    <DropdownMenuItem onClick={handleRecallMessage}>
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      <span>Thu hồi</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
+                <DropdownMenuItem
+                  onClick={handleDeleteMessage}
+                  className="text-red-500 focus:text-red-500"
+                >
+                  <Trash className="h-4 w-4 mr-2" />
+                  <span>Xóa chỉ ở phía tôi</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
 
         {/* If message is a reply to another message */}
         {message.repliedTo && (
