@@ -112,10 +112,13 @@ function Sidebar() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Avatar className="cursor-pointer h-12 w-12 border-2 border-white hover:border-blue-300 transition-all">
-                <AvatarImage
-                  className="object-cover"
-                  src={user?.userInfo?.profilePictureUrl || undefined}
-                />
+                {user?.userInfo?.profilePictureUrl &&
+                  user.userInfo.profilePictureUrl !== "" && (
+                    <AvatarImage
+                      className="object-cover"
+                      src={user.userInfo.profilePictureUrl}
+                    />
+                  )}
                 <AvatarFallback className="text-gray">
                   {avatarFallback}
                 </AvatarFallback>

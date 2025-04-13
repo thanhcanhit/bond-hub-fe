@@ -79,6 +79,8 @@ export default function ProfileDialog({
   const [requestId, setRequestId] = useState<string | null>(null);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
+  const [showRemoveFriendDialog, setShowRemoveFriendDialog] = useState(false);
+  const [isRemovingFriend, setIsRemovingFriend] = useState(false);
   const profilePictureInputRef = useRef<HTMLInputElement>(null);
 
   // State for image viewer
@@ -233,22 +235,29 @@ export default function ProfileDialog({
   const handleRemoveFriend = async () => {
     if (!user?.id) return;
 
-    if (!confirm("Bạn có chắc chắn muốn xóa kết bạn với người dùng này?")) {
-      return;
-    }
-
+    setIsRemovingFriend(true);
     try {
       const accessToken = useAuthStore.getState().accessToken || undefined;
       const result = await removeFriend(user.id, accessToken);
       if (result.success) {
         toast.success("Xóa kết bạn thành công!");
         setRelationship("NONE");
+
+        // Force cleanup of any potential overlay issues
+        document.body.style.pointerEvents = "auto";
+
+        // Close dialog with a slight delay
+        setTimeout(() => {
+          setShowRemoveFriendDialog(false);
+        }, 50);
       } else {
         toast.error(`Không thể xóa kết bạn: ${result.error}`);
       }
     } catch (error) {
       console.error("Error removing friend:", error);
       toast.error("Đã xảy ra lỗi khi xóa kết bạn");
+    } finally {
+      setIsRemovingFriend(false);
     }
   };
 
@@ -848,7 +857,7 @@ export default function ProfileDialog({
                     <Button
                       variant="ghost"
                       className="justify-start w-full h-10 px-3 text-red-500"
-                      onClick={handleRemoveFriend}
+                      onClick={() => setShowRemoveFriendDialog(true)}
                     >
                       <UserMinus className="h-5 w-5 mr-2 flex-shrink-0" />
                       <span className="text-sm">Xóa bạn bè</span>
@@ -921,6 +930,50 @@ export default function ProfileDialog({
                 </>
               ) : (
                 "Chặn"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remove Friend Confirmation Dialog */}
+      <AlertDialog
+        open={showRemoveFriendDialog}
+        onOpenChange={(open) => {
+          setShowRemoveFriendDialog(open);
+
+          // If dialog is closing, ensure cleanup
+          if (!open) {
+            // Force cleanup of any potential overlay issues
+            document.body.style.pointerEvents = "auto";
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa bạn bè</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa kết bạn với{" "}
+              {user?.userInfo?.fullName || "người dùng này"}? Hành động này sẽ
+              xóa tất cả các cuộc trò chuyện chung và không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRemovingFriend}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRemoveFriend}
+              disabled={isRemovingFriend}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {isRemovingFriend ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                  Đang xóa...
+                </>
+              ) : (
+                "Xóa bạn bè"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
