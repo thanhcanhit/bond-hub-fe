@@ -251,6 +251,7 @@ export interface Message {
   createdAt: Date;
   updatedAt: Date;
   messageType?: MessageType | null;
+  forwardedFrom?: string | null; // ID of the original message if this is a forwarded message
 }
 
 export interface Comment {

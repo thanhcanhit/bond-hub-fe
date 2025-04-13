@@ -344,9 +344,18 @@ export async function forwardMessage(
   recipients: Array<{ type: "USER" | "GROUP"; id: string }>,
 ) {
   try {
+    // Convert recipients to the format expected by the backend
+    const targets = recipients.map((recipient) => {
+      if (recipient.type === "USER") {
+        return { userId: recipient.id };
+      } else {
+        return { groupId: recipient.id };
+      }
+    });
+
     const response = await axiosInstance.post("/messages/forward", {
       messageId,
-      recipients,
+      targets,
     });
 
     return {
