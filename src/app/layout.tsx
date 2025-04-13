@@ -25,7 +25,7 @@ export default function RootLayout({
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </head>
-      <body className={`${inter.className}`}>
+      <body className={`${inter.className} force-pointer-events`}>
         <Toaster position="top-center" richColors />
         <AuthProvider>
           <main className="min-h-screen">{children}</main>

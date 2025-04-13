@@ -6,8 +6,7 @@ import {
   logout as logoutAction,
 } from "@/actions/auth.action";
 import { getUserDataById } from "@/actions/user.action";
-// Không cần import socket nữa vì đã sử dụng hook
-// Custom storage that handles SSR
+
 const storage = {
   getItem: (name: string): string | null => {
     if (typeof window === "undefined") return null;
@@ -57,8 +56,7 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
-      socket: null,
-      socketId: null,
+      // Removed socket and socketId to avoid storing them in localStorage
       deviceId: null,
       _hasHydrated: false,
       setHasHydrated: (state) => set({ _hasHydrated: state }),
@@ -84,43 +82,36 @@ export const useAuthStore = create<AuthState>()(
             deviceType,
           );
 
-          console.log(result);
-          if (result.success) {
-            // First set the tokens and basic user data
-            set({
-              accessToken: result.accessToken,
-              refreshToken: result.refreshToken,
-              deviceId: result.deviceId,
-              isAuthenticated: true,
-              isLoading: false,
-            });
-            // Socket sẽ được khởi tạo tự động bởi SocketProvider
-            // Then try to get additional user data
-            try {
-              const userData = await getUserDataById(result.user.userId);
-              if (userData.success && userData.user) {
-                set({
-                  user: userData.user as UserWithInfo,
-                  isLoading: false,
-                });
-              }
-            } catch (userDataError) {
-              console.warn(
-                "Failed to fetch additional user data:",
-                userDataError,
-              );
-              // Set basic user data if additional data fetch fails
+          if (!result.success) return false;
+
+          // First set the tokens and basic user data
+          set({
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+            deviceId: result.deviceId,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+
+          // Socket sẽ được khởi tạo tự động bởi SocketProvider
+          // Then try to get additional user data
+          try {
+            const userData = await getUserDataById(result.user.userId);
+            if (userData.success && userData.user) {
               set({
-                user: result.user as UserWithInfo,
+                user: userData.user as UserWithInfo,
                 isLoading: false,
               });
             }
-            return true;
+          } catch {
+            // Set basic user data if additional data fetch fails
+            set({
+              user: result.user as UserWithInfo,
+              isLoading: false,
+            });
           }
-
-          return false;
-        } catch (error) {
-          console.error("Login error:", error);
+          return true;
+        } catch {
           return false;
         } finally {
           set({ isLoading: false });
@@ -147,9 +138,11 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         try {
           // Socket sẽ được ngắt kết nối tự động khi accessToken thay đổi
-          const result = await logoutAction();
-
-          // Reset store state
+          await logoutAction();
+        } catch {
+          // Ignore errors from the API
+        } finally {
+          // Always reset store state to ensure UI updates
           set({
             user: null,
             accessToken: null,
@@ -158,23 +151,9 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: false,
             isLoading: false,
           });
-
-          return result.success || true; // Return true even if API call fails
-        } catch (error) {
-          console.error("Error during logout:", error);
-
-          // Reset store state even if there's an error
-          set({
-            user: null,
-            accessToken: null,
-            refreshToken: null,
-            deviceId: null,
-            isAuthenticated: false,
-            isLoading: false,
-          });
-
-          return true; // Always return true to ensure UI updates
         }
+
+        return true; // Always return true to ensure UI updates
       },
       setTokens: (accessToken, refreshToken) => {
         set({

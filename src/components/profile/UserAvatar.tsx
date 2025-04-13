@@ -1,7 +1,7 @@
 import { User } from "@/types/base";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { cn } from "@/lib/utils";
-import { HTMLProps } from "react";
+import { HTMLProps, useMemo } from "react";
 import { getUserInitials } from "@/utils/userUtils";
 
 export default function UserAvatar({
@@ -11,6 +11,12 @@ export default function UserAvatar({
   user: User;
   className?: HTMLProps<HTMLElement>["className"];
 }) {
+  // Add cache-busting timestamp to ensure the latest image is always shown
+  const profileImageSrc = useMemo(() => {
+    if (!user?.userInfo?.profilePictureUrl) return undefined;
+    return `${user.userInfo.profilePictureUrl}?t=${new Date().getTime()}`;
+  }, [user?.userInfo?.profilePictureUrl]);
+
   return (
     <Avatar
       className={cn(
@@ -20,7 +26,7 @@ export default function UserAvatar({
     >
       <AvatarImage
         className="object-cover"
-        src={user?.userInfo?.profilePictureUrl || undefined}
+        src={profileImageSrc || undefined}
       />
       <AvatarFallback className="text-gray">
         {getUserInitials(user)}

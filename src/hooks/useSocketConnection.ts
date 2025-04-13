@@ -1,15 +1,59 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { useAuthStore } from "@/stores/authStore";
 import { useRouter } from "next/navigation";
+import { SocketMessage, isUserDataUpdateMessage } from "@/types/socket";
 
+// Sử dụng một biến singleton để lưu trữ socket instance
 let socketInstance: Socket | null = null;
 
+// Tối ưu hóa hook để giảm thiểu sử dụng RAM
 export const useSocketConnection = (isAuthenticated: boolean = false) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const { accessToken, logout } = useAuthStore();
   const router = useRouter();
   const socketInitialized = useRef(false);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 5;
+
+  // Tạo hàm cleanup socket để tái sử dụng
+  const cleanupSocket = useCallback((socketToCleanup: Socket | null) => {
+    if (socketToCleanup) {
+      // Loại bỏ tất cả các event listener để tránh memory leak
+      socketToCleanup.removeAllListeners();
+      socketToCleanup.disconnect();
+
+      if (socketInstance === socketToCleanup) {
+        socketInstance = null;
+        socketInitialized.current = false;
+      }
+    }
+  }, []);
+
+  // Xử lý sự kiện cập nhật dữ liệu người dùng
+  const handleUserDataUpdate = useCallback((message: SocketMessage) => {
+    // Kiểm tra message trước khi xử lý để tránh lỗi
+    if (!message || typeof message !== "object") return;
+
+    // Sử dụng type guard để kiểm tra loại message
+    if (isUserDataUpdateMessage(message)) {
+      const { updateUser } = useAuthStore.getState();
+      updateUser(message.data.user);
+    }
+  }, []);
+
+  // Xử lý sự kiện forceLogout
+  const handleForceLogout = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (data: any) => {
+      console.log("handleForceLogout", data);
+      // Đăng xuất và chuyển hướng
+      logout()
+        .then(() => router.push("/login", { scroll: false }))
+        .catch(() => router.push("/login", { scroll: false }));
+    },
+    [logout, router],
+  );
 
   useEffect(() => {
     // Chỉ kết nối khi đã đăng nhập và có accessToken
@@ -23,28 +67,29 @@ export const useSocketConnection = (isAuthenticated: boolean = false) => {
       socketInstance.connected &&
       socketInitialized.current
     ) {
+      setSocket(socketInstance);
       return;
     }
 
     // Ngắt kết nối socket cũ nếu có
-    if (socketInstance) {
-      console.log("Disconnecting existing socket connection");
-      socketInstance.disconnect();
-    }
+    cleanupSocket(socketInstance);
 
-    // Tạo kết nối socket mới
-    console.log("Creating new socket connection with token");
+    // Tạo kết nối socket mới với các tùy chọn tối ưu
     try {
       const newSocket = io(
         process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000",
         {
           auth: { token: accessToken },
           reconnection: true,
-          reconnectionAttempts: 5,
+          reconnectionAttempts: maxReconnectAttempts,
           reconnectionDelay: 1000,
           reconnectionDelayMax: 5000,
           timeout: 10000,
           transports: ["websocket"], // Chỉ sử dụng websocket để tăng hiệu suất
+          forceNew: false, // Tái sử dụng kết nối nếu có thể
+          autoConnect: true,
+          // Giảm kích thước gói tin
+          perMessageDeflate: { threshold: 1024 },
         },
       );
 
@@ -52,58 +97,42 @@ export const useSocketConnection = (isAuthenticated: boolean = false) => {
       socketInstance = newSocket;
       setSocket(newSocket);
       socketInitialized.current = true;
+      reconnectAttempts.current = 0;
 
-      // Xử lý các sự kiện socket
+      // Đăng ký các event listener với tham chiếu hàm xử lý cố định
       newSocket.on("connect", () => {
-        console.log("✅ Socket connected with ID:", newSocket.id);
+        reconnectAttempts.current = 0;
       });
 
-      newSocket.on("disconnect", (reason) => {
-        console.log("❌ Socket disconnected. Reason:", reason);
+      newSocket.on("disconnect", () => {
+        // Tăng số lần thử kết nối lại
+        reconnectAttempts.current++;
+
+        // Nếu đã thử kết nối lại quá nhiều lần, ngừng thử
+        if (reconnectAttempts.current > maxReconnectAttempts) {
+          cleanupSocket(newSocket);
+        }
       });
 
-      newSocket.on("connect_error", (error) => {
-        console.error("⚠️ Socket connection error:", error);
-      });
-
-      // Xử lý sự kiện forceLogout
-      newSocket.on("forceLogout", (data) => {
-        console.warn("🚨 Forced logout received:", data);
-
-        // Ngắt kết nối socket
-        newSocket.disconnect();
-
-        // Đăng xuất và chuyển hướng
-        logout()
-          .then(() => {
-            console.log("Logout successful after forceLogout event");
-            router.push("/login", { scroll: false });
-          })
-          .catch((error) => {
-            console.error(
-              "Error during logout after forceLogout event:",
-              error,
-            );
-            // Chuyển hướng ngay cả khi đăng xuất thất bại
-            router.push("/login", { scroll: false });
-          });
-      });
+      // Đăng ký các event listener chính
+      newSocket.on("forceLogout", handleForceLogout);
+      newSocket.on("userDataUpdate", handleUserDataUpdate);
 
       // Cleanup khi component unmount hoặc accessToken thay đổi
-      return () => {
-        console.log("Cleaning up socket connection");
-        newSocket.disconnect();
-        if (socketInstance === newSocket) {
-          socketInstance = null;
-          socketInitialized.current = false;
-        }
-      };
+      return () => cleanupSocket(newSocket);
     } catch (error) {
-      console.error("Error creating socket connection:", error);
-      // Trả về hàm cleanup rỗng để tránh lỗi
-      return () => {};
+      console.log("error", error);
+      return () => {}; // Trả về hàm cleanup rỗng để tránh lỗi
     }
-  }, [accessToken, logout, router]);
+  }, [
+    accessToken,
+    isAuthenticated,
+    logout,
+    router,
+    cleanupSocket,
+    handleForceLogout,
+    handleUserDataUpdate,
+  ]);
 
   return socket;
 };

@@ -3,14 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import DateOfBirthPicker from "./DateOfBirthPicker";
+import { CalendarIcon } from "lucide-react";
 
 // Define form type for better type safety
 export type ProfileFormValues = {
@@ -26,9 +21,9 @@ interface ProfileEditFormProps {
   initialValues: ProfileFormValues;
   onSubmit: (values: ProfileFormValues) => void;
   onCancel: () => void;
-  days: string[];
-  months: string[];
-  years: string[];
+  days?: string[];
+  months?: string[];
+  years?: string[];
 }
 
 // Optimized input component that doesn't cause re-renders
@@ -67,14 +62,7 @@ const OptimizedInput = memo(
 OptimizedInput.displayName = "OptimizedInput";
 
 const ProfileEditForm = memo(
-  ({
-    initialValues,
-    onSubmit,
-    onCancel,
-    days,
-    months,
-    years,
-  }: ProfileEditFormProps) => {
+  ({ initialValues, onSubmit, onCancel }: ProfileEditFormProps) => {
     // Use refs for form elements
     const formRef = useRef<HTMLFormElement>(null);
 
@@ -143,45 +131,42 @@ const ProfileEditForm = memo(
 
           <div className="space-y-2">
             <Label>Ngày sinh</Label>
-            <div className="flex gap-2">
-              <Select name="day" defaultValue={initialValues.day}>
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Day" />
-                </SelectTrigger>
-                <SelectContent>
-                  {days.map((d) => (
-                    <SelectItem key={d} value={d}>
-                      {d}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select name="month" defaultValue={initialValues.month}>
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  {months.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select name="year" defaultValue={initialValues.year}>
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {years.map((y) => (
-                    <SelectItem key={y} value={y}>
-                      {y}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex items-center gap-2 border border-input rounded-md px-3">
+              <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+              <DateOfBirthPicker
+                day={initialValues.day}
+                month={initialValues.month}
+                year={initialValues.year}
+                onDayChange={(value) => {
+                  if (formRef.current) {
+                    const dayInput =
+                      formRef.current.querySelector('input[name="day"]');
+                    if (dayInput) {
+                      (dayInput as HTMLInputElement).value = value;
+                    }
+                  }
+                }}
+                onMonthChange={(value) => {
+                  if (formRef.current) {
+                    const monthInput = formRef.current.querySelector(
+                      'input[name="month"]',
+                    );
+                    if (monthInput) {
+                      (monthInput as HTMLInputElement).value = value;
+                    }
+                  }
+                }}
+                onYearChange={(value) => {
+                  if (formRef.current) {
+                    const yearInput =
+                      formRef.current.querySelector('input[name="year"]');
+                    if (yearInput) {
+                      (yearInput as HTMLInputElement).value = value;
+                    }
+                  }
+                }}
+                className="border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0"
+              />
             </div>
           </div>
         </div>

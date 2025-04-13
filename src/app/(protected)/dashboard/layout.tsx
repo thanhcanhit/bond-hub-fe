@@ -12,7 +12,7 @@ export default function ProtectedLayout({
         {/* Sidebar trái - Tabs */}
         <Sidebar />
       </div>
-      <div className="flex-1 h-full overflow-hidden">{children}</div>
+      <div className="flex flex-col flex-1">{children}</div>
     </div>
   );
 }
