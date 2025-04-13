@@ -13,7 +13,7 @@ type GroupInvitationProps = {
 };
 
 function GroupInvitationItem({
-  id,
+  // id,
   groupName,
   groupImageUrl,
   inviterName,

@@ -1,6 +1,5 @@
 "use server";
 import axiosInstance from "@/lib/axios";
-import { useAuthStore } from "@/stores/authStore";
 
 // Tìm kiếm tin nhắn dựa trên từ khóa
 export async function searchMessages(keyword: string) {
