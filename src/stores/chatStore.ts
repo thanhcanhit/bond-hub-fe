@@ -1,5 +1,12 @@
 import { create } from "zustand";
-import { Group, Message, MessageType, User, UserInfo } from "@/types/base";
+import {
+  Group,
+  Message,
+  MessageType,
+  ReactionType,
+  User,
+  UserInfo,
+} from "@/types/base";
 import {
   getMessagesBetweenUsers,
   getGroupMessages,
@@ -12,6 +19,8 @@ import {
   forwardMessage,
   searchMessagesWithUser,
   searchGroupMessages,
+  addReactionToMessage,
+  removeReactionFromMessage,
 } from "@/actions/message.action";
 
 interface ChatState {
@@ -55,6 +64,11 @@ interface ChatState {
   updateMessage: (messageId: string, updatedMessage: Partial<Message>) => void;
   removeMessage: (messageId: string) => void;
   clearChat: () => void;
+  addReactionToMessageById: (
+    messageId: string,
+    reaction: ReactionType,
+  ) => Promise<boolean>;
+  removeReactionFromMessageById: (messageId: string) => Promise<boolean>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -376,5 +390,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
       selectedMessage: null,
       isDialogOpen: false,
     });
+  },
+
+  addReactionToMessageById: async (messageId, reaction) => {
+    try {
+      const result = await addReactionToMessage(messageId, reaction);
+      if (result.success && result.message) {
+        set((state) => ({
+          messages: state.messages.map((msg) =>
+            msg.id === messageId ? result.message : msg,
+          ),
+        }));
+      }
+      return result.success;
+    } catch (error) {
+      console.error("Error adding reaction to message:", error);
+      return false;
+    }
+  },
+
+  removeReactionFromMessageById: async (messageId) => {
+    try {
+      const result = await removeReactionFromMessage(messageId);
+      if (result.success && result.message) {
+        set((state) => ({
+          messages: state.messages.map((msg) =>
+            msg.id === messageId ? result.message : msg,
+          ),
+        }));
+      }
+      return result.success;
+    } catch (error) {
+      console.error("Error removing reaction from message:", error);
+      return false;
+    }
   },
 }));

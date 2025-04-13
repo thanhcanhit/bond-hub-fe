@@ -76,15 +76,41 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     }
   }, [selectedContact?.id, markAsRead]);
 
+  // Keep track of previous messages to detect what changed
+  const prevMessagesRef = useRef<Message[]>([]);
+
   useEffect(() => {
-    // Scroll to bottom when messages change
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Only scroll to bottom when a new message is added, not when reactions change
+    const shouldScrollToBottom = () => {
+      // If message count changed, it's a new message
+      if (prevMessagesRef.current.length !== messages.length) {
+        return true;
+      }
+
+      // If the last message ID changed, it's a new message
+      if (messages.length > 0 && prevMessagesRef.current.length > 0) {
+        const lastMessageId = messages[messages.length - 1].id;
+        const prevLastMessageId =
+          prevMessagesRef.current[prevMessagesRef.current.length - 1].id;
+        return lastMessageId !== prevLastMessageId;
+      }
+
+      return false;
+    };
+
+    // Only scroll if it's a new message, not a reaction update
+    if (shouldScrollToBottom()) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
 
     // Update last message in conversations list when messages change
     if (messages.length > 0 && selectedContact) {
       const lastMessage = messages[messages.length - 1];
       updateLastMessage(selectedContact.id, lastMessage);
     }
+
+    // Update the previous messages reference
+    prevMessagesRef.current = [...messages];
   }, [messages, selectedContact, updateLastMessage]);
 
   // Scroll to bottom when component mounts

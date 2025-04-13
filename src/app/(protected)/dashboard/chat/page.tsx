@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import ContactList from "@/components/chat/ContactList";
+import ContactList from "@/components/chat/ConverstationList";
 import ChatArea from "@/components/chat/ChatArea";
-import ContactInfo from "@/components/chat/ContactInfo";
+import ContactInfo from "@/components/chat/ConverstationInfo";
 import ChatSocketHandler from "@/components/chat/ChatSocketHandler";
 import { User, UserInfo } from "@/types/base";
 import { useAuthStore } from "@/stores/authStore";

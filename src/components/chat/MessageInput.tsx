@@ -11,10 +11,6 @@ import {
   ImageIcon,
   FileText,
   Play,
-  Sticker,
-  Gift,
-  MoreHorizontal,
-  Wand2,
   Trash2,
 } from "lucide-react";
 import { Message } from "@/types/base";
@@ -335,21 +331,10 @@ export default function MessageInput({
         />
 
         {/* Toolbar buttons - now above the input */}
-        <div className="flex items-center px-2 py-1 border-b bg-gray-50">
+        <div className="flex items-center py-0.5 px-2 border-b">
           <Button
             variant="ghost"
             size="icon"
-            className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md h-9 w-9 mr-0.5"
-            disabled={disabled}
-            onClick={handleAttachClick}
-          >
-            <Sticker className="h-5 w-5" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md h-9 w-9 mr-0.5"
             disabled={disabled}
             onClick={handleAttachClick}
           >
@@ -359,38 +344,10 @@ export default function MessageInput({
           <Button
             variant="ghost"
             size="icon"
-            className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md h-9 w-9 mr-0.5"
             disabled={disabled}
             onClick={handleAttachClick}
           >
             <Paperclip className="h-5 w-5" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md h-9 w-9 mr-0.5"
-            disabled={disabled}
-          >
-            <Gift className="h-5 w-5" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md h-9 w-9"
-            disabled={disabled}
-          >
-            <Wand2 className="h-5 w-5" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md h-9 w-9 ml-auto"
-            disabled={disabled}
-          >
-            <MoreHorizontal className="h-5 w-5" />
           </Button>
         </div>
 

@@ -16,11 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "../ui/separator";
-import {
-  deleteMessageForSelf,
-  recallMessage,
-  addReactionToMessage,
-} from "@/actions/message.action";
+import { useChatStore } from "@/stores/chatStore";
 import {
   Copy,
   Download,
@@ -36,6 +32,7 @@ import {
   Image as ImageIcon,
   ThumbsUp,
   Forward,
+  X,
 } from "lucide-react";
 
 interface MediaItemProps {
@@ -179,15 +176,12 @@ export default function MessageItem({
     }
   };
 
+  const chatStore = useChatStore();
+
   const handleDeleteMessage = async () => {
     try {
-      const result = await deleteMessageForSelf(message.id);
-      if (result.success) {
-        toast.success("Đã xóa tin nhắn");
-        // In a real implementation, you would update the UI to reflect the deletion
-      } else {
-        toast.error(`Lỗi: ${result.error}`);
-      }
+      await chatStore.deleteMessageById(message.id);
+      toast.success("Đã xóa tin nhắn");
     } catch (error) {
       console.error("Error deleting message:", error);
       toast.error("Có lỗi xảy ra khi xóa tin nhắn");
@@ -196,16 +190,10 @@ export default function MessageItem({
 
   const handleRecallMessage = async () => {
     try {
-      const result = await recallMessage(message.id);
-      if (result.success) {
-        // Update the message in the UI to show it as recalled
-        message.recalled = true;
-        // Force a re-render
-        setIsHovered(false);
-        toast.success("Đã thu hồi tin nhắn");
-      } else {
-        toast.error(`Lỗi: ${result.error}`);
-      }
+      await chatStore.recallMessageById(message.id);
+      // Force a re-render
+      setIsHovered(false);
+      toast.success("Đã thu hồi tin nhắn");
     } catch (error) {
       console.error("Error recalling message:", error);
       toast.error("Có lỗi xảy ra khi thu hồi tin nhắn");
@@ -224,19 +212,59 @@ export default function MessageItem({
     }
   };
 
-  const handleLikeMessage = async () => {
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+
+  const handleReaction = async (reactionType: ReactionType) => {
     try {
-      const result = await addReactionToMessage(message.id, ReactionType.LIKE);
-      if (result.success) {
-        toast.success("Đã thích tin nhắn");
+      const success = await chatStore.addReactionToMessageById(
+        message.id,
+        reactionType,
+      );
+      if (success) {
+        let reactionText = "Đã thích tin nhắn";
+        switch (reactionType) {
+          case ReactionType.LOVE:
+            reactionText = "Đã yêu thích tin nhắn";
+            break;
+          case ReactionType.HAHA:
+            reactionText = "Đã cười tin nhắn";
+            break;
+          case ReactionType.WOW:
+            reactionText = "Đã ngạc nhiên về tin nhắn";
+            break;
+          case ReactionType.SAD:
+            reactionText = "Đã buồn về tin nhắn";
+            break;
+          case ReactionType.ANGRY:
+            reactionText = "Đã giận dữ về tin nhắn";
+            break;
+        }
+        toast.success(reactionText);
+        setShowReactionPicker(false);
       } else {
-        toast.error(`Lỗi: ${result.error}`);
+        toast.error("Không thể thêm biểu cảm");
       }
     } catch (error) {
-      console.error("Error liking message:", error);
-      toast.error("Có lỗi xảy ra khi thích tin nhắn");
+      console.error("Error reacting to message:", error);
+      toast.error("Có lỗi xảy ra khi thêm biểu cảm");
     }
   };
+
+  const handleRemoveReaction = async () => {
+    try {
+      const success = await chatStore.removeReactionFromMessageById(message.id);
+      if (success) {
+        toast.success("Đã xóa biểu cảm");
+      } else {
+        toast.error("Không thể xóa biểu cảm");
+      }
+    } catch (error) {
+      console.error("Error removing reaction:", error);
+      toast.error("Có lỗi xảy ra khi xóa biểu cảm");
+    }
+  };
+
+  // Removed handleLikeMessage as we now handle reactions differently
 
   const handleForwardMessage = () => {
     // For now, we'll just show a toast. In a real implementation, you would open a dialog to select recipients
@@ -274,9 +302,15 @@ export default function MessageItem({
     }
   };
 
+  const isDeletedForSelf = message.deletedBy.includes(currentUser?.id || "");
+
+  if (isDeletedForSelf) {
+    return null;
+  }
+
   return (
     <div
-      className={`flex ${isCurrentUser ? "justify-end" : "justify-start"} mb-2 relative`}
+      className={`flex group ${isCurrentUser ? "justify-end" : "justify-start"} mb-2 relative`}
     >
       {!isCurrentUser && showAvatar && (
         <div className="mr-2 flex-shrink-0">
@@ -338,15 +372,8 @@ export default function MessageItem({
               <Forward className="h-4 w-4 text-gray-600" />
             </Button>
 
-            {/* Like button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 rounded-full bg-white shadow-sm hover:bg-gray-100"
-              onClick={handleLikeMessage}
-            >
-              <ThumbsUp className="h-4 w-4 text-gray-600" />
-            </Button>
+            {/* Empty div to maintain spacing */}
+            <div></div>
 
             {/* Options button */}
             <DropdownMenu>
@@ -550,10 +577,238 @@ export default function MessageItem({
             )}
           </>
         )}
-        <div
-          className={`text-xs text-gray-500 mt-1 ${isCurrentUser ? "text-right" : "text-left"}`}
-        >
-          {formattedTime}
+        <div className="flex justify-between items-center mt-1">
+          <div
+            className={`text-xs text-gray-500 ${isCurrentUser ? "text-right" : "text-left"}`}
+          >
+            {formattedTime}
+          </div>
+
+          {/* Reaction summary and buttons */}
+          <div className="flex items-center gap-1">
+            {message.reactions && message.reactions.length > 0 && (
+              <div className="flex items-center bg-white rounded-full shadow-sm px-1 py-0.5 text-xs">
+                {/* Group reactions by type and display unique reaction types */}
+                {(() => {
+                  // Count reactions by type
+                  const reactionCounts: Record<string, number> = {};
+                  let totalReactions = 0;
+
+                  // Process each reaction to handle different API response formats
+                  message.reactions.forEach((reaction) => {
+                    let reactionType: ReactionType;
+                    let count = 1; // Default count
+
+                    // Check if the reaction object has a reactionType property
+                    if ("reactionType" in reaction && reaction.reactionType) {
+                      reactionType = reaction.reactionType;
+                    }
+                    // Check if the reaction object has a reaction property
+                    else if (
+                      "reaction" in reaction &&
+                      typeof reaction.reaction === "string"
+                    ) {
+                      reactionType = reaction.reaction as ReactionType;
+                    }
+                    // Default to LIKE if neither property is found
+                    else {
+                      reactionType = ReactionType.LIKE;
+                    }
+
+                    // Check if the reaction has a count property
+                    if (
+                      "count" in reaction &&
+                      typeof reaction.count === "number"
+                    ) {
+                      count = reaction.count;
+                    }
+
+                    reactionCounts[reactionType] =
+                      (reactionCounts[reactionType] || 0) + count;
+                    totalReactions += count;
+                  });
+
+                  // Map reaction types to emoji
+                  const reactionEmojis = {
+                    [ReactionType.LIKE]: "👍",
+                    [ReactionType.LOVE]: "❤️",
+                    [ReactionType.HAHA]: "😂",
+                    [ReactionType.WOW]: "😮",
+                    [ReactionType.SAD]: "😢",
+                    [ReactionType.ANGRY]: "😡",
+                  };
+
+                  // Display unique reaction types
+                  return (
+                    <>
+                      {Object.entries(reactionCounts).map(([type, count]) => (
+                        <span
+                          key={type}
+                          className="mr-0.5"
+                          title={`${count} ${type.toLowerCase()}`}
+                        >
+                          {reactionEmojis[type as ReactionType]}
+                        </span>
+                      ))}
+                      <span className="text-gray-600 font-medium ml-0.5">
+                        {totalReactions}
+                      </span>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Reaction buttons */}
+            {(() => {
+              // Get current user's reaction
+              const userReaction = message.reactions?.find(
+                (r) => r.userId === currentUser?.id,
+              );
+
+              // Map reaction types to emoji
+              const reactionEmojis = {
+                [ReactionType.LIKE]: "👍",
+                [ReactionType.LOVE]: "❤️",
+                [ReactionType.HAHA]: "😂",
+                [ReactionType.WOW]: "😮",
+                [ReactionType.SAD]: "😢",
+                [ReactionType.ANGRY]: "😡",
+              };
+
+              if (userReaction) {
+                // Get the emoji for the current reaction
+                let reactionType: ReactionType;
+
+                // Check if the reaction object has a reactionType property
+                if (
+                  "reactionType" in userReaction &&
+                  userReaction.reactionType
+                ) {
+                  reactionType = userReaction.reactionType;
+                }
+                // Check if the reaction object has a reaction property
+                else if (
+                  "reaction" in userReaction &&
+                  typeof userReaction.reaction === "string"
+                ) {
+                  reactionType = userReaction.reaction as ReactionType;
+                }
+                // Default to LIKE if neither property is found
+                else {
+                  reactionType = ReactionType.LIKE;
+                }
+
+                const emoji = reactionEmojis[reactionType];
+
+                // When user has already reacted, show two buttons: add more and remove
+                return (
+                  <div className="flex gap-1 ml-1">
+                    {/* Button to add more of the same reaction */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 rounded-full bg-blue-50 shadow-sm hover:bg-blue-100 p-0"
+                      onClick={() => handleReaction(reactionType)}
+                      title={`Thêm biểu cảm ${reactionType.toLowerCase()}`}
+                    >
+                      <span className="text-xs">{emoji || "👍"}</span>
+                    </Button>
+
+                    {/* Button to remove reaction */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 rounded-full bg-white shadow-sm hover:bg-gray-100 p-0"
+                      onClick={handleRemoveReaction}
+                      title="Xóa biểu cảm"
+                    >
+                      <X className="h-3 w-3 text-red-500" />
+                    </Button>
+                  </div>
+                );
+              } else {
+                // When user hasn't reacted yet, show reaction button with picker
+                return (
+                  <div className="relative ml-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 rounded-full shadow-sm hover:bg-gray-100 bg-white p-0"
+                      onMouseEnter={() => setShowReactionPicker(true)}
+                      title="Thêm biểu cảm"
+                    >
+                      <ThumbsUp className="h-3 w-3 text-gray-600" />
+                    </Button>
+
+                    {/* Reaction picker - visible on hover */}
+                    {(isHovered || showReactionPicker) && (
+                      <div
+                        className="absolute bottom-full right-0 mb-2 bg-white rounded-full shadow-lg p-1 flex items-center gap-1 z-50"
+                        onMouseEnter={() => setShowReactionPicker(true)}
+                        onMouseLeave={() => setShowReactionPicker(false)}
+                      >
+                        <button
+                          className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-all duration-150 hover:scale-125 hover:shadow-md group/reaction"
+                          onClick={() => handleReaction(ReactionType.LIKE)}
+                        >
+                          <span className="text-xl">👍</span>
+                          <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-black/75 text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover/reaction:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                            Thích
+                          </span>
+                        </button>
+                        <button
+                          className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-all duration-150 hover:scale-125 hover:shadow-md group/reaction"
+                          onClick={() => handleReaction(ReactionType.LOVE)}
+                        >
+                          <span className="text-xl">❤️</span>
+                          <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-black/75 text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover/reaction:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                            Yêu thích
+                          </span>
+                        </button>
+                        <button
+                          className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-all duration-150 hover:scale-125 hover:shadow-md group/reaction"
+                          onClick={() => handleReaction(ReactionType.HAHA)}
+                        >
+                          <span className="text-xl">😂</span>
+                          <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-black/75 text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover/reaction:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                            Haha
+                          </span>
+                        </button>
+                        <button
+                          className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-all duration-150 hover:scale-125 hover:shadow-md group/reaction"
+                          onClick={() => handleReaction(ReactionType.WOW)}
+                        >
+                          <span className="text-xl">😮</span>
+                          <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-black/75 text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover/reaction:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                            Wow
+                          </span>
+                        </button>
+                        <button
+                          className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-all duration-150 hover:scale-125 hover:shadow-md group/reaction"
+                          onClick={() => handleReaction(ReactionType.SAD)}
+                        >
+                          <span className="text-xl">😢</span>
+                          <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-black/75 text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover/reaction:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                            Buồn
+                          </span>
+                        </button>
+                        <button
+                          className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-all duration-150 hover:scale-125 hover:shadow-md group/reaction"
+                          onClick={() => handleReaction(ReactionType.ANGRY)}
+                        >
+                          <span className="text-xl">😡</span>
+                          <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-black/75 text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover/reaction:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                            Phẫn nộ
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+            })()}
+          </div>
         </div>
       </div>
 

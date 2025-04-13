@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Message, Media } from "@/types/base";
+import type React from "react";
+
+import { useState, useEffect, useRef } from "react";
+import type { Message, Media } from "@/types/base";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime, formatMessageDate } from "@/utils/dateUtils";
 import Image from "next/image";
@@ -12,8 +14,9 @@ import {
   ChevronRight,
   ChevronDown,
   Share2,
-  ChevronUp,
   Forward,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createPortal } from "react-dom";
@@ -45,9 +48,195 @@ export default function MessageDetailDialog({
     Array<{ type: "USER" | "GROUP"; id: string; name: string }>
   >([]);
   const [forwardSuccess, setForwardSuccess] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
+  const imageRef = useRef<HTMLImageElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [fileContent, setFileContent] = useState<string | null>(null);
 
   const { forwardMessageToRecipients } = useChatStore();
   const { conversations } = useConversationsStore();
+
+  // Helper functions for file handling
+  const isOfficeDocument = (extension?: string) => {
+    if (!extension) return false;
+    const officeExtensions = ["doc", "docx", "xls", "xlsx", "ppt", "pptx"];
+    return officeExtensions.includes(extension.toLowerCase());
+  };
+
+  const isTextFile = (extension?: string) => {
+    if (!extension) return false;
+    const textExtensions = [
+      "txt",
+      "md",
+      "json",
+      "js",
+      "ts",
+      "html",
+      "css",
+      "csv",
+    ];
+    return textExtensions.includes(extension.toLowerCase());
+  };
+
+  const getFileIcon = (extension?: string, size = 32) => {
+    const iconSize = size;
+    const strokeWidth = size <= 24 ? 2 : 1.5;
+
+    if (!extension) {
+      return (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width={iconSize}
+          height={iconSize}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-gray-500"
+        >
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+          <polyline points="14 2 14 8 20 8" />
+        </svg>
+      );
+    }
+
+    switch (extension.toLowerCase()) {
+      case "pdf":
+        return (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width={iconSize}
+            height={iconSize}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-red-500"
+          >
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+            <polyline points="14 2 14 8 20 8" />
+            <path d="M9 15v-1h6v1" />
+            <path d="M9 18v-1h6v1" />
+            <path d="M9 12v-1h6v1" />
+          </svg>
+        );
+      case "doc":
+      case "docx":
+        return (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width={iconSize}
+            height={iconSize}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-blue-600"
+          >
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+            <polyline points="14 2 14 8 20 8" />
+            <path d="M9 15h6" />
+            <path d="M9 18h6" />
+            <path d="M9 12h6" />
+          </svg>
+        );
+      case "xls":
+      case "xlsx":
+        return (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width={iconSize}
+            height={iconSize}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-green-600"
+          >
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+            <polyline points="14 2 14 8 20 8" />
+            <rect x="8" y="12" width="8" height="6" />
+            <path d="M8 12v-2h8v2" />
+          </svg>
+        );
+      case "ppt":
+      case "pptx":
+        return (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width={iconSize}
+            height={iconSize}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-orange-600"
+          >
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+            <polyline points="14 2 14 8 20 8" />
+            <circle cx="12" cy="14" r="4" />
+          </svg>
+        );
+      case "txt":
+      case "md":
+      case "json":
+      case "js":
+      case "ts":
+      case "html":
+      case "css":
+      case "csv":
+        return (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width={iconSize}
+            height={iconSize}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-gray-600"
+          >
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="8" y1="13" x2="16" y2="13" />
+            <line x1="8" y1="17" x2="16" y2="17" />
+          </svg>
+        );
+      default:
+        return (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width={iconSize}
+            height={iconSize}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-gray-500"
+          >
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+        );
+    }
+  };
 
   // Reset states when dialog opens
   useEffect(() => {
@@ -58,6 +247,59 @@ export default function MessageDetailDialog({
     }
   }, [isOpen]);
 
+  // Fetch text file content when needed
+  useEffect(() => {
+    let currentMedia: Media | null = null;
+    if (message?.content.media && message.content.media.length > 0) {
+      currentMedia = message.content.media[currentMediaIndex];
+    } else if (message?.content.image) {
+      currentMedia = {
+        url: message.content.image,
+        type: "IMAGE",
+        fileId: "legacy-image",
+        fileName: "image.jpg",
+        metadata: {
+          path: "",
+          size: 0,
+          mimeType: "image/jpeg",
+          extension: "jpg",
+          bucketName: "",
+          uploadedAt: new Date().toISOString(),
+          sizeFormatted: "",
+        },
+      };
+    } else if (message?.content.video) {
+      currentMedia = {
+        url: message.content.video,
+        type: "VIDEO",
+        fileId: "legacy-video",
+        fileName: "video.mp4",
+        metadata: {
+          path: "",
+          size: 0,
+          mimeType: "video/mp4",
+          extension: "mp4",
+          bucketName: "",
+          uploadedAt: new Date().toISOString(),
+          sizeFormatted: "",
+        },
+      };
+    }
+    if (currentMedia && isTextFile(currentMedia.metadata.extension)) {
+      setFileContent(null); // Reset content while loading
+
+      fetch(currentMedia.url)
+        .then((response) => response.text())
+        .then((text) => {
+          setFileContent(text);
+        })
+        .catch((error) => {
+          console.error("Error fetching text file:", error);
+          setFileContent("Error loading file content.");
+        });
+    }
+  }, [message, currentMediaIndex]);
+
   useEffect(() => {
     setMounted(true);
 
@@ -65,6 +307,10 @@ export default function MessageDetailDialog({
     if (isOpen) {
       document.body.style.overflow = "hidden";
     }
+
+    // Reset zoom when dialog opens or closes
+    setZoomLevel(1);
+    setImagePosition({ x: 0, y: 0 });
 
     return () => {
       // Khi dialog đóng, cho phép cuộn trang trở lại
@@ -112,15 +358,29 @@ export default function MessageDetailDialog({
   if (!message || !mounted || !isOpen) return null;
 
   const handleDownload = (media: Media) => {
-    const link = document.createElement("a");
-    link.href = media.url;
-    link.download = media.fileName;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.setAttribute("download", media.fileName);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Use fetch to get the file as a blob
+    fetch(media.url)
+      .then((response) => response.blob())
+      .then((blob) => {
+        // Create a blob URL for the file
+        const blobUrl = URL.createObjectURL(blob);
+
+        // Create a temporary anchor element
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = media.fileName;
+
+        // Append to body, click, and clean up
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Release the blob URL
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+      })
+      .catch((error) => {
+        console.error("Download failed:", error);
+      });
   };
 
   const handlePrevMedia = () => {
@@ -128,6 +388,7 @@ export default function MessageDetailDialog({
       setCurrentMediaIndex((prev) =>
         prev === 0 ? message.content.media!.length - 1 : prev - 1,
       );
+      resetZoom();
     }
   };
 
@@ -136,7 +397,71 @@ export default function MessageDetailDialog({
       setCurrentMediaIndex((prev) =>
         prev === message.content.media!.length - 1 ? 0 : prev + 1,
       );
+      resetZoom();
     }
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!currentMedia || currentMedia.type !== "IMAGE") return;
+
+    e.preventDefault();
+
+    // Determine zoom direction
+    const zoomDirection = e.deltaY < 0 ? 1 : -1;
+
+    // Calculate new zoom level
+    const newZoomLevel = Math.max(
+      1,
+      Math.min(2.5, zoomLevel + zoomDirection * 0.1),
+    );
+
+    // Only update if zoom level changed
+    if (newZoomLevel !== zoomLevel) {
+      setZoomLevel(newZoomLevel);
+
+      // Reset position when zooming back to 1
+      if (newZoomLevel === 1) {
+        setImagePosition({ x: 0, y: 0 });
+      }
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomLevel > 1) {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+      // Change cursor style
+      if (containerRef.current) {
+        containerRef.current.style.cursor = "grabbing";
+      }
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging && zoomLevel > 1) {
+      const dx = e.clientX - dragStart.x;
+      const dy = e.clientY - dragStart.y;
+
+      setImagePosition({
+        x: imagePosition.x + dx / zoomLevel,
+        y: imagePosition.y + dy / zoomLevel,
+      });
+
+      setDragStart({ x: e.clientX, y: e.clientY });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    // Reset cursor style
+    if (containerRef.current) {
+      containerRef.current.style.cursor = "grab";
+    }
+  };
+
+  const resetZoom = () => {
+    setZoomLevel(1);
+    setImagePosition({ x: 0, y: 0 });
   };
 
   // Xác định media hiện tại để hiển thị
@@ -179,6 +504,20 @@ export default function MessageDetailDialog({
 
   const hasMultipleMedia =
     message.content.media && message.content.media.length > 1;
+
+  // Add zoom control functions
+  const zoomIn = () => {
+    const newZoomLevel = Math.min(2.5, zoomLevel + 0.25);
+    setZoomLevel(newZoomLevel);
+  };
+
+  const zoomOut = () => {
+    const newZoomLevel = Math.max(1, zoomLevel - 0.25);
+    setZoomLevel(newZoomLevel);
+    if (newZoomLevel === 1) {
+      setImagePosition({ x: 0, y: 0 });
+    }
+  };
 
   // Sử dụng createPortal để render dialog trực tiếp vào body
   return createPortal(
@@ -349,16 +688,35 @@ export default function MessageDetailDialog({
           {currentMedia && (
             <>
               {currentMedia.type === "IMAGE" ? (
-                <div className="relative max-h-full max-w-full w-auto h-auto">
+                <div
+                  ref={containerRef}
+                  className="relative max-h-full max-w-full w-auto h-auto overflow-hidden"
+                  onWheel={handleWheel}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                  style={{ cursor: zoomLevel > 1 ? "grab" : "default" }}
+                >
                   <Image
-                    src={currentMedia.url}
+                    ref={imageRef}
+                    src={currentMedia.url || "/placeholder.svg"}
                     alt={currentMedia.fileName}
-                    className="object-contain max-h-[80vh] w-auto h-auto"
+                    className="object-contain max-h-[80vh] w-auto h-auto transition-transform duration-100"
                     width={1200}
                     height={800}
                     unoptimized
-                    style={{ maxWidth: "90vw" }}
+                    style={{
+                      maxWidth: "90vw",
+                      transform: `scale(${zoomLevel}) translate(${imagePosition.x}px, ${imagePosition.y}px)`,
+                      transformOrigin: "center",
+                    }}
                   />
+                  {zoomLevel > 1 && (
+                    <div className="absolute top-4 right-4 text-white text-[10px] px-2 py-0.5 rounded drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]">
+                      {Math.round(zoomLevel * 100)}%
+                    </div>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -367,6 +725,16 @@ export default function MessageDetailDialog({
                   >
                     <Download className="h-5 w-5" />
                   </Button>
+                  {zoomLevel > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute bottom-4 left-4 bg-white/20 text-white hover:bg-white/40 rounded-full"
+                      onClick={resetZoom}
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
+                  )}
                 </div>
               ) : currentMedia.type === "VIDEO" ? (
                 <div className="relative max-h-full max-w-full w-auto h-auto">
@@ -386,59 +754,68 @@ export default function MessageDetailDialog({
                   </Button>
                 </div>
               ) : (
-                <div className="bg-white p-8 rounded-lg">
-                  <div className="flex flex-col items-center">
-                    <div className="mb-4 p-4 bg-gray-100 rounded-full">
-                      {currentMedia.metadata.extension === "pdf" ? (
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="48"
-                          height="48"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                          <polyline points="14 2 14 8 20 8" />
-                          <path d="M9 15v-1h6v1" />
-                          <path d="M9 18v-1h6v1" />
-                          <path d="M9 12v-1h6v1" />
-                        </svg>
-                      ) : (
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="48"
-                          height="48"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                          <polyline points="14 2 14 8 20 8" />
-                        </svg>
-                      )}
+                <div className="bg-white rounded-lg max-w-5xl w-full max-h-[80vh] flex flex-col overflow-hidden">
+                  {/* Clean header with file info and download button */}
+                  <div className="p-3 border-b flex items-center justify-between bg-gray-50">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0">
+                        {getFileIcon(currentMedia.metadata.extension, 24)}
+                      </div>
+                      <div className="truncate">
+                        <h3 className="font-medium text-base truncate max-w-[300px]">
+                          {currentMedia.fileName}
+                        </h3>
+                        <p className="text-xs text-gray-500">
+                          {currentMedia.metadata.sizeFormatted}
+                        </p>
+                      </div>
                     </div>
-                    <h3 className="text-lg font-medium mb-1">
-                      {currentMedia.fileName}
-                    </h3>
-                    <p className="text-sm text-gray-500 mb-4">
-                      {currentMedia.metadata.sizeFormatted}
-                    </p>
                     <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() =>
                         currentMedia && handleDownload(currentMedia)
                       }
-                      className="flex items-center gap-2"
+                      className="flex items-center gap-1.5"
                     >
                       <Download className="h-4 w-4" />
                       <span>Tải xuống</span>
                     </Button>
+                  </div>
+
+                  {/* Content area */}
+                  <div className="flex-1 overflow-auto min-h-[300px] max-h-[calc(80vh-60px)]">
+                    {currentMedia.metadata.extension === "pdf" ? (
+                      <iframe
+                        src={`${currentMedia.url}#toolbar=0`}
+                        className="w-full h-full min-h-[500px] border-0"
+                        title={currentMedia.fileName}
+                      />
+                    ) : isOfficeDocument(currentMedia.metadata.extension) ? (
+                      <iframe
+                        src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(currentMedia.url)}`}
+                        className="w-full h-full min-h-[500px] border-0"
+                        title={currentMedia.fileName}
+                      />
+                    ) : isTextFile(currentMedia.metadata.extension) ? (
+                      <div className="p-4 font-mono text-sm whitespace-pre-wrap h-full overflow-auto">
+                        {fileContent || (
+                          <div className="flex items-center justify-center h-full">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                        <div className="mb-4 p-6 bg-gray-50 rounded-full">
+                          {getFileIcon(currentMedia.metadata.extension, 64)}
+                        </div>
+                        <p className="text-gray-500 mb-4">
+                          Không thể hiển thị trực tiếp tệp này. Vui lòng tải
+                          xuống để xem.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -487,7 +864,7 @@ export default function MessageDetailDialog({
                         HD
                       </div>
                       <Image
-                        src={media.url}
+                        src={media.url || "/placeholder.svg"}
                         alt={media.fileName}
                         className="object-cover w-full h-full"
                         width={150}
@@ -503,7 +880,7 @@ export default function MessageDetailDialog({
                       <div className="w-full h-full bg-gray-800 flex items-center justify-center relative">
                         {media.thumbnailUrl ? (
                           <Image
-                            src={media.thumbnailUrl}
+                            src={media.thumbnailUrl || "/placeholder.svg"}
                             alt={media.fileName}
                             className="object-cover w-full h-full"
                             width={150}
@@ -524,20 +901,7 @@ export default function MessageDetailDialog({
                       <div className="absolute top-1 left-1 z-10 bg-black/50 text-white text-xs px-1 py-0.5 rounded">
                         HD
                       </div>
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="32"
-                        height="32"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                        <polyline points="14 2 14 8 20 8" />
-                      </svg>
+                      {getFileIcon(media.metadata.extension, 32)}
                       <span className="text-xs mt-1 text-center truncate w-full">
                         {media.fileName}
                       </span>
@@ -546,13 +910,6 @@ export default function MessageDetailDialog({
                 </div>
               ))}
           </div>
-        </div>
-      )}
-
-      {/* Phần nội dung tin nhắn */}
-      {message.content.text && (
-        <div className="p-4 bg-white shadow-md mb-4 mx-auto rounded-lg max-w-4xl">
-          <p className="text-gray-800 font-medium">{message.content.text}</p>
         </div>
       )}
 
@@ -597,23 +954,102 @@ export default function MessageDetailDialog({
       </div>
 
       {/* Thanh cuộn bên phải */}
-      <div className="fixed right-0 top-1/2 -translate-y-1/2 bg-black/30 rounded-l-md p-1 flex flex-col gap-1 z-50">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-white hover:bg-white/10 rounded-full h-8 w-8"
-        >
-          <ChevronUp className="h-4 w-4" />
-        </Button>
-        <div className="w-1 h-20 bg-white/20 rounded-full mx-auto"></div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-white hover:bg-white/10 rounded-full h-8 w-8"
-        >
-          <ChevronDown className="h-4 w-4" />
-        </Button>
-      </div>
+      {currentMedia && currentMedia.type === "IMAGE" && (
+        <div className="fixed right-0 top-1/2 -translate-y-1/2 bg-black/30 rounded-l-md p-1 flex flex-col gap-1 z-50">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 rounded-full h-8 w-8"
+            onClick={zoomIn}
+          >
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <div className="w-1 h-20 bg-white/20 rounded-full mx-auto relative">
+            <div
+              className="w-1 bg-white rounded-full absolute bottom-0"
+              style={{
+                height: `${((zoomLevel - 1) / 1.5) * 100}%`,
+                maxHeight: "100%",
+              }}
+            ></div>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 rounded-full h-8 w-8"
+            onClick={zoomOut}
+          >
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      {/* Thumbnails at bottom */}
+      {hasMultipleMedia && !showGrid && (
+        <div className="absolute bottom-16 left-0 right-0 flex justify-center overflow-x-auto py-2 px-4 bg-black/40">
+          <div className="flex gap-2 max-w-full">
+            {message.content.media?.map((media, index) => (
+              <div
+                key={media.fileId}
+                className={`relative cursor-pointer transition-all ${
+                  index === currentMediaIndex
+                    ? "border-2 border-white scale-110 z-10"
+                    : "border border-white/30 opacity-70 hover:opacity-100"
+                }`}
+                onClick={() => {
+                  setCurrentMediaIndex(index);
+                  resetZoom();
+                }}
+              >
+                {media.type === "IMAGE" ? (
+                  <Image
+                    src={media.url || "/placeholder.svg"}
+                    alt={media.fileName}
+                    className="object-cover w-14 h-14"
+                    width={56}
+                    height={56}
+                    unoptimized
+                  />
+                ) : media.type === "VIDEO" ? (
+                  <div className="w-14 h-14 bg-gray-800 flex items-center justify-center">
+                    {media.thumbnailUrl ? (
+                      <Image
+                        src={media.thumbnailUrl || "/placeholder.svg"}
+                        alt={media.fileName}
+                        className="object-cover w-full h-full"
+                        width={56}
+                        height={56}
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center w-full h-full">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-white"
+                        >
+                          <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="w-14 h-14 bg-gray-100 flex items-center justify-center">
+                    {getFileIcon(media.metadata.extension, 20)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   );
