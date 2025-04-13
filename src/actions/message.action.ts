@@ -306,3 +306,208 @@ export async function deleteMessageForSelf(messageId: string) {
     };
   }
 }
+
+/**
+ * Lấy danh sách cuộc trò chuyện
+ * @param page Số trang (mặc định là 1)
+ * @param limit Số lượng cuộc trò chuyện trên mỗi trang (mặc định là 20)
+ * @returns Danh sách cuộc trò chuyện và tổng số cuộc trò chuyện
+ */
+export async function getConversations(page: number = 1, limit: number = 20) {
+  try {
+    const response = await axiosInstance.get("/messages/conversations", {
+      params: { page, limit },
+    });
+
+    return {
+      success: true,
+      conversations: response.data.conversations,
+      totalCount: response.data.totalCount,
+    };
+  } catch (error) {
+    console.error("Get conversations failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Chuyển tiếp tin nhắn đến người dùng hoặc nhóm khác
+ * @param messageId ID của tin nhắn cần chuyển tiếp
+ * @param recipients Danh sách người nhận (có thể là USER hoặc GROUP)
+ * @returns Thông tin về các tin nhắn đã chuyển tiếp
+ */
+export async function forwardMessage(
+  messageId: string,
+  recipients: Array<{ type: "USER" | "GROUP"; id: string }>,
+) {
+  try {
+    const response = await axiosInstance.post("/messages/forward", {
+      messageId,
+      recipients,
+    });
+
+    return {
+      success: true,
+      forwardedMessages: response.data,
+    };
+  } catch (error) {
+    console.error("Forward message failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Gửi tin nhắn cho nhóm
+ * @param groupId ID của nhóm
+ * @param text Nội dung tin nhắn (text)
+ * @returns Thông tin tin nhắn đã gửi
+ */
+export async function sendGroupTextMessage(groupId: string, text: string) {
+  try {
+    const response = await axiosInstance.post("/messages/group", {
+      groupId,
+      content: { text },
+    });
+
+    const message = response.data as Message;
+    return { success: true, message };
+  } catch (error: unknown) {
+    const axiosError = error as AxiosError;
+    console.error("Send group text message failed:", {
+      error: axiosError.message,
+      status: axiosError.response?.status,
+      data: axiosError.response?.data,
+    });
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Gửi tin nhắn có hình ảnh cho nhóm
+ * @param groupId ID của nhóm
+ * @param text Nội dung tin nhắn (text)
+ * @param files Danh sách file hình ảnh
+ * @returns Thông tin tin nhắn đã gửi
+ */
+export async function sendGroupMediaMessage(
+  groupId: string,
+  text: string,
+  files: File[],
+) {
+  try {
+    const formData = new FormData();
+    formData.append("groupId", groupId);
+    formData.append("content[text]", text);
+
+    // Thêm các file vào formData
+    files.forEach((file) => {
+      formData.append("files", file);
+    });
+
+    const response = await axiosInstance.post("/messages/group", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    const message = response.data as Message;
+    return { success: true, message };
+  } catch (error) {
+    console.error("Send group media message failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Lấy tin nhắn trong nhóm
+ * @param groupId ID của nhóm
+ * @param page Số trang (mặc định là 1)
+ * @returns Danh sách tin nhắn
+ */
+export async function getGroupMessages(groupId: string, page: number = 1) {
+  try {
+    const response = await axiosInstance.get(`/messages/group/${groupId}`, {
+      params: { page },
+    });
+    const messages = response.data as Message[];
+    return { success: true, messages };
+  } catch (error) {
+    console.error("Get group messages failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Tìm kiếm tin nhắn trong cuộc trò chuyện cá nhân
+ * @param receiverId ID của người nhận
+ * @param searchText Nội dung tìm kiếm
+ * @param page Số trang (mặc định là 1)
+ * @returns Danh sách tin nhắn tìm thấy
+ */
+export async function searchMessagesWithUser(
+  receiverId: string,
+  searchText: string,
+  page: number = 1,
+) {
+  try {
+    const response = await axiosInstance.get(
+      `/messages/user/${receiverId}/search`,
+      {
+        params: { searchText, page },
+      },
+    );
+    const messages = response.data as Message[];
+    return { success: true, messages };
+  } catch (error) {
+    console.error("Search messages with user failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Tìm kiếm tin nhắn trong nhóm
+ * @param groupId ID của nhóm
+ * @param searchText Nội dung tìm kiếm
+ * @param page Số trang (mặc định là 1)
+ * @returns Danh sách tin nhắn tìm thấy
+ */
+export async function searchGroupMessages(
+  groupId: string,
+  searchText: string,
+  page: number = 1,
+) {
+  try {
+    const response = await axiosInstance.get(
+      `/messages/group/${groupId}/search`,
+      {
+        params: { searchText, page },
+      },
+    );
+    const messages = response.data as Message[];
+    return { success: true, messages };
+  } catch (error) {
+    console.error("Search group messages failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}

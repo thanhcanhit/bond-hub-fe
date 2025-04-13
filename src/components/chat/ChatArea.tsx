@@ -11,6 +11,8 @@ import { formatMessageDate } from "@/utils/dateUtils";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { getUserDataById } from "@/actions/user.action";
+import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 
 interface ChatAreaProps {
   currentUser: User;
@@ -24,6 +26,10 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     replyingTo,
     selectedMessage,
     isDialogOpen,
+    searchText,
+    searchResults,
+    isSearching,
+    clearSearch,
     setReplyingTo,
     setSelectedMessage,
     setIsDialogOpen,
@@ -157,6 +163,77 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
 
   const messageGroups = groupMessagesByDate();
 
+  // Process messages or search results for display
+  const renderMessageContent = () => {
+    // If we're searching, display search results
+    if (searchText && searchResults.length > 0) {
+      return (
+        <div className="mb-4">
+          <div className="sticky top-0 bg-blue-50 p-2 rounded-md flex justify-between items-center mb-4 z-10">
+            <div className="text-sm text-blue-700">
+              Kết quả tìm kiếm: {searchResults.length} tin nhắn
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-blue-700 hover:bg-blue-100"
+              onClick={clearSearch}
+            >
+              <X className="h-4 w-4 mr-1" />
+              Đóng
+            </Button>
+          </div>
+
+          {processMessagesForDisplay(searchResults).map(
+            ({ message, isCurrentUser, showAvatar }) => (
+              <MessageItem
+                key={message.id}
+                message={message}
+                isCurrentUser={isCurrentUser}
+                showAvatar={showAvatar}
+                onReply={handleReply}
+                onMessageClick={handleMessageClick}
+                highlight={searchText}
+              />
+            ),
+          )}
+        </div>
+      );
+    }
+
+    // Otherwise show normal messages grouped by date
+    return messageGroups.length > 0 ? (
+      messageGroups.map((group, groupIndex) => (
+        <div key={groupIndex} className="mb-4">
+          <div className="flex justify-center mb-4">
+            <div className="bg-white px-3 py-1 rounded-full text-xs text-gray-500 shadow-sm">
+              {group.date}
+            </div>
+          </div>
+
+          {processMessagesForDisplay(group.messages).map(
+            ({ message, isCurrentUser, showAvatar }) => (
+              <MessageItem
+                key={message.id}
+                message={message}
+                isCurrentUser={isCurrentUser}
+                showAvatar={showAvatar}
+                onReply={handleReply}
+                onMessageClick={handleMessageClick}
+              />
+            ),
+          )}
+        </div>
+      ))
+    ) : (
+      <div className="h-full flex items-center justify-center">
+        <p className="text-gray-500">
+          Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!
+        </p>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full w-full">
       <ChatHeader contact={selectedContact} onToggleInfo={onToggleInfo} />
@@ -166,36 +243,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
       >
         <div className="overflow-y-auto overflow-x-hidden bg-gray-50 p-4 custom-scrollbar h-full">
           {selectedContact ? (
-            messageGroups.length > 0 ? (
-              messageGroups.map((group, groupIndex) => (
-                <div key={groupIndex} className="mb-4">
-                  <div className="flex justify-center mb-4">
-                    <div className="bg-white px-3 py-1 rounded-full text-xs text-gray-500 shadow-sm">
-                      {group.date}
-                    </div>
-                  </div>
-
-                  {processMessagesForDisplay(group.messages).map(
-                    ({ message, isCurrentUser, showAvatar }) => (
-                      <MessageItem
-                        key={message.id}
-                        message={message}
-                        isCurrentUser={isCurrentUser}
-                        showAvatar={showAvatar}
-                        onReply={handleReply}
-                        onMessageClick={handleMessageClick}
-                      />
-                    ),
-                  )}
-                </div>
-              ))
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <p className="text-gray-500">
-                  Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!
-                </p>
-              </div>
-            )
+            renderMessageContent()
           ) : (
             <div className="h-full flex items-center justify-center">
               <p className="text-gray-500">
@@ -209,7 +257,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
 
       <MessageInput
         onSendMessage={handleSendMessage}
-        disabled={!selectedContact}
+        disabled={!selectedContact || isSearching}
         replyingTo={replyingTo}
         onCancelReply={handleCancelReply}
       />

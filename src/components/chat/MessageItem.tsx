@@ -151,6 +151,7 @@ interface MessageItemProps {
   showAvatar?: boolean;
   onReply?: (message: Message) => void;
   onMessageClick?: (message: Message) => void;
+  highlight?: string;
 }
 
 export default function MessageItem({
@@ -159,6 +160,7 @@ export default function MessageItem({
   showAvatar = true,
   onReply,
   onMessageClick,
+  highlight,
 }: MessageItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const formattedTime = formatMessageTime(message.createdAt);
@@ -213,6 +215,37 @@ export default function MessageItem({
   const handleMessageClick = () => {
     if (onMessageClick) {
       onMessageClick(message);
+    }
+  };
+
+  // Function to highlight search text in message content
+  const renderHighlightedText = (text: string, searchText: string) => {
+    if (!searchText || !text) return text;
+
+    try {
+      // Use case-insensitive regex to find matches
+      const regex = new RegExp(
+        `(${searchText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+        "gi",
+      );
+
+      // Split the text by matches
+      const parts = text.split(regex);
+
+      return parts.map((part, i) => {
+        // Check if this part matches the search term
+        if (part.toLowerCase() === searchText.toLowerCase()) {
+          return (
+            <span key={i} className="bg-yellow-200 px-0.5 rounded">
+              {part}
+            </span>
+          );
+        }
+        return part;
+      });
+    } catch {
+      // If any error in regex, return plain text
+      return text;
     }
   };
 
@@ -363,12 +396,19 @@ export default function MessageItem({
             onClick={!message.recalled ? handleMessageClick : undefined}
           >
             {message.recalled ? (
-              <p className="flex items-center gap-1">
-                <RotateCcw className="h-3 w-3" />
-                <span>Tin nhắn đã được thu hồi</span>
-              </p>
+              <div className="flex items-center italic text-sm text-gray-500">
+                <RotateCcw className="h-3 w-3 mr-1" />
+                Tin nhắn đã bị thu hồi
+              </div>
             ) : (
-              <p className="break-words">{message.content.text}</p>
+              <div className="text-sm">
+                {highlight
+                  ? renderHighlightedText(
+                      message.content.text || "",
+                      highlight || "",
+                    )
+                  : message.content.text}
+              </div>
             )}
           </div>
         )}

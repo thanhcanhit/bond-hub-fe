@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { User, UserInfo, Message } from "@/types/base";
+import { User, UserInfo, Message, Media } from "@/types/base";
 import { getAllUsers, getUserDataById } from "@/actions/user.action";
+import { getConversations } from "@/actions/message.action";
 
 // Helper function to sort conversations by lastActivity (newest first)
 const sortConversationsByActivity = (conversations: Conversation[]) => {
@@ -31,6 +32,40 @@ export interface Conversation {
   lastMessage?: Message;
   unreadCount: number;
   lastActivity: Date;
+  type: string;
+}
+
+// Define the API conversation interface
+interface ApiConversation {
+  id: string;
+  type: "USER" | "GROUP";
+  user?: {
+    id: string;
+    fullName: string;
+    profilePictureUrl?: string | null;
+    statusMessage?: string | null;
+    lastSeen?: string | null;
+  };
+  group?: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+    createdAt?: string;
+  };
+  lastMessage?: {
+    id: string;
+    content: {
+      text?: string;
+      media?: Media[]; // Using Media type from base.ts
+    };
+    senderId: string;
+    senderName: string;
+    createdAt: string;
+    recalled: boolean;
+    isRead: boolean;
+  };
+  unreadCount: number;
+  updatedAt: string;
 }
 
 interface ConversationsState {
@@ -83,99 +118,227 @@ export const useConversationsStore = create<ConversationsState>()(
       loadConversations: async (currentUserId) => {
         set({ isLoading: true });
         try {
-          const result = await getAllUsers();
-          if (result.success && result.users) {
-            // Filter out current user
-            const filteredUsers = result.users.filter(
-              (user) => user.id !== currentUserId,
-            );
+          // Use the new API endpoint to get conversations
+          const result = await getConversations(1, 50);
 
-            // Create initial conversations with basic info
-            const conversations = filteredUsers.map((user) => ({
-              contact: {
-                ...user,
-                userInfo: user.userInfo
-                  ? {
-                      ...user.userInfo,
-                      // Ensure fullName is set properly
-                      fullName:
-                        user.userInfo.fullName ||
-                        extractNameFromEmail(user.email) ||
-                        user.phoneNumber ||
-                        "Unknown",
-                    }
-                  : {
-                      id: user.id,
-                      fullName:
-                        extractNameFromEmail(user.email) ||
-                        user.phoneNumber ||
-                        "Unknown",
-                      profilePictureUrl: null,
-                      statusMessage: "No status",
-                      blockStrangers: false,
-                      createdAt: new Date(),
-                      updatedAt: new Date(),
-                      userAuth: user,
-                    },
-              },
-              lastMessage: undefined,
-              unreadCount: 0,
-              lastActivity: new Date(),
-            }));
+          if (result.success && result.conversations) {
+            // Format conversations from API response
+            const formattedConversations = result.conversations
+              .map((conv: ApiConversation) => {
+                const isUserConversation = conv.type === "USER";
 
-            // Sort conversations by lastActivity
-            const sortedConversations =
-              sortConversationsByActivity(conversations);
-            set({ conversations: sortedConversations });
-
-            // Fetch detailed user info for each contact in the background
-            filteredUsers.forEach(async (user) => {
-              try {
-                const userResult = await getUserDataById(user.id);
-                if (userResult.success && userResult.user) {
-                  // Update the conversation with complete user data
-                  const updatedUser = userResult.user;
-
-                  // Ensure userInfo exists
-                  if (!updatedUser.userInfo) {
-                    updatedUser.userInfo = {
-                      id: updatedUser.id,
-                      fullName:
-                        extractNameFromEmail(updatedUser.email) ||
-                        updatedUser.phoneNumber ||
-                        "Unknown",
-                      profilePictureUrl: null,
-                      statusMessage: "No status",
-                      blockStrangers: false,
-                      createdAt: new Date(),
-                      updatedAt: new Date(),
-                      userAuth: updatedUser,
-                    };
-                  }
-
-                  // Update the conversation with the complete user data
-                  set((state) => {
-                    const updatedConversations = state.conversations.map(
-                      (conv) =>
-                        conv.contact.id === updatedUser.id
-                          ? {
-                              ...conv,
-                              contact: updatedUser as User & {
-                                userInfo: UserInfo;
-                              },
-                            }
-                          : conv,
-                    );
-                    return { conversations: updatedConversations };
-                  });
+                if (isUserConversation && conv.user) {
+                  return {
+                    contact: {
+                      id: conv.user.id,
+                      userInfo: {
+                        id: conv.user.id,
+                        fullName: conv.user.fullName || "Unknown",
+                        profilePictureUrl: conv.user.profilePictureUrl || null,
+                        statusMessage: conv.user.statusMessage || null,
+                        lastSeen: conv.user.lastSeen
+                          ? new Date(conv.user.lastSeen)
+                          : null,
+                        blockStrangers: false,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                        userAuth: { id: conv.user.id },
+                      },
+                    } as User & { userInfo: UserInfo },
+                    // Convert the simplified lastMessage to our Message format
+                    lastMessage: conv.lastMessage
+                      ? ({
+                          id: conv.lastMessage.id,
+                          content: {
+                            text: conv.lastMessage.content.text,
+                            media: conv.lastMessage.content.media,
+                          },
+                          senderId: conv.lastMessage.senderId,
+                          sender: {
+                            id: conv.lastMessage.senderId,
+                            userInfo: {
+                              id: conv.lastMessage.senderId,
+                              fullName: conv.lastMessage.senderName,
+                              createdAt: new Date(),
+                              updatedAt: new Date(),
+                              blockStrangers: false,
+                              userAuth: { id: conv.lastMessage.senderId },
+                            },
+                          } as User,
+                          recalled: conv.lastMessage.recalled,
+                          readBy: conv.lastMessage.isRead
+                            ? [currentUserId]
+                            : [],
+                          deletedBy: [],
+                          reactions: [],
+                          createdAt: new Date(conv.lastMessage.createdAt),
+                          updatedAt: new Date(conv.lastMessage.createdAt),
+                        } as Message)
+                      : undefined,
+                    unreadCount: conv.unreadCount || 0,
+                    lastActivity: new Date(conv.updatedAt),
+                    type: conv.type,
+                  };
+                } else if (!isUserConversation && conv.group) {
+                  return {
+                    contact: {
+                      id: conv.group.id,
+                      userInfo: {
+                        id: conv.group.id,
+                        fullName: conv.group.name,
+                        profilePictureUrl: conv.group.avatarUrl,
+                        statusMessage: null,
+                        blockStrangers: false,
+                        createdAt: conv.group.createdAt
+                          ? new Date(conv.group.createdAt)
+                          : new Date(),
+                        updatedAt: new Date(),
+                        userAuth: { id: conv.group.id },
+                      },
+                    } as User & { userInfo: UserInfo },
+                    lastMessage: conv.lastMessage
+                      ? ({
+                          id: conv.lastMessage.id,
+                          content: {
+                            text: conv.lastMessage.content.text,
+                            media: conv.lastMessage.content.media,
+                          },
+                          senderId: conv.lastMessage.senderId,
+                          sender: {
+                            id: conv.lastMessage.senderId,
+                            userInfo: {
+                              id: conv.lastMessage.senderId,
+                              fullName: conv.lastMessage.senderName,
+                              createdAt: new Date(),
+                              updatedAt: new Date(),
+                              blockStrangers: false,
+                              userAuth: { id: conv.lastMessage.senderId },
+                            },
+                          } as User,
+                          recalled: conv.lastMessage.recalled,
+                          readBy: conv.lastMessage.isRead
+                            ? [currentUserId]
+                            : [],
+                          deletedBy: [],
+                          reactions: [],
+                          createdAt: new Date(conv.lastMessage.createdAt),
+                          updatedAt: new Date(conv.lastMessage.createdAt),
+                        } as Message)
+                      : undefined,
+                    unreadCount: conv.unreadCount || 0,
+                    lastActivity: new Date(conv.updatedAt),
+                    type: conv.type,
+                  };
+                } else {
+                  // This shouldn't happen with valid data, but provide a fallback
+                  return null;
                 }
-              } catch (error) {
-                console.error(
-                  `Error fetching detailed info for user ${user.id}:`,
-                  error,
-                );
-              }
+              })
+              .filter(Boolean) as Conversation[]; // Filter out any null values
+
+            set({
+              conversations: sortConversationsByActivity(
+                formattedConversations,
+              ),
+              isLoading: false,
             });
+          } else {
+            // Fallback to old method if the new API fails
+            const result = await getAllUsers();
+            if (result.success && result.users) {
+              // Filter out current user
+              const filteredUsers = result.users.filter(
+                (user) => user.id !== currentUserId,
+              );
+
+              // Create initial conversations with basic info
+              const conversations = filteredUsers.map((user) => ({
+                contact: {
+                  ...user,
+                  userInfo: user.userInfo
+                    ? {
+                        ...user.userInfo,
+                        // Ensure fullName is set properly
+                        fullName:
+                          user.userInfo.fullName ||
+                          extractNameFromEmail(user.email) ||
+                          user.phoneNumber ||
+                          "Unknown",
+                      }
+                    : {
+                        id: user.id,
+                        fullName:
+                          extractNameFromEmail(user.email) ||
+                          user.phoneNumber ||
+                          "Unknown",
+                        profilePictureUrl: null,
+                        statusMessage: "No status",
+                        blockStrangers: false,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                        userAuth: user,
+                      },
+                },
+                lastMessage: undefined,
+                unreadCount: 0,
+                lastActivity: new Date(),
+                type: "USER",
+              }));
+
+              // Sort conversations by lastActivity
+              const sortedConversations =
+                sortConversationsByActivity(conversations);
+              set({ conversations: sortedConversations });
+
+              // Fetch detailed user info for each contact in the background
+              filteredUsers.forEach(async (user) => {
+                try {
+                  const userResult = await getUserDataById(user.id);
+                  if (userResult.success && userResult.user) {
+                    // Update the conversation with complete user data
+                    const updatedUser = userResult.user;
+
+                    // Ensure userInfo exists
+                    if (!updatedUser.userInfo) {
+                      updatedUser.userInfo = {
+                        id: updatedUser.id,
+                        fullName:
+                          extractNameFromEmail(updatedUser.email) ||
+                          updatedUser.phoneNumber ||
+                          "Unknown",
+                        profilePictureUrl: null,
+                        statusMessage: "No status",
+                        blockStrangers: false,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                        userAuth: updatedUser,
+                      };
+                    }
+
+                    // Update the conversation with the complete user data
+                    set((state) => {
+                      const updatedConversations = state.conversations.map(
+                        (conv) =>
+                          conv.contact.id === updatedUser.id
+                            ? {
+                                ...conv,
+                                contact: updatedUser as User & {
+                                  userInfo: UserInfo;
+                                },
+                              }
+                            : conv,
+                      );
+                      return { conversations: updatedConversations };
+                    });
+                  }
+                } catch (error) {
+                  console.error(
+                    `Error fetching detailed info for user ${user.id}:`,
+                    error,
+                  );
+                }
+              });
+            }
           }
         } catch (error) {
           console.error("Error loading conversations:", error);

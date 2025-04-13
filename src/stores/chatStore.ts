@@ -1,25 +1,38 @@
 import { create } from "zustand";
-import { Message, MessageType, User, UserInfo } from "@/types/base";
+import { Group, Message, MessageType, User, UserInfo } from "@/types/base";
 import {
   getMessagesBetweenUsers,
+  getGroupMessages,
   sendTextMessage,
   sendMediaMessage,
+  sendGroupTextMessage,
+  sendGroupMediaMessage,
   recallMessage,
   deleteMessageForSelf,
+  forwardMessage,
+  searchMessagesWithUser,
+  searchGroupMessages,
 } from "@/actions/message.action";
 
 interface ChatState {
   // Current chat state
   messages: Message[];
   selectedContact: (User & { userInfo: UserInfo }) | null;
+  selectedGroup: Group | null;
+  currentChatType: "USER" | "GROUP" | null;
   replyingTo: Message | null;
   selectedMessage: Message | null;
   isDialogOpen: boolean;
   isLoading: boolean;
+  isForwarding: boolean;
+  searchText: string;
+  searchResults: Message[];
+  isSearching: boolean;
 
   // Actions
   setSelectedContact: (contact: (User & { userInfo: UserInfo }) | null) => void;
-  loadMessages: (contactId: string) => Promise<void>;
+  setSelectedGroup: (group: Group | null) => void;
+  loadMessages: (id: string, type: "USER" | "GROUP") => Promise<void>;
   sendMessage: (
     text: string,
     files?: File[],
@@ -30,6 +43,14 @@ interface ChatState {
   setIsDialogOpen: (isOpen: boolean) => void;
   recallMessageById: (messageId: string) => Promise<void>;
   deleteMessageById: (messageId: string) => Promise<void>;
+  forwardMessageToRecipients: (
+    messageId: string,
+    recipients: Array<{ type: "USER" | "GROUP"; id: string }>,
+  ) => Promise<boolean>;
+  setIsForwarding: (isForwarding: boolean) => void;
+  searchMessages: (searchText: string) => Promise<void>;
+  setSearchText: (text: string) => void;
+  clearSearch: () => void;
   addMessage: (message: Message) => void;
   updateMessage: (messageId: string, updatedMessage: Partial<Message>) => void;
   removeMessage: (messageId: string) => void;
@@ -40,109 +61,57 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Initial state
   messages: [],
   selectedContact: null,
+  selectedGroup: null,
+  currentChatType: null,
   replyingTo: null,
   selectedMessage: null,
   isDialogOpen: false,
   isLoading: false,
+  isForwarding: false,
+  searchText: "",
+  searchResults: [],
+  isSearching: false,
 
   // Actions
   setSelectedContact: (contact) => {
-    set({ selectedContact: contact });
+    set({
+      selectedContact: contact,
+      selectedGroup: null,
+      currentChatType: contact ? "USER" : null,
+    });
     if (contact) {
-      get().loadMessages(contact.id);
+      get().loadMessages(contact.id, "USER");
     } else {
       set({ messages: [] });
     }
   },
 
-  loadMessages: async (contactId) => {
+  setSelectedGroup: (group) => {
+    set({
+      selectedGroup: group,
+      selectedContact: null,
+      currentChatType: group ? "GROUP" : null,
+    });
+    if (group) {
+      get().loadMessages(group.id, "GROUP");
+    } else {
+      set({ messages: [] });
+    }
+  },
+
+  loadMessages: async (id, type) => {
     set({ isLoading: true });
     try {
-      const result = await getMessagesBetweenUsers(contactId);
+      let result;
+      if (type === "USER") {
+        result = await getMessagesBetweenUsers(id);
+      } else {
+        result = await getGroupMessages(id);
+      }
+
       if (result.success && result.messages) {
-        // Get current state
-        const { selectedContact } = get();
-        const currentUser = selectedContact;
-
-        // Process messages to ensure sender and receiver have userInfo
-        const processedMessages = result.messages.map((message) => {
-          // Create a copy of the message to avoid mutating the original
-          const processedMessage = { ...message };
-
-          // Ensure sender has userInfo
-          if (processedMessage.sender) {
-            // If sender is current user, always use current user's data
-            if (processedMessage.senderId === currentUser?.id) {
-              processedMessage.sender = { ...currentUser };
-            }
-            // If sender is selected contact, always use selected contact's data
-            else if (
-              selectedContact &&
-              processedMessage.senderId === selectedContact.id
-            ) {
-              processedMessage.sender = { ...selectedContact };
-            }
-            // If sender doesn't have userInfo
-            else if (!processedMessage.sender.userInfo) {
-              // Create a fallback userInfo
-              processedMessage.sender.userInfo = {
-                id: processedMessage.sender.id,
-                fullName:
-                  processedMessage.sender.email ||
-                  processedMessage.sender.phoneNumber ||
-                  "Unknown",
-                profilePictureUrl: null,
-                statusMessage: "No status",
-                blockStrangers: false,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                userAuth: processedMessage.sender,
-              };
-            }
-          }
-
-          // Ensure receiver has userInfo if it exists
-          if (
-            processedMessage.receiver &&
-            !processedMessage.receiver.userInfo
-          ) {
-            // If receiver is current user
-            if (
-              processedMessage.receiverId === currentUser?.id &&
-              currentUser?.userInfo
-            ) {
-              processedMessage.receiver.userInfo = currentUser.userInfo;
-            }
-            // If receiver is selected contact
-            else if (
-              processedMessage.receiverId === selectedContact?.id &&
-              selectedContact?.userInfo
-            ) {
-              processedMessage.receiver.userInfo = selectedContact.userInfo;
-            }
-            // Otherwise create a fallback userInfo
-            else {
-              processedMessage.receiver.userInfo = {
-                id: processedMessage.receiver.id,
-                fullName:
-                  processedMessage.receiver.email ||
-                  processedMessage.receiver.phoneNumber ||
-                  "Unknown",
-                profilePictureUrl: null,
-                statusMessage: "No status",
-                blockStrangers: false,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                userAuth: processedMessage.receiver,
-              };
-            }
-          }
-
-          return processedMessage;
-        });
-
-        // Sắp xếp tin nhắn theo thời gian tạo, từ cũ đến mới
-        const sortedMessages = [...processedMessages].sort((a, b) => {
+        // Sort messages chronologically
+        const sortedMessages = [...result.messages].sort((a, b) => {
           return (
             new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           );
@@ -161,17 +130,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (text, files, currentUser) => {
-    const { selectedContact } = get();
+    const { selectedContact, selectedGroup, currentChatType } = get();
 
     if (
-      !selectedContact ||
-      (!text.trim() && !files?.length) ||
       !currentUser ||
-      !currentUser.id
+      !currentUser.id ||
+      (!text.trim() && !files?.length) ||
+      !currentChatType
     ) {
-      console.error(
-        "Cannot send message: Missing contact, message text, or current user",
-      );
+      console.error("Cannot send message: Missing required data");
+      return;
+    }
+
+    const recipientId =
+      currentChatType === "USER" ? selectedContact?.id : selectedGroup?.id;
+
+    if (!recipientId) {
+      console.error("Cannot send message: No recipient selected");
       return;
     }
 
@@ -206,15 +181,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
       senderId: currentUser.id,
       sender: currentUser,
-      receiverId: selectedContact.id,
-      receiver: selectedContact,
+      receiverId: currentChatType === "USER" ? recipientId : undefined,
+      receiver: currentChatType === "USER" ? selectedContact : undefined,
+      groupId: currentChatType === "GROUP" ? recipientId : undefined,
+      group: currentChatType === "GROUP" ? selectedGroup : undefined,
       recalled: false,
       deletedBy: [],
       reactions: [],
       readBy: [],
       createdAt: new Date(),
       updatedAt: new Date(),
-      messageType: MessageType.USER,
+      messageType:
+        currentChatType === "USER" ? MessageType.USER : MessageType.GROUP,
       repliedTo: get().replyingTo?.id,
     };
 
@@ -227,12 +205,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       // Send message to API
       let result;
-      if (files && files.length > 0) {
-        // Use sendMediaMessage if we have files
-        result = await sendMediaMessage(selectedContact.id, text, files);
+      if (currentChatType === "USER") {
+        if (files && files.length > 0) {
+          // Use sendMediaMessage if we have files
+          result = await sendMediaMessage(recipientId, text, files);
+        } else {
+          // Use sendTextMessage if we only have text
+          result = await sendTextMessage(recipientId, text);
+        }
       } else {
-        // Use sendTextMessage if we only have text
-        result = await sendTextMessage(selectedContact.id, text);
+        if (files && files.length > 0) {
+          // Use sendGroupMediaMessage if we have files for group
+          result = await sendGroupMediaMessage(recipientId, text, files);
+        } else {
+          // Use sendGroupTextMessage if we only have text for group
+          result = await sendGroupTextMessage(recipientId, text);
+        }
       }
 
       if (result.success && result.message) {
@@ -250,6 +238,56 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (error) {
       console.error("Error sending message:", error);
     }
+  },
+
+  searchMessages: async (searchText) => {
+    const { selectedContact, selectedGroup, currentChatType } = get();
+    if (!searchText.trim() || !currentChatType) return;
+
+    const id =
+      currentChatType === "USER" ? selectedContact?.id : selectedGroup?.id;
+
+    if (!id) return;
+
+    set({ isSearching: true });
+
+    try {
+      let result;
+      if (currentChatType === "USER") {
+        result = await searchMessagesWithUser(id, searchText);
+      } else {
+        result = await searchGroupMessages(id, searchText);
+      }
+
+      if (result.success && result.messages) {
+        // Sort messages chronologically
+        const sortedMessages = [...result.messages].sort((a, b) => {
+          return (
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        });
+
+        set({ searchResults: sortedMessages });
+      } else {
+        set({ searchResults: [] });
+      }
+    } catch (error) {
+      console.error("Error searching messages:", error);
+      set({ searchResults: [] });
+    } finally {
+      set({ isSearching: false });
+    }
+  },
+
+  setSearchText: (text) => {
+    set({ searchText: text });
+    if (!text) {
+      set({ searchResults: [] });
+    }
+  },
+
+  clearSearch: () => {
+    set({ searchText: "", searchResults: [] });
   },
 
   setReplyingTo: (message) => {
@@ -292,6 +330,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  forwardMessageToRecipients: async (messageId, recipients) => {
+    set({ isLoading: true });
+    try {
+      const result = await forwardMessage(messageId, recipients);
+      set({ isForwarding: false });
+      return result.success;
+    } catch (error) {
+      console.error("Error forwarding message:", error);
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  setIsForwarding: (isForwarding) => {
+    set({ isForwarding });
+  },
+
   addMessage: (message) => {
     set((state) => ({ messages: [...state.messages, message] }));
   },
@@ -314,6 +370,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       messages: [],
       selectedContact: null,
+      selectedGroup: null,
+      currentChatType: null,
       replyingTo: null,
       selectedMessage: null,
       isDialogOpen: false,

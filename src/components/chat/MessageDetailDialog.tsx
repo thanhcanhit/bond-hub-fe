@@ -13,9 +13,18 @@ import {
   ChevronDown,
   Share2,
   ChevronUp,
+  Forward,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createPortal } from "react-dom";
+import { useChatStore } from "@/stores/chatStore";
+import { useConversationsStore } from "@/stores/conversationsStore";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { CheckCircle2 } from "lucide-react";
 
 interface MessageDetailDialogProps {
   message: Message | null;
@@ -31,6 +40,23 @@ export default function MessageDetailDialog({
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showGrid, setShowGrid] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isForwardMenuOpen, setIsForwardMenuOpen] = useState(false);
+  const [selectedRecipients, setSelectedRecipients] = useState<
+    Array<{ type: "USER" | "GROUP"; id: string; name: string }>
+  >([]);
+  const [forwardSuccess, setForwardSuccess] = useState(false);
+
+  const { forwardMessageToRecipients } = useChatStore();
+  const { conversations } = useConversationsStore();
+
+  // Reset states when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedRecipients([]);
+      setForwardSuccess(false);
+      setIsForwardMenuOpen(false);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     setMounted(true);
@@ -45,6 +71,43 @@ export default function MessageDetailDialog({
       document.body.style.overflow = "";
     };
   }, [isOpen]);
+
+  const handleForwardMessage = async () => {
+    if (!message || selectedRecipients.length === 0) return;
+
+    const recipients = selectedRecipients.map((recipient) => ({
+      type: recipient.type,
+      id: recipient.id,
+    }));
+
+    const success = await forwardMessageToRecipients(message.id, recipients);
+
+    if (success) {
+      setForwardSuccess(true);
+      // Auto close the forward menu after success
+      setTimeout(() => {
+        setIsForwardMenuOpen(false);
+        setSelectedRecipients([]);
+        setForwardSuccess(false);
+      }, 2000);
+    }
+  };
+
+  const toggleRecipient = (
+    type: "USER" | "GROUP",
+    id: string,
+    name: string,
+  ) => {
+    setSelectedRecipients((prev) => {
+      const exists = prev.some((r) => r.id === id && r.type === type);
+
+      if (exists) {
+        return prev.filter((r) => !(r.id === id && r.type === type));
+      } else {
+        return [...prev, { type, id, name }];
+      }
+    });
+  };
 
   if (!message || !mounted || !isOpen) return null;
 
@@ -148,6 +211,116 @@ export default function MessageDetailDialog({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Popover open={isForwardMenuOpen} onOpenChange={setIsForwardMenuOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/10 rounded-full h-8 w-8"
+              >
+                <Forward className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end">
+              {!forwardSuccess ? (
+                <div className="max-h-80 overflow-auto">
+                  <div className="p-3 border-b">
+                    <h3 className="font-medium">Chuyển tiếp tới</h3>
+                    {selectedRecipients.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {selectedRecipients.map((recipient) => (
+                          <div
+                            key={`${recipient.type}-${recipient.id}`}
+                            className="bg-blue-100 text-blue-800 text-xs rounded-full px-2 py-1 flex items-center gap-1"
+                          >
+                            <span>{recipient.name}</span>
+                            <button
+                              className="text-blue-600 hover:text-blue-800"
+                              onClick={() =>
+                                toggleRecipient(
+                                  recipient.type,
+                                  recipient.id,
+                                  recipient.name,
+                                )
+                              }
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="divide-y">
+                    {conversations.map((conversation) => (
+                      <div
+                        key={conversation.contact.id}
+                        className={`p-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer ${
+                          selectedRecipients.some(
+                            (r) => r.id === conversation.contact.id,
+                          )
+                            ? "bg-blue-50"
+                            : ""
+                        }`}
+                        onClick={() =>
+                          toggleRecipient(
+                            conversation.type as "USER" | "GROUP",
+                            conversation.contact.id,
+                            conversation.contact.userInfo?.fullName ||
+                              "Unknown",
+                          )
+                        }
+                      >
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage
+                              src={
+                                conversation.contact.userInfo
+                                  ?.profilePictureUrl || undefined
+                              }
+                            />
+                            <AvatarFallback>
+                              {conversation.contact.userInfo?.fullName
+                                ?.slice(0, 2)
+                                .toUpperCase() || "??"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="text-sm font-medium">
+                              {conversation.contact.userInfo?.fullName}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {conversation.type === "GROUP"
+                                ? "Nhóm"
+                                : "Người dùng"}
+                            </p>
+                          </div>
+                        </div>
+                        {selectedRecipients.some(
+                          (r) => r.id === conversation.contact.id,
+                        ) && <CheckCircle2 className="h-5 w-5 text-blue-600" />}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-3 border-t">
+                    <Button
+                      className="w-full"
+                      disabled={selectedRecipients.length === 0}
+                      onClick={handleForwardMessage}
+                    >
+                      Chuyển tiếp
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 text-center">
+                  <CheckCircle2 className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                  <p className="font-medium">Đã chuyển tiếp thành công!</p>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+
           <Button
             variant="ghost"
             size="icon"
