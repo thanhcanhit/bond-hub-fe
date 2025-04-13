@@ -1,4 +1,5 @@
 import { useAuthStore } from "@/stores/authStore";
+import { useFriendStore } from "@/stores/friendStore";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +37,7 @@ const NAV_ITEMS: { path: string; icon: IconType; label: string }[] = [
 
 function Sidebar() {
   const { logout: logoutFromStore, user } = useAuthStore();
+  const { unreadReceivedRequests } = useFriendStore();
   const router = useRouter();
   const pathname = usePathname();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -160,7 +162,17 @@ function Sidebar() {
                   className={`flex items-center justify-center text-white p-3 hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white ${isActive(item.path) ? "bg-[#0045b8]" : ""} [&_svg]:!size-7 !h-12 !w-12 !rounded-2sm`}
                   title={item.label}
                 >
-                  <item.icon size={40} />
+                  <div className="relative">
+                    <item.icon size={40} />
+                    {item.label === "Contacts" &&
+                      unreadReceivedRequests > 0 && (
+                        <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                          {unreadReceivedRequests > 9
+                            ? "9+"
+                            : unreadReceivedRequests}
+                        </div>
+                      )}
+                  </div>
                 </Button>
               </Link>
             </div>

@@ -1,6 +1,7 @@
 "use client";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useEffect } from "react";
 import { Users, UserPlus, UsersRound, UserRoundPlus } from "lucide-react";
+import { useFriendStore } from "@/stores/friendStore";
 
 type ContactSidebarProps = {
   activeTab: string;
@@ -21,16 +22,32 @@ const tabs = [
 
 // Use memo to prevent unnecessary re-renders
 function ContactSidebar({ activeTab, setActiveTab }: ContactSidebarProps) {
+  // Get unread friend requests count from store
+  const { unreadReceivedRequests, markFriendRequestsAsRead } = useFriendStore();
+
   // Memoize the tab click handler for each tab
   const handleTabClick = useMemo(() => {
     const handlers: Record<string, () => void> = {};
 
     tabs.forEach((tab) => {
-      handlers[tab.id] = () => setActiveTab(tab.id);
+      handlers[tab.id] = () => {
+        // If clicking on requests tab, mark requests as read
+        if (tab.id === "requests") {
+          markFriendRequestsAsRead();
+        }
+        setActiveTab(tab.id);
+      };
     });
 
     return handlers;
-  }, [setActiveTab]);
+  }, [setActiveTab, markFriendRequestsAsRead]);
+
+  // Mark requests as read when the component mounts with requests tab active
+  useEffect(() => {
+    if (activeTab === "requests") {
+      markFriendRequestsAsRead();
+    }
+  }, [activeTab, markFriendRequestsAsRead]);
 
   return (
     <div className="w-[300px] bg-white border-r flex flex-col h-full overflow-hidden">
@@ -43,9 +60,16 @@ function ContactSidebar({ activeTab, setActiveTab }: ContactSidebarProps) {
             }`}
             onClick={handleTabClick[tab.id]}
           >
-            <div className="flex items-center gap-2">
-              <tab.icon className="h-5 w-5" />
-              <span className="font-semibold text-sm">{tab.label}</span>
+            <div className="flex items-center gap-2 justify-between w-full">
+              <div className="flex items-center gap-2">
+                <tab.icon className="h-5 w-5" />
+                <span className="font-semibold text-sm">{tab.label}</span>
+              </div>
+              {tab.id === "requests" && unreadReceivedRequests > 0 && (
+                <div className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {unreadReceivedRequests > 9 ? "9+" : unreadReceivedRequests}
+                </div>
+              )}
             </div>
           </div>
         ))}
