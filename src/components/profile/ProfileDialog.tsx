@@ -92,8 +92,10 @@ export default function ProfileDialog({
 
   // Lấy các hàm từ stores
   const { acceptRequest, rejectRequest } = useFriendStore();
-  const { openChat } = useChatStore();
   const router = useRouter();
+
+  // Lấy hàm openChat từ chatStore
+  const { openChat } = useChatStore();
 
   // Lấy user từ store để luôn có dữ liệu mới nhất
   const storeUser = useAuthStore((state) => state.user);
@@ -620,11 +622,6 @@ export default function ProfileDialog({
                           if (user?.id) {
                             // Close the dialog
                             onOpenChange(false);
-
-                            // Show toast message
-                            toast.success(
-                              `Đang mở cuộc trò chuyện với ${user.userInfo?.fullName || "người dùng"}`,
-                            );
 
                             // Open the chat with this user
                             await openChat(user.id);

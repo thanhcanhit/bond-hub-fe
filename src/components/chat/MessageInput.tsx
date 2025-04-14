@@ -14,7 +14,9 @@ import {
   Trash2,
   AlertCircle,
   Music,
+  Mic,
 } from "lucide-react";
+import AudioRecorder from "./AudioRecorder";
 import { toast } from "sonner";
 import { Message } from "@/types/base";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
@@ -43,6 +45,7 @@ export default function MessageInput({
   >([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
@@ -533,80 +536,138 @@ export default function MessageInput({
           >
             <Paperclip className="h-5 w-5" />
           </Button>
-        </div>
 
-        {/* Input field and send button */}
-        <div
-          className={`flex items-center p-2 ${isDragging ? "bg-blue-50 border border-dashed border-blue-300 rounded-md" : ""}`}
-          ref={inputContainerRef}
-        >
-          <div className="flex-1 relative">
-            <textarea
-              ref={textareaRef}
-              placeholder={
-                disabled ? "Chọn một cuộc trò chuyện" : "Nhập tin nhắn..."
-              }
-              className="w-full p-2 pl-3 pr-10 rounded-md focus:outline-none focus:ring-none resize-none overflow-auto"
-              value={message}
-              onChange={(e) => {
-                setMessage(e.target.value);
-                // Điều chỉnh chiều cao sau khi nội dung thay đổi
-                setTimeout(adjustTextareaHeight, 0);
-                // Send typing indicator
-                handleTyping();
-              }}
-              onKeyDown={handleKeyDown}
-              disabled={disabled}
-              rows={1}
-              style={{ maxHeight: "100px", minHeight: "40px" }}
-            />
-
-            <div className="absolute right-2 top-1/2 -translate-y-1/2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`h-7 w-7 rounded-full ${showEmojiPicker ? "text-blue-500" : "text-gray-500"} hover:text-blue-500 hover:bg-transparent`}
-                disabled={disabled}
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                ref={emojiButtonRef}
-              >
-                <Smile className="h-5 w-5" />
-              </Button>
-            </div>
-
-            {showEmojiPicker && (
-              <div
-                className="absolute bottom-12 right-0 z-50 shadow-lg rounded-lg overflow-hidden transition-all duration-200 transform origin-bottom-right"
-                ref={emojiPickerRef}
-              >
-                <EmojiPicker
-                  onEmojiClick={handleEmojiClick}
-                  width={320}
-                  height={400}
-                  searchPlaceHolder="Tìm kiếm emoji..."
-                  previewConfig={{ showPreview: false }}
-                  lazyLoadEmojis={true}
-                  skinTonesDisabled
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Send button */}
           <Button
-            variant={message.trim() ? "default" : "ghost"}
+            variant="ghost"
             size="icon"
-            className={
-              message.trim()
-                ? "bg-blue-500 hover:bg-blue-600 text-white rounded-full h-9 w-9 ml-2"
-                : "text-gray-400 rounded-full h-9 w-9 ml-2"
-            }
-            onClick={handleSendMessage}
-            disabled={disabled || !message.trim()}
+            disabled={disabled}
+            onClick={() => setIsRecording(true)}
+            title="Ghi âm tin nhắn"
           >
-            <Send className="h-4 w-4" />
+            <Mic className="h-5 w-5" />
           </Button>
         </div>
+
+        {/* Audio recorder */}
+        {isRecording && (
+          <AudioRecorder
+            onSend={(audioBlob, duration) => {
+              console.log(
+                "Received audio blob from recorder:",
+                audioBlob,
+                "duration:",
+                duration,
+              );
+
+              // Create filename with duration info if available
+              const timestamp = Date.now();
+              const fileName = duration
+                ? `audio_message_${timestamp}_duration_${duration}.mp3`
+                : `audio_message_${timestamp}.mp3`;
+
+              // Convert blob to File object with correct MIME type
+              const audioFile = new File([audioBlob], fileName, {
+                type: audioBlob.type || "audio/mpeg",
+                lastModified: timestamp,
+              });
+
+              // Add custom property for duration if available
+              if (duration) {
+                Object.defineProperty(audioFile, "duration", {
+                  value: duration,
+                  writable: false,
+                });
+              }
+
+              console.log(
+                "Created audio file:",
+                audioFile,
+                "with duration:",
+                duration,
+              );
+
+              // Send the audio file
+              onSendMessage("", [audioFile]);
+              setIsRecording(false);
+            }}
+            onCancel={() => setIsRecording(false)}
+          />
+        )}
+
+        {/* Input field and send button */}
+        {!isRecording && (
+          <div
+            className={`flex items-center p-2 ${isDragging ? "bg-blue-50 border border-dashed border-blue-300 rounded-md" : ""}`}
+            ref={inputContainerRef}
+          >
+            <div className="flex-1 relative">
+              <textarea
+                ref={textareaRef}
+                placeholder={
+                  disabled ? "Chọn một cuộc trò chuyện" : "Nhập tin nhắn..."
+                }
+                className="w-full p-2 pl-3 pr-10 rounded-md focus:outline-none focus:ring-none resize-none overflow-auto"
+                value={message}
+                onChange={(e) => {
+                  setMessage(e.target.value);
+                  // Điều chỉnh chiều cao sau khi nội dung thay đổi
+                  setTimeout(adjustTextareaHeight, 0);
+                  // Send typing indicator
+                  handleTyping();
+                }}
+                onKeyDown={handleKeyDown}
+                disabled={disabled}
+                rows={1}
+                style={{ maxHeight: "100px", minHeight: "40px" }}
+              />
+
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 rounded-full ${showEmojiPicker ? "text-blue-500" : "text-gray-500"} hover:text-blue-500 hover:bg-transparent`}
+                  disabled={disabled}
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  ref={emojiButtonRef}
+                >
+                  <Smile className="h-5 w-5" />
+                </Button>
+              </div>
+
+              {showEmojiPicker && (
+                <div
+                  className="absolute bottom-12 right-0 z-50 shadow-lg rounded-lg overflow-hidden transition-all duration-200 transform origin-bottom-right"
+                  ref={emojiPickerRef}
+                >
+                  <EmojiPicker
+                    onEmojiClick={handleEmojiClick}
+                    width={320}
+                    height={400}
+                    searchPlaceHolder="Tìm kiếm emoji..."
+                    previewConfig={{ showPreview: false }}
+                    lazyLoadEmojis={true}
+                    skinTonesDisabled
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Send button */}
+            <Button
+              variant={message.trim() ? "default" : "ghost"}
+              size="icon"
+              className={
+                message.trim()
+                  ? "bg-blue-500 hover:bg-blue-600 text-white rounded-full h-9 w-9 ml-2"
+                  : "text-gray-400 rounded-full h-9 w-9 ml-2"
+              }
+              onClick={handleSendMessage}
+              disabled={disabled || !message.trim()}
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

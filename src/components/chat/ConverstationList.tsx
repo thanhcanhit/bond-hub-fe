@@ -7,10 +7,63 @@ import { formatMessageTime } from "@/utils/dateUtils";
 import { getUserInitials, getUserDisplayName } from "@/utils/userUtils";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { useChatStore } from "@/stores/chatStore";
+import { Media } from "@/types/base";
 
 interface ContactListProps {
   onSelectContact: (contactId: string | null) => void;
 }
+
+// Helper function to format the last message media for display
+const formatLastMessageMedia = (media: Media[]) => {
+  if (!media || media.length === 0) return "";
+
+  // Count media types
+  const imageCount = media.filter((m) => m.type === "IMAGE").length;
+  const videoCount = media.filter((m) => m.type === "VIDEO").length;
+  const audioCount = media.filter((m) => m.type === "AUDIO").length;
+  const documentCount = media.filter(
+    (m) => m.type !== "IMAGE" && m.type !== "VIDEO" && m.type !== "AUDIO",
+  ).length;
+
+  // Format based on media types present
+  if (audioCount > 0) {
+    if (audioCount === media.length) {
+      return audioCount === 1 ? "[Âm thanh]" : `[${audioCount} âm thanh]`;
+    }
+  }
+
+  if (
+    imageCount > 0 &&
+    videoCount === 0 &&
+    audioCount === 0 &&
+    documentCount === 0
+  ) {
+    return imageCount === 1 ? "[Hình ảnh]" : `[${imageCount} hình ảnh]`;
+  }
+
+  if (
+    videoCount > 0 &&
+    imageCount === 0 &&
+    audioCount === 0 &&
+    documentCount === 0
+  ) {
+    return videoCount === 1 ? "[Video]" : `[${videoCount} video]`;
+  }
+
+  if (
+    documentCount > 0 &&
+    imageCount === 0 &&
+    videoCount === 0 &&
+    audioCount === 0
+  ) {
+    return documentCount === 1
+      ? "[Tệp đính kèm]"
+      : `[${documentCount} tệp đính kèm]`;
+  }
+
+  // Mixed media types
+  return "[Đa phương tiện]";
+};
 
 export default function ContactList({ onSelectContact }: ContactListProps) {
   const selectedContact = useChatStore((state) => state.selectedContact);
@@ -96,7 +149,9 @@ export default function ContactList({ onSelectContact }: ContactListProps) {
                       ? "Tin nhắn đã được thu hồi"
                       : conversation.lastMessage.content.text ||
                         (conversation.lastMessage.content.media?.length
-                          ? "[Hình ảnh/Tệp đính kèm]"
+                          ? formatLastMessageMedia(
+                              conversation.lastMessage.content.media,
+                            )
                           : "")}
                   </p>
                 ) : conversation.contact.userInfo?.statusMessage ? (

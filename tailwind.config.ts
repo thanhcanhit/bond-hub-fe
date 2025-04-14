@@ -5,6 +5,25 @@ export default {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
+      keyframes: {
+        "sound-wave-1": {
+          "0%, 100%": { height: "4px" },
+          "50%": { height: "10px" },
+        },
+        "sound-wave-2": {
+          "0%, 100%": { height: "6px" },
+          "50%": { height: "12px" },
+        },
+        "sound-wave-3": {
+          "0%, 100%": { height: "3px" },
+          "50%": { height: "8px" },
+        },
+      },
+      animation: {
+        "sound-wave-1": "sound-wave-1 0.8s ease-in-out infinite",
+        "sound-wave-2": "sound-wave-2 0.7s ease-in-out infinite",
+        "sound-wave-3": "sound-wave-3 0.9s ease-in-out infinite",
+      },
       colors: {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",

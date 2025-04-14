@@ -2,7 +2,7 @@
 
 import { Media } from "@/types/base";
 import Image from "next/image";
-import { Download, FileText, Play } from "lucide-react";
+import { Download, FileText, Play, Music } from "lucide-react";
 
 interface MediaGridProps {
   media: Media[];
@@ -17,11 +17,13 @@ export default function MediaGrid({
 }: MediaGridProps) {
   const images = media.filter((item) => item.type === "IMAGE");
   const videos = media.filter((item) => item.type === "VIDEO");
+  const audios = media.filter((item) => item.type === "AUDIO");
   const files = media.filter(
-    (item) => item.type !== "IMAGE" && item.type !== "VIDEO",
+    (item) =>
+      item.type !== "IMAGE" && item.type !== "VIDEO" && item.type !== "AUDIO",
   );
 
-  const gridMedia = [...images, ...videos, ...files];
+  const gridMedia = [...images, ...videos, ...audios, ...files];
 
   gridMedia.sort((a, b) => {
     if (a.type === "IMAGE" && b.type !== "IMAGE") return -1;
@@ -29,6 +31,20 @@ export default function MediaGrid({
     if (a.type === "VIDEO" && b.type !== "VIDEO" && b.type !== "IMAGE")
       return -1;
     if (a.type !== "VIDEO" && a.type !== "IMAGE" && b.type === "VIDEO")
+      return 1;
+    if (
+      a.type === "AUDIO" &&
+      b.type !== "AUDIO" &&
+      b.type !== "VIDEO" &&
+      b.type !== "IMAGE"
+    )
+      return -1;
+    if (
+      a.type !== "AUDIO" &&
+      a.type !== "VIDEO" &&
+      a.type !== "IMAGE" &&
+      b.type === "AUDIO"
+    )
       return 1;
     return 0;
   });
@@ -153,6 +169,24 @@ export default function MediaGrid({
                   <Download className="h-4 w-4" />
                 </button>
               </div>
+            </div>
+          ) : item.type === "AUDIO" ? (
+            <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center p-2 hover:bg-gray-200 transition-colors duration-200 isolate">
+              <Music className="h-8 w-8 text-blue-500 mb-1" />
+              <span className="text-xs text-gray-700 font-medium truncate w-full text-center">
+                {item.fileName}
+              </span>
+              <span className="text-xs text-gray-500">Audio</span>
+              <button
+                className="mt-2 bg-white p-1 rounded-full shadow hover:bg-gray-100 transition-opacity opacity-0 hover:opacity-100"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDownload(item);
+                }}
+              >
+                <Download className="h-4 w-4" />
+              </button>
             </div>
           ) : (
             <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center p-2 hover:bg-gray-200 transition-colors duration-200 isolate">

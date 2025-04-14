@@ -132,6 +132,7 @@ interface ChatState {
 
   // Reaction picker control
   setActiveReactionPickerMessageId: (messageId: string | null) => void;
+  openChat: (userId: string) => Promise<boolean>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -1440,7 +1441,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         // Check if conversation exists
         const existingConversation = conversationsStore.conversations.find(
-          (conv) => conv.contact.id === userId,
+          (conv) => conv.contact?.id === userId,
         );
 
         // If conversation doesn't exist, create it
@@ -1453,6 +1454,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             type: "USER",
           });
         }
+
+        // Load messages for this conversation
+        await get().loadMessages(userId, "USER");
 
         return true;
       }
