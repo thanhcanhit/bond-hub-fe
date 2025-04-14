@@ -21,6 +21,9 @@ import { QrStatusData, UserData } from "@/types/qrCode";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { generateQrCode } from "@/actions/qrAuth.action";
 import { User } from "@/types/base";
+import { getDeviceInfo } from "@/utils/helpers";
+import { getSocketInstance } from "@/hooks/useSocketConnection";
+import { getUserDataById } from "@/actions/user.action";
 
 export default function QrLogin() {
   const [qrToken, setQrToken] = useState("");
@@ -65,7 +68,7 @@ export default function QrLogin() {
   const [status, setStatus] = useState<"pending" | "scanned" | "confirmed">(
     "pending",
   );
-  const { setAuth } = useAuthStore();
+  const { setAuth, setTokens } = useAuthStore();
   const router = useRouter();
 
   // Handle responsive QR code size
@@ -199,6 +202,7 @@ export default function QrLogin() {
                 id: user.id,
                 fullName: user.fullName,
                 profilePictureUrl: user.profilePictureUrl,
+                coverImgUrl: user.coverImgUrl || null,
                 blockStrangers: false,
                 createdAt: new Date(),
                 updatedAt: new Date(),
@@ -225,15 +229,48 @@ export default function QrLogin() {
               comments: [],
             };
 
-            // Set auth state with complete information
+            // Get device info for login
+            getDeviceInfo(); // Just calling for consistency with regular login, not using the values
+
+            // Initial auth state with basic information
             setAuth(userForAuth, accessToken);
 
-            // Save refresh token if needed
-            useAuthStore.getState().setTokens(accessToken, refreshToken);
+            // Save refresh token
+            setTokens(accessToken, refreshToken);
 
-            // Redirect after auth is set
-            setTimeout(() => {
-              router.push("/dashboard");
+            // Get the main socket instance from the hook (will be established by SocketProvider)
+            // This ensures we have the same socket connection as regular login
+            const mainSocket = getSocketInstance();
+
+            // Check if mainSocket exists; if not, it will be created by the SocketProvider
+            if (!mainSocket) {
+              console.log(
+                "Main socket will be established by SocketProvider after auth is set",
+              );
+            } else {
+              console.log(
+                "Main socket already exists, will reconnect with new auth token",
+              );
+            }
+
+            // After login, fetch complete user data to get any missing fields
+            setTimeout(async () => {
+              try {
+                // Get full user profile data with all fields
+                const userData = await getUserDataById(user.id);
+                if (userData.success && userData.user) {
+                  // Update user with complete data including cover image and other fields
+                  useAuthStore.getState().updateUser(userData.user);
+                  console.log(
+                    "User data updated with complete profile including cover image",
+                  );
+                }
+              } catch (error) {
+                console.error("Error fetching complete user data:", error);
+              } finally {
+                // Redirect after auth is set and user data is fetched, even if fetch fails
+                router.push("/dashboard");
+              }
             }, 1000);
           }
           break;
@@ -258,7 +295,7 @@ export default function QrLogin() {
     return () => {
       unsubscribeFromQrEvents(socket, qrToken);
     };
-  }, [qrToken, router, setAuth, isQrExpired]);
+  }, [qrToken, router, setAuth, setTokens, isQrExpired]);
 
   // Tính và format thời gian còn lại
   const [timeLeft, setTimeLeft] = useState<number>(300); // Mặc định 5 phút (300 giây)
@@ -405,8 +442,9 @@ export default function QrLogin() {
           <div className="mb-4 relative">
             <Avatar className="h-24 w-24">
               <AvatarImage
-                src={scannedUser.profilePictureUrl || null}
+                src={scannedUser.profilePictureUrl || undefined}
                 alt="Profile"
+                className="object-cover"
               />
               <AvatarFallback className="text-3xl">
                 {scannedUser.fullName

@@ -1,52 +1,117 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
-import SearchHeader from "@/components/SearchHeader";
+import { useEffect, useState } from "react";
+import ContactList from "@/components/chat/ConverstationList";
+import ChatArea from "@/components/chat/ChatArea";
+import ContactInfo from "@/components/chat/ConverstationInfo";
+import ChatSocketHandler from "@/components/chat/ChatSocketHandler";
+import { User, UserInfo } from "@/types/base";
+import { useAuthStore } from "@/stores/authStore";
+import { useChatStore } from "@/stores/chatStore";
+import { useConversationsStore } from "@/stores/conversationsStore";
+import { getUserDataById } from "@/actions/user.action";
 
 export default function ChatPage() {
-  // Use constants for values that don't change
-  const isRightSidebarCollapsed = false;
   const [isTabContentVisible, setIsTabContentVisible] = useState(true);
+  const [showContactInfo, setShowContactInfo] = useState(false);
 
-  // Memoize the resize handler to prevent recreation on each render
-  const handleResize = useCallback(() => {
-    setIsTabContentVisible(window.innerWidth >= 1024);
+  // Get state from stores
+  const currentUser = useAuthStore((state) => state.user);
+  const { selectedContact, setSelectedContact } = useChatStore();
+  const { loadConversations } = useConversationsStore();
+
+  // Load conversations when component mounts
+  useEffect(() => {
+    if (currentUser?.id) {
+      loadConversations(currentUser.id);
+    }
+  }, [currentUser?.id, loadConversations]);
+
+  // Handle window resize for responsive layout
+  useEffect(() => {
+    const handleResize = () => {
+      setIsTabContentVisible(window.innerWidth >= 768);
+      if (window.innerWidth < 1024) {
+        setShowContactInfo(false);
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Only run effect once on mount
-  useEffect(() => {
-    // Set initial state
-    handleResize();
+  // Handle selecting a contact
+  const handleSelectContact = async (contactId: string | null) => {
+    if (contactId) {
+      // First, check if we already have this contact in our conversations store
+      const existingConversation = useConversationsStore
+        .getState()
+        .conversations.find((conv) => conv.contact.id === contactId);
 
-    // Add event listener
-    window.addEventListener("resize", handleResize);
+      if (existingConversation) {
+        // Use the contact from the conversations store
+        setSelectedContact(existingConversation.contact);
+      }
 
-    // Clean up on unmount
-    return () => window.removeEventListener("resize", handleResize);
-  }, [handleResize]);
+      // Always fetch the latest user data to ensure we have the most up-to-date info
+      const result = await getUserDataById(contactId);
+      if (result.success && result.user) {
+        // Ensure userInfo exists
+        const user = result.user;
+        if (!user.userInfo) {
+          user.userInfo = {
+            id: user.id,
+            fullName: user.email || user.phoneNumber || "Unknown",
+            profilePictureUrl: null,
+            statusMessage: "No status",
+            blockStrangers: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            userAuth: user,
+          };
+        }
+        setSelectedContact(user as User & { userInfo: UserInfo });
+      } else if (!existingConversation) {
+        // Only set to null if we don't have an existing conversation
+        setSelectedContact(null);
+      }
+    } else {
+      setSelectedContact(null);
+    }
+  };
+
+  // Toggle contact info sidebar
+  const toggleContactInfo = () => {
+    setShowContactInfo((prev) => !prev);
+  };
 
   return (
-    <div className="flex flex-col flex-1 h-full w-full overflow-hidden">
-      <div className="flex border-b bg-white">
-        <SearchHeader />
-        <div className="flex-1 p-4">
-          <h1 className="text-lg font-semibold">Chat</h1>
-        </div>
+    <div className="flex h-full w-full bg-gray-100 overflow-hidden">
+      {/* Socket handler for real-time updates */}
+      <ChatSocketHandler />
+
+      {/* Left Sidebar - Contact List */}
+      <div
+        className={`w-[340px] bg-white border-r flex flex-col overflow-hidden ${isTabContentVisible ? "flex" : "hidden"}`}
+      >
+        <ContactList onSelectContact={handleSelectContact} />
       </div>
 
-      <div className="flex flex-1 bg-gray-100">
-        {/* Left Sidebar - Chat List */}
-        <div
-          className={`w-[340px] bg-white border-r flex flex-col ${isTabContentVisible ? "flex" : "hidden"}`}
-        >
-          <div className="flex-1 overflow-y-scroll scroll-container custom-scrollbar"></div>
-        </div>
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <ChatArea
+          currentUser={currentUser as User}
+          onToggleInfo={toggleContactInfo}
+        />
+      </div>
 
-        {/* Main Chat Area */}
-        <div
-          className={`flex-1 flex flex-col ${isRightSidebarCollapsed ? "w-full" : "w-[calc(100%-344px)]"} transition-all duration-300 ${isTabContentVisible ? "md:w-[calc(100%-408px)]" : "w-full"}`}
-        >
-          <div className="flex-1 bg-[#ebecf0] overflow-y-auto"></div>
-        </div>
+      {/* Right Sidebar - Contact Info */}
+      <div
+        className={`w-[340px] bg-white border-l flex flex-col overflow-hidden transition-all duration-300 ${showContactInfo ? "flex" : "hidden"}`}
+      >
+        <ContactInfo
+          contact={selectedContact as (User & { userInfo: UserInfo }) | null}
+          onClose={() => setShowContactInfo(false)}
+        />
       </div>
     </div>
   );

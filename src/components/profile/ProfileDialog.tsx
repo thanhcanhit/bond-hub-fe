@@ -44,7 +44,9 @@ import {
 import ImageViewerDialog from "./ImageViewerDialog";
 import { useFriendStore } from "@/stores/friendStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useChatStore } from "@/stores/chatStore";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 // Removed framer-motion imports to improve performance
 import UserAvatar from "./UserAvatar";
 import ProfileEditForm, { ProfileFormValues } from "./ProfileEditForm";
@@ -88,8 +90,10 @@ export default function ProfileDialog({
   const [viewerImageUrl, setViewerImageUrl] = useState("");
   const [viewerImageAlt, setViewerImageAlt] = useState("");
 
-  // Lấy các hàm từ friendStore
+  // Lấy các hàm từ stores
   const { acceptRequest, rejectRequest } = useFriendStore();
+  const { openChat } = useChatStore();
+  const router = useRouter();
 
   // Lấy user từ store để luôn có dữ liệu mới nhất
   const storeUser = useAuthStore((state) => state.user);
@@ -610,14 +614,32 @@ export default function ProfileDialog({
                           Gọi điện
                         </Button>
                       )}
-                      {onChat && (
-                        <Button
-                          onClick={onChat}
-                          className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 h-8 !border-none !rounded-none"
-                        >
-                          Nhắn tin
-                        </Button>
-                      )}
+                      {/* Always show the chat button for friends */}
+                      <Button
+                        onClick={async () => {
+                          if (user?.id) {
+                            // Close the dialog
+                            onOpenChange(false);
+
+                            // Show toast message
+                            toast.success(
+                              `Đang mở cuộc trò chuyện với ${user.userInfo?.fullName || "người dùng"}`,
+                            );
+
+                            // Open the chat with this user
+                            await openChat(user.id);
+
+                            // Navigate to chat page if not already there
+                            router.push("/dashboard/chat");
+
+                            // Call the onChat callback if provided
+                            if (onChat) onChat();
+                          }
+                        }}
+                        className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 h-8 !border-none !rounded-none"
+                      >
+                        Nhắn tin
+                      </Button>
                     </div>
                   ) : relationship === "PENDING_SENT" ? (
                     <Button

@@ -16,7 +16,7 @@ type GroupItemProps = {
   imageUrl: string;
 };
 
-function GroupItem({ id, name, memberCount, imageUrl }: GroupItemProps) {
+function GroupItem({ name, memberCount, imageUrl }: GroupItemProps) {
   return (
     <div className="group flex items-center justify-between py-3 px-1 hover:bg-[#f0f2f5] cursor-pointer relative last:after:hidden after:content-[''] after:absolute after:left-[56px] after:right-0 after:bottom-0 after:h-[0.25px] after:bg-black/20">
       <div className="flex items-center">

@@ -3,6 +3,9 @@ import { useAuthStore } from "@/stores/authStore";
 
 const NEXT_PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
+// Log the backend URL for debugging
+console.log("Backend URL:", NEXT_PUBLIC_BACKEND_URL || "Not set");
+
 // Tạo một instance axios cơ bản với token được truyền vào
 export const createAxiosInstance = (token?: string) => {
   const instance = axios.create({
@@ -46,7 +49,7 @@ export const createAxiosInstance = (token?: string) => {
 };
 
 const axiosInstance = axios.create({
-  baseURL: NEXT_PUBLIC_BACKEND_URL,
+  baseURL: NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000",
   headers: { "Content-Type": "application/json" },
   timeout: 15000, // 15 seconds timeout
 });
@@ -55,9 +58,16 @@ axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     try {
       const accessToken = useAuthStore.getState().accessToken;
+      console.log(`Axios request to ${config.url}`, {
+        hasToken: !!accessToken,
+        baseURL: config.baseURL,
+      });
+
       if (accessToken) {
         config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${accessToken}`;
+      } else {
+        console.warn("No access token available for request");
       }
       return config;
     } catch (error) {

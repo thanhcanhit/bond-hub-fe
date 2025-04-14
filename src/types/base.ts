@@ -1,13 +1,28 @@
 // Interfaces for specific Json fields
+export interface MediaMetadata {
+  path: string;
+  size: number;
+  mimeType: string;
+  extension: string;
+  bucketName: string;
+  uploadedAt: string;
+  sizeFormatted: string;
+}
+
 export interface Media {
   url: string;
-  type: string; // e.g., "image", "video"
+  type: string; // e.g., "IMAGE", "VIDEO", "DOCUMENT"
+  fileId: string;
+  fileName: string;
+  metadata: MediaMetadata;
+  thumbnailUrl?: string;
 }
 
 export interface MessageContent {
   text?: string;
   image?: string;
   video?: string;
+  media?: Media[];
 }
 
 export interface Reaction {
@@ -236,6 +251,7 @@ export interface Message {
   createdAt: Date;
   updatedAt: Date;
   messageType?: MessageType | null;
+  forwardedFrom?: string | null; // ID of the original message if this is a forwarded message
 }
 
 export interface Comment {

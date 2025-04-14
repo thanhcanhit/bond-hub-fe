@@ -44,7 +44,9 @@ export const useSocketConnection = (isAuthenticated: boolean = false) => {
 
   // Xử lý sự kiện forceLogout
   const handleForceLogout = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (data: any) => {
+      console.log("handleForceLogout", data);
       // Đăng xuất và chuyển hướng
       logout()
         .then(() => router.push("/login", { scroll: false }))
@@ -119,6 +121,7 @@ export const useSocketConnection = (isAuthenticated: boolean = false) => {
       // Cleanup khi component unmount hoặc accessToken thay đổi
       return () => cleanupSocket(newSocket);
     } catch (error) {
+      console.log("error", error);
       return () => {}; // Trả về hàm cleanup rỗng để tránh lỗi
     }
   }, [
