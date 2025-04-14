@@ -7,6 +7,15 @@ import {
   User,
   UserInfo,
 } from "@/types/base";
+import { Socket } from "socket.io-client";
+
+// Ensure window object has the right types
+declare global {
+  interface Window {
+    messageSocket: Socket | null;
+    sentMessageIds?: Set<string>;
+  }
+}
 import {
   getMessagesBetweenUsers,
   getGroupMessages,
@@ -693,7 +702,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isDialogOpen: isOpen });
   },
 
-  recallMessageById: async (messageId) => {
+  recallMessageById: async (messageId: string): Promise<void> => {
     try {
       console.log(`[chatStore] Recalling message with ID: ${messageId}`);
       const result = await recallMessage(messageId);
@@ -720,9 +729,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (affectedConversation) {
           console.log(`[chatStore] Updating recalled message in conversation`);
 
-          if (affectedConversation.type === "USER") {
+          if (
+            affectedConversation.type === "USER" &&
+            affectedConversation.lastMessage
+          ) {
             // Update last message in user conversation
-            const updatedMessage = {
+            const updatedMessage: Message = {
               ...affectedConversation.lastMessage,
               recalled: true,
             };
@@ -732,10 +744,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             );
           } else if (
             affectedConversation.type === "GROUP" &&
-            affectedConversation.group
+            affectedConversation.group &&
+            affectedConversation.lastMessage
           ) {
             // Update last message in group conversation
-            const updatedMessage = {
+            const updatedMessage: Message = {
               ...affectedConversation.lastMessage,
               recalled: true,
             };
@@ -747,15 +760,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             );
           }
         }
-
-        return true;
       } else {
         console.error("[chatStore] Failed to recall message:", result.error);
-        return false;
       }
     } catch (error) {
       console.error("[chatStore] Error recalling message:", error);
-      return false;
     }
   },
 
@@ -880,7 +889,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  updateMessage: (messageId, updatedMessage) => {
+  updateMessage: (messageId: string, updatedMessage: Partial<Message>) => {
     set((state) => {
       console.log(
         `[chatStore] Updating message ${messageId} with:`,
@@ -923,9 +932,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
 
         // Thay thế tin nhắn tạm thời bằng tin nhắn thật
+        // Ensure updatedMessage is a complete Message object
+        const completeMessage = updatedMessage as Message;
         return {
           messages: state.messages.map((msg) =>
-            msg.id === messageId ? updatedMessage : msg,
+            msg.id === messageId ? completeMessage : msg,
           ),
         };
       }
@@ -1004,15 +1015,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   clearChat: () => {
     set((state) => {
       // Lưu cache hiện tại trước khi xóa
-      const { currentChatType, selectedContact, selectedGroup, messageCache } =
-        state;
-      let cacheKey = "";
-
-      if (currentChatType === "USER" && selectedContact) {
-        cacheKey = `USER_${selectedContact.id}`;
-      } else if (currentChatType === "GROUP" && selectedGroup) {
-        cacheKey = `GROUP_${selectedGroup.id}`;
-      }
+      const { messageCache } = state;
 
       return {
         messages: [],
@@ -1234,7 +1237,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // Send typing indicator to the server
-  sendTypingIndicator: (isTyping) => {
+  sendTypingIndicator: (isTyping: boolean) => {
     // Get the current state
     const state = get();
 

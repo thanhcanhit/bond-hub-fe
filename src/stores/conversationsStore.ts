@@ -265,42 +265,44 @@ export const useConversationsStore = create<ConversationsState>()(
               );
 
               // Create initial conversations with basic info
-              const conversations = filteredUsers.map((user) => ({
-                contact: {
-                  ...user,
-                  userInfo: user.userInfo
-                    ? {
-                        ...user.userInfo,
-                        // Ensure fullName is set properly
-                        fullName:
-                          user.userInfo.fullName ||
-                          extractNameFromEmail(user.email) ||
-                          user.phoneNumber ||
-                          "Unknown",
-                      }
-                    : {
-                        id: user.id,
-                        fullName:
-                          extractNameFromEmail(user.email) ||
-                          user.phoneNumber ||
-                          "Unknown",
-                        profilePictureUrl: null,
-                        statusMessage: "No status",
-                        blockStrangers: false,
-                        createdAt: new Date(),
-                        updatedAt: new Date(),
-                        userAuth: user,
-                      },
-                },
-                lastMessage: undefined,
-                unreadCount: 0,
-                lastActivity: new Date(),
-                type: "USER",
-              }));
+              const initialConversations: Conversation[] = filteredUsers.map(
+                (user) => ({
+                  contact: {
+                    ...user,
+                    userInfo: user.userInfo
+                      ? {
+                          ...user.userInfo,
+                          // Ensure fullName is set properly
+                          fullName:
+                            user.userInfo.fullName ||
+                            extractNameFromEmail(user.email) ||
+                            user.phoneNumber ||
+                            "Unknown",
+                        }
+                      : {
+                          id: user.id,
+                          fullName:
+                            extractNameFromEmail(user.email) ||
+                            user.phoneNumber ||
+                            "Unknown",
+                          profilePictureUrl: null,
+                          statusMessage: "No status",
+                          blockStrangers: false,
+                          createdAt: new Date(),
+                          updatedAt: new Date(),
+                          userAuth: user,
+                        },
+                  },
+                  lastMessage: undefined,
+                  unreadCount: 0,
+                  lastActivity: new Date(),
+                  type: "USER",
+                }),
+              );
 
               // Sort conversations by lastActivity
               const sortedConversations =
-                sortConversationsByActivity(conversations);
+                sortConversationsByActivity(initialConversations);
               set({ conversations: sortedConversations });
 
               // Fetch detailed user info for each contact in the background
@@ -394,7 +396,11 @@ export const useConversationsStore = create<ConversationsState>()(
                   `[conversationsStore] No changes detected for message ${updates.lastMessage.id}, skipping lastMessage update`,
                 );
                 // Cập nhật các trường khác nhưng giữ nguyên lastMessage
-                const { lastMessage, ...otherUpdates } = updates;
+                // Use type assertion to help TypeScript understand the structure
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { lastMessage, ...otherUpdates } = updates as {
+                  lastMessage: Message;
+                } & Partial<Conversation>;
                 return { ...conv, ...otherUpdates };
               }
 
