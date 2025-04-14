@@ -37,6 +37,13 @@ import { getUserDataById } from "@/actions/user.action";
 import { useConversationsStore } from "./conversationsStore";
 import { useAuthStore } from "./authStore";
 
+// Utility types for message handling
+interface MessageHandlingOptions {
+  updateCache?: boolean;
+  notifyConversationStore?: boolean;
+  skipDuplicateCheck?: boolean;
+}
+
 interface ChatState {
   // Current chat state
   messages: Message[];
@@ -90,18 +97,33 @@ interface ChatState {
   searchMessages: (searchText: string) => Promise<void>;
   setSearchText: (text: string) => void;
   clearSearch: () => void;
-  addMessage: (message: Message) => void;
-  updateMessage: (messageId: string, updatedMessage: Partial<Message>) => void;
-  removeMessage: (messageId: string) => void;
+  addMessage: (message: Message, options?: MessageHandlingOptions) => void;
+  updateMessage: (
+    messageId: string,
+    updatedMessage: Partial<Message>,
+    options?: MessageHandlingOptions,
+  ) => void;
+  removeMessage: (messageId: string, options?: MessageHandlingOptions) => void;
   clearChat: () => void;
   addReactionToMessageById: (
     messageId: string,
     reaction: ReactionType,
   ) => Promise<boolean>;
-  removeReactionFromMessageById: (messageId: string) => Promise<boolean>;
+
+  // New utility functions
+  processNewMessage: (
+    message: Message,
+    options?: MessageHandlingOptions,
+  ) => void;
+  isDuplicateMessage: (message: Message) => boolean;
+  updateMessageCache: (
+    message: Message,
+    action: "add" | "update" | "remove",
+  ) => void;
+  syncWithConversationStore: (message: Message) => void;
   markMessageAsReadById: (messageId: string) => Promise<boolean>;
+  removeReactionFromMessageById: (messageId: string) => Promise<boolean>;
   markMessageAsUnreadById: (messageId: string) => Promise<boolean>;
-  openChat: (userId: string) => Promise<boolean>;
 
   // Cache control methods
   setShouldFetchMessages: (shouldFetch: boolean) => void;
@@ -113,6 +135,151 @@ interface ChatState {
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
+  // Utility functions
+  isDuplicateMessage: (message: Message): boolean => {
+    const { messages } = get();
+    const currentUser = useAuthStore.getState().user;
+
+    // Kiểm tra ID chính xác
+    const exactMessageExists = messages.some((msg) => msg.id === message.id);
+    if (exactMessageExists) {
+      console.log(`[chatStore] Message with ID ${message.id} already exists`);
+      return true;
+    }
+
+    // Kiểm tra nội dung, người gửi và thời gian gửi gần nhau
+    const similarMessageExists = messages.some(
+      (msg) =>
+        !msg.id.startsWith("temp-") && // Không phải tin nhắn tạm thời
+        msg.senderId === message.senderId &&
+        msg.content.text === message.content.text &&
+        Math.abs(
+          new Date(msg.createdAt).getTime() -
+            new Date(message.createdAt).getTime(),
+        ) < 2000, // 2 giây
+    );
+
+    if (similarMessageExists) {
+      console.log(`[chatStore] Similar message content detected`);
+      return true;
+    }
+
+    // Kiểm tra xem tin nhắn có phải là tin nhắn vừa gửi từ người dùng hiện tại không
+    if (message.senderId === currentUser?.id) {
+      // Tạo khóa tin nhắn để kiểm tra
+      const messageKey = `${message.id}|${message.content.text}|${message.senderId}`;
+
+      // Kiểm tra xem tin nhắn này có trong danh sách đã gửi không
+      if (typeof window !== "undefined" && window.sentMessageIds) {
+        if (
+          window.sentMessageIds.has(messageKey) ||
+          window.sentMessageIds.has(message.id)
+        ) {
+          console.log(`[chatStore] Message was just sent by current user`);
+          return true;
+        }
+      }
+    }
+
+    return false;
+  },
+
+  updateMessageCache: (
+    message: Message,
+    action: "add" | "update" | "remove",
+  ): void => {
+    set((state) => {
+      const { currentChatType, selectedContact, selectedGroup } = state;
+      let cacheKey = "";
+
+      if (currentChatType === "USER" && selectedContact) {
+        cacheKey = `USER_${selectedContact.id}`;
+      } else if (currentChatType === "GROUP" && selectedGroup) {
+        cacheKey = `GROUP_${selectedGroup.id}`;
+      }
+
+      if (!cacheKey || !state.messageCache[cacheKey]) {
+        return state; // Không có cache để cập nhật
+      }
+
+      let updatedCache;
+
+      switch (action) {
+        case "add":
+          updatedCache = {
+            ...state.messageCache,
+            [cacheKey]: {
+              messages: [...state.messageCache[cacheKey].messages, message],
+              lastFetched: new Date(),
+            },
+          };
+          break;
+
+        case "update":
+          updatedCache = {
+            ...state.messageCache,
+            [cacheKey]: {
+              messages: state.messageCache[cacheKey].messages.map((msg) =>
+                msg.id === message.id ? message : msg,
+              ),
+              lastFetched: new Date(),
+            },
+          };
+          break;
+
+        case "remove":
+          updatedCache = {
+            ...state.messageCache,
+            [cacheKey]: {
+              messages: state.messageCache[cacheKey].messages.filter(
+                (msg) => msg.id !== message.id,
+              ),
+              lastFetched: new Date(),
+            },
+          };
+          break;
+      }
+
+      return { messageCache: updatedCache };
+    });
+  },
+
+  syncWithConversationStore: (message: Message): void => {
+    const conversationsStore = useConversationsStore.getState();
+    conversationsStore.processNewMessage(message);
+  },
+
+  processNewMessage: (
+    message: Message,
+    options: MessageHandlingOptions = {},
+  ): void => {
+    const {
+      updateCache = true,
+      notifyConversationStore = true,
+      skipDuplicateCheck = false,
+    } = options;
+
+    // Kiểm tra trùng lặp nếu không bỏ qua
+    if (!skipDuplicateCheck && get().isDuplicateMessage(message)) {
+      console.log(`[chatStore] Message ${message.id} is duplicate, skipping`);
+      return;
+    }
+
+    console.log(`[chatStore] Processing new message ${message.id}`);
+
+    // Thêm tin nhắn vào danh sách
+    set((state) => ({ messages: [...state.messages, message] }));
+
+    // Cập nhật cache nếu cần
+    if (updateCache) {
+      get().updateMessageCache(message, "add");
+    }
+
+    // Đồng bộ với conversationsStore nếu cần
+    if (notifyConversationStore) {
+      get().syncWithConversationStore(message);
+    }
+  },
   // Initial state
   messages: [],
   selectedContact: null,
@@ -799,111 +966,41 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isForwarding });
   },
 
-  addMessage: (message) => {
-    set((state) => {
-      // Kiểm tra xem tin nhắn đã tồn tại trong danh sách chưa
-      const messageExists = state.messages.some((msg) => {
-        // Kiểm tra ID
-        if (msg.id === message.id) {
-          console.log(
-            `[chatStore] Message with ID ${message.id} already exists, skipping`,
-          );
-          return true;
-        }
+  addMessage: (message, options = {}) => {
+    const {
+      updateCache = true,
+      notifyConversationStore = true,
+      skipDuplicateCheck = false,
+    } = options;
 
-        // Kiểm tra nội dung, người gửi và thời gian gửi gần nhau
-        if (
-          msg.senderId === message.senderId &&
-          msg.content.text === message.content.text &&
-          Math.abs(
-            new Date(msg.createdAt).getTime() -
-              new Date(message.createdAt).getTime(),
-          ) < 2000
-        ) {
-          console.log(
-            `[chatStore] Duplicate message content detected, skipping`,
-          );
-          return true;
-        }
-
-        return false;
-      });
-
-      // Kiểm tra xem tin nhắn có phải là tin nhắn vừa gửi từ người dùng hiện tại không
-      const currentUser = useAuthStore.getState().user;
-      if (message.senderId === currentUser?.id) {
-        // Tạo khóa tin nhắn để kiểm tra
-        const messageKey = `${message.id}|${message.content.text}|${message.senderId}`;
-
-        // Kiểm tra xem tin nhắn này có trong danh sách đã gửi không
-        if (typeof window !== "undefined" && window.sentMessageIds) {
-          // Kiểm tra theo ID chính xác
-          if (
-            window.sentMessageIds.has(messageKey) ||
-            window.sentMessageIds.has(message.id)
-          ) {
-            console.log(
-              `[chatStore] Message was just sent by current user, skipping`,
-            );
-            return state;
-          }
-        }
-      }
-
-      if (messageExists) {
-        console.log(
-          `[chatStore] Message ${message.id} already exists or is duplicate, skipping`,
-        );
-        return state; // Không thay đổi state nếu tin nhắn đã tồn tại
-      }
-
-      console.log(`[chatStore] Adding new message ${message.id} to chat`);
-
-      // Cập nhật cache cho cuộc trò chuyện hiện tại
-      const { currentChatType, selectedContact, selectedGroup } = state;
-      let cacheKey = "";
-
-      if (currentChatType === "USER" && selectedContact) {
-        cacheKey = `USER_${selectedContact.id}`;
-      } else if (currentChatType === "GROUP" && selectedGroup) {
-        cacheKey = `GROUP_${selectedGroup.id}`;
-      }
-
-      if (cacheKey && state.messageCache[cacheKey]) {
-        // Cập nhật cache
-        const updatedCache = {
-          ...state.messageCache,
-          [cacheKey]: {
-            messages: [...state.messageCache[cacheKey].messages, message],
-            lastFetched: new Date(),
-          },
-        };
-
-        return {
-          messages: [...state.messages, message],
-          messageCache: updatedCache,
-        };
-      }
-
-      return { messages: [...state.messages, message] };
+    // Sử dụng hàm processNewMessage để xử lý tin nhắn mới
+    get().processNewMessage(message, {
+      updateCache,
+      notifyConversationStore,
+      skipDuplicateCheck,
     });
   },
 
-  updateMessage: (messageId: string, updatedMessage: Partial<Message>) => {
+  updateMessage: (
+    messageId: string,
+    updatedMessage: Partial<Message>,
+    options: MessageHandlingOptions = {},
+  ) => {
+    const { updateCache = true, notifyConversationStore = true } = options;
+
+    console.log(`[chatStore] Updating message ${messageId}`);
+
     set((state) => {
-      console.log(
-        `[chatStore] Updating message ${messageId} with:`,
-        updatedMessage,
+      // Kiểm tra xem tin nhắn có tồn tại trong danh sách không
+      const existingMessage = state.messages.find(
+        (msg) => msg.id === messageId,
       );
 
-      // Kiểm tra xem tin nhắn có tồn tại trong danh sách không
-      const messageExists = state.messages.some((msg) => msg.id === messageId);
-
-      if (!messageExists) {
+      if (!existingMessage) {
         console.log(
           `[chatStore] Message ${messageId} not found in current chat, skipping update`,
         );
-        return state; // Không thay đổi state nếu tin nhắn không tồn tại
+        return state;
       }
 
       // Nếu đang cập nhật tin nhắn tạm thời bằng tin nhắn thật
@@ -926,14 +1023,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
             `[chatStore] Real message ${updatedMessage.id} already exists, removing temporary message`,
           );
           // Nếu tin nhắn thật đã tồn tại, chỉ xóa tin nhắn tạm thời
+
+          // Cập nhật cache nếu cần
+          if (updateCache) {
+            get().updateMessageCache(existingMessage, "remove");
+          }
+
           return {
             messages: state.messages.filter((msg) => msg.id !== messageId),
           };
         }
 
         // Thay thế tin nhắn tạm thời bằng tin nhắn thật
-        // Ensure updatedMessage is a complete Message object
         const completeMessage = updatedMessage as Message;
+
+        // Cập nhật cache nếu cần
+        if (updateCache) {
+          get().updateMessageCache(completeMessage, "update");
+        }
+
+        // Đồng bộ với conversationsStore nếu cần
+        if (notifyConversationStore) {
+          get().syncWithConversationStore(completeMessage);
+        }
+
         return {
           messages: state.messages.map((msg) =>
             msg.id === messageId ? completeMessage : msg,
@@ -942,73 +1055,80 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       // Cập nhật thông thường
-      const updatedMessages = state.messages.map((msg) =>
-        msg.id === messageId ? { ...msg, ...updatedMessage } : msg,
-      );
+      const updatedMessageObject = { ...existingMessage, ...updatedMessage };
 
-      // Cập nhật cache cho cuộc trò chuyện hiện tại
-      const { currentChatType, selectedContact, selectedGroup } = state;
-      let cacheKey = "";
-
-      if (currentChatType === "USER" && selectedContact) {
-        cacheKey = `USER_${selectedContact.id}`;
-      } else if (currentChatType === "GROUP" && selectedGroup) {
-        cacheKey = `GROUP_${selectedGroup.id}`;
+      // Cập nhật cache nếu cần
+      if (updateCache) {
+        get().updateMessageCache(updatedMessageObject, "update");
       }
 
-      if (cacheKey && state.messageCache[cacheKey]) {
-        // Cập nhật cache
-        const updatedCache = {
-          ...state.messageCache,
-          [cacheKey]: {
-            messages: state.messageCache[cacheKey].messages.map((msg) =>
-              msg.id === messageId ? { ...msg, ...updatedMessage } : msg,
-            ),
-            lastFetched: new Date(),
-          },
-        };
-
-        return {
-          messages: updatedMessages,
-          messageCache: updatedCache,
-        };
+      // Đồng bộ với conversationsStore nếu cần
+      if (notifyConversationStore) {
+        get().syncWithConversationStore(updatedMessageObject);
       }
 
-      return { messages: updatedMessages };
+      return {
+        messages: state.messages.map((msg) =>
+          msg.id === messageId ? updatedMessageObject : msg,
+        ),
+      };
     });
   },
 
-  removeMessage: (messageId) => {
+  removeMessage: (messageId, options: MessageHandlingOptions = {}) => {
+    const { updateCache = true, notifyConversationStore = true } = options;
+
+    console.log(`[chatStore] Removing message ${messageId}`);
+
     set((state) => {
-      // Cập nhật cache cho cuộc trò chuyện hiện tại
-      const { currentChatType, selectedContact, selectedGroup } = state;
-      let cacheKey = "";
+      // Tìm tin nhắn cần xóa
+      const messageToRemove = state.messages.find(
+        (msg) => msg.id === messageId,
+      );
 
-      if (currentChatType === "USER" && selectedContact) {
-        cacheKey = `USER_${selectedContact.id}`;
-      } else if (currentChatType === "GROUP" && selectedGroup) {
-        cacheKey = `GROUP_${selectedGroup.id}`;
+      if (!messageToRemove) {
+        console.log(
+          `[chatStore] Message ${messageId} not found in current chat, skipping removal`,
+        );
+        return state;
       }
 
-      if (cacheKey && state.messageCache[cacheKey]) {
-        // Cập nhật cache
-        const updatedCache = {
-          ...state.messageCache,
-          [cacheKey]: {
-            messages: state.messageCache[cacheKey].messages.filter(
-              (msg) => msg.id !== messageId,
-            ),
-            lastFetched: new Date(),
-          },
-        };
-
-        return {
-          messages: state.messages.filter((msg) => msg.id !== messageId),
-          messageCache: updatedCache,
-        };
+      // Cập nhật cache nếu cần
+      if (updateCache) {
+        get().updateMessageCache(messageToRemove, "remove");
       }
 
-      return { messages: state.messages.filter((msg) => msg.id !== messageId) };
+      // Đồng bộ với conversationsStore nếu cần
+      // Lưu ý: Đối với xóa tin nhắn, chúng ta cần xử lý đặc biệt trong conversationsStore
+      // nếu tin nhắn này là tin nhắn cuối cùng của cuộc trò chuyện
+      if (notifyConversationStore) {
+        const conversationsStore = useConversationsStore.getState();
+        const conversation =
+          conversationsStore.findConversationByMessage(messageToRemove);
+
+        if (conversation && conversation.lastMessage?.id === messageId) {
+          // Tìm tin nhắn mới nhất khác để cập nhật làm tin nhắn cuối cùng
+          const newLastMessage = state.messages
+            .filter((msg) => msg.id !== messageId)
+            .sort(
+              (a, b) =>
+                new Date(b.createdAt).getTime() -
+                new Date(a.createdAt).getTime(),
+            )[0];
+
+          if (newLastMessage) {
+            conversationsStore.processNewMessage(newLastMessage, {
+              incrementUnreadCount: false,
+              markAsRead: false,
+              updateLastActivity: true,
+            });
+          }
+        }
+      }
+
+      return {
+        messages: state.messages.filter((msg) => msg.id !== messageId),
+      };
     });
   },
 
@@ -1278,7 +1398,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     socket.emit(event, data);
   },
 
-  openChat: async (userId) => {
+  openChat: async (userId: string) => {
     try {
       // Fetch user data
       const result = await getUserDataById(userId);
