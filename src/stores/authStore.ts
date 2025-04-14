@@ -89,6 +89,9 @@ export const useAuthStore = create<AuthState>()(
             "Login successful, setting tokens. accessToken:",
             result.accessToken ? "Token exists" : "No token",
           );
+
+          // Lưu refreshToken vào state nhưng không lưu vào localStorage
+          // (partialize sẽ loại bỏ refreshToken khi lưu vào localStorage)
           set({
             accessToken: result.accessToken,
             refreshToken: result.refreshToken,
@@ -151,6 +154,7 @@ export const useAuthStore = create<AuthState>()(
           // Ignore errors from the API
         } finally {
           // Always reset store state to ensure UI updates
+          // Xóa cả refreshToken khỏi store
           set({
             user: null,
             accessToken: null,
@@ -168,12 +172,16 @@ export const useAuthStore = create<AuthState>()(
           "setTokens called with accessToken:",
           accessToken ? "Token exists" : "No token",
         );
+
+        // Lưu refreshToken vào state nhưng không lưu vào localStorage
+        // (được xử lý bởi partialize)
         set({
           accessToken,
           refreshToken,
           isAuthenticated: true,
           // Keep existing deviceId
         });
+
         // Socket sẽ được cập nhật tự động bởi SocketProvider khi accessToken thay đổi
         console.log(
           "After setTokens, accessToken in store:",
@@ -187,7 +195,7 @@ export const useAuthStore = create<AuthState>()(
       storage: createJSONStorage(() => storage),
       partialize: (state) => ({
         accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
+        // Không lưu refreshToken vào localStorage
         isAuthenticated: state.isAuthenticated,
         user: state.user,
         deviceId: state.deviceId,
