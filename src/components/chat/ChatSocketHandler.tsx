@@ -7,6 +7,7 @@ import { useConversationsStore } from "@/stores/conversationsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { Message, User, UserInfo, MessageType, Reaction } from "@/types/base";
 import { useSocket } from "@/providers/SocketProvider";
+import { useNotificationSound } from "@/hooks/useNotificationSound";
 
 // Extend Window interface to include our socket and message tracking
 declare global {
@@ -75,6 +76,9 @@ export default function ChatSocketHandler() {
     updateConversation,
   } = useConversationsStore();
 
+  // Sử dụng hook để phát âm thanh thông báo
+  const playNotificationSound = useNotificationSound();
+
   // Function to ensure message sender has userInfo
   const ensureMessageHasUserInfo = useCallback(
     (message: Message) => {
@@ -126,63 +130,107 @@ export default function ChatSocketHandler() {
   const handleNewMessage = useCallback(
     (data: MessageEventData) => {
       console.log("[ChatSocketHandler] New message received:", data);
-      console.log("[ChatSocketHandler] Current chat state:", {
-        currentChatType,
-        selectedContact: selectedContact?.id,
-        selectedGroup: selectedGroup?.id,
-        messagesCount: messages.length,
-      });
 
       const message = ensureMessageHasUserInfo(data.message);
 
-      // Kiểm tra xem tin nhắn có phải là tin nhắn vừa gửi từ người dùng hiện tại không
+      // QUAN TRỌNG: Kiểm tra xem tin nhắn có phải là tin nhắn vừa gửi từ người dùng hiện tại không
       if (message.senderId === currentUser?.id) {
-        // Tạo khóa tin nhắn để kiểm tra
-        const messageKey = `${message.id}|${message.content.text}|${message.senderId}`;
+        // Kiểm tra xem tin nhắn đã có trong danh sách tin nhắn chưa (kiểm tra ID chính xác)
+        const exactMessageExists = messages.some(
+          (msg) => msg.id === message.id,
+        );
+
+        if (exactMessageExists) {
+          console.log(
+            `[ChatSocketHandler] Message with ID ${message.id} already exists in chat, skipping socket event`,
+          );
+          return;
+        }
+
+        // Kiểm tra xem có tin nhắn tạm thời (temp message) có nội dung giống nhau không
+        const tempMessages = messages.filter(
+          (msg) =>
+            msg.id.startsWith("temp-") && // Chỉ kiểm tra tin nhắn tạm thời
+            msg.senderId === message.senderId &&
+            msg.content.text === message.content.text &&
+            Math.abs(
+              new Date(msg.createdAt).getTime() -
+                new Date(message.createdAt).getTime(),
+            ) < 10000, // 10 giây
+        );
+
+        if (tempMessages.length > 0) {
+          console.log(
+            `[ChatSocketHandler] Found ${tempMessages.length} similar temporary messages, replacing with real message`,
+          );
+
+          // Đây là trường hợp tin nhắn thật từ server trả về cho tin nhắn tạm thời
+          // Chúng ta sẽ thay thế tin nhắn tạm thời bằng tin nhắn thật này
+          const chatStore = useChatStore.getState();
+
+          // Thay thế tin nhắn tạm thời đầu tiên tìm thấy bằng tin nhắn thật
+          chatStore.updateMessage(tempMessages[0].id, message);
+
+          // Xóa các tin nhắn tạm thời khác (nếu có)
+          if (tempMessages.length > 1) {
+            for (let i = 1; i < tempMessages.length; i++) {
+              chatStore.removeMessage(tempMessages[i].id);
+            }
+          }
+
+          return;
+        }
 
         // Kiểm tra xem tin nhắn này có trong danh sách đã gửi không
         if (typeof window !== "undefined" && window.sentMessageIds) {
-          // Kiểm tra theo ID chính xác
-          if (window.sentMessageIds.has(messageKey)) {
-            console.log(
-              `[ChatSocketHandler] Message key ${messageKey} was just sent by current user, skipping socket event`,
-            );
-            return;
-          }
+          // Tạo khóa tin nhắn để kiểm tra
+          const messageKey = `${message.id}|${message.content.text}|${message.senderId}`;
 
-          // Kiểm tra theo ID cũ
-          if (window.sentMessageIds.has(message.id)) {
+          if (
+            window.sentMessageIds.has(messageKey) ||
+            window.sentMessageIds.has(message.id)
+          ) {
             console.log(
-              `[ChatSocketHandler] Message ID ${message.id} was just sent by current user, skipping socket event`,
+              `[ChatSocketHandler] Message was tracked as sent by current user, skipping socket event`,
             );
             return;
           }
         }
 
-        // Kiểm tra xem tin nhắn đã có trong danh sách tin nhắn chưa
-        const messageExists = messages.some(
+        // Kiểm tra xem tin nhắn đã có trong danh sách tin nhắn chưa (kiểm tra nội dung)
+        const similarMessageExists = messages.some(
           (msg) =>
-            // Kiểm tra ID
-            msg.id === message.id ||
-            // Hoặc kiểm tra nội dung, người gửi và thời gian gửi gần nhau
-            (msg.senderId === message.senderId &&
-              msg.content.text === message.content.text &&
-              Math.abs(
-                new Date(msg.createdAt).getTime() -
-                  new Date(message.createdAt).getTime(),
-              ) < 2000),
+            !msg.id.startsWith("temp-") && // Không phải tin nhắn tạm thời
+            msg.senderId === message.senderId &&
+            msg.content.text === message.content.text &&
+            Math.abs(
+              new Date(msg.createdAt).getTime() -
+                new Date(message.createdAt).getTime(),
+            ) < 5000, // 5 giây
         );
 
-        if (messageExists) {
+        if (similarMessageExists) {
           console.log(
-            `[ChatSocketHandler] Message from current user already exists in chat, skipping`,
+            `[ChatSocketHandler] Similar message from current user already exists, skipping`,
           );
           return;
         }
 
         console.log(
-          `[ChatSocketHandler] Processing new message from current user: ${message.id}`,
+          `[ChatSocketHandler] This appears to be a new message from current user: ${message.id}`,
         );
+      }
+
+      // Phát âm thanh thông báo nếu tin nhắn đến từ người khác
+      if (message.senderId !== currentUser?.id) {
+        // Kiểm tra xem tin nhắn có phải là tin nhắn mới không
+        const messageExists = messages.some((msg) => msg.id === message.id);
+        if (!messageExists) {
+          console.log(
+            `[ChatSocketHandler] Playing notification sound for new message from ${message.senderId}`,
+          );
+          playNotificationSound();
+        }
       }
 
       // If the message is for the current chat, add it to the messages list
@@ -408,6 +456,7 @@ export default function ChatSocketHandler() {
       addConversation,
       updateConversation,
       ensureMessageHasUserInfo,
+      playNotificationSound,
     ],
   );
 

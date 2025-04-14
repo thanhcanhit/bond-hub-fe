@@ -418,11 +418,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
 
         // Replace temporary message with real one from server
-        set((state) => ({
-          messages: state.messages.map((msg) =>
-            msg.id === tempMessage.id ? result.message : msg,
-          ),
-        }));
+        // Chúng ta sẽ chỉ thay thế tin nhắn tạm thời, không thêm tin nhắn mới
+        // Vì tin nhắn thật sẽ được nhận qua socket
+        set((state) => {
+          // Kiểm tra xem tin nhắn tạm thời có tồn tại không
+          const tempMessageExists = state.messages.some(
+            (msg) => msg.id === tempMessage.id,
+          );
+
+          if (tempMessageExists) {
+            console.log(
+              `[chatStore] Replacing temporary message ${tempMessage.id} with real message ${result.message.id}`,
+            );
+            return {
+              messages: state.messages.map((msg) =>
+                msg.id === tempMessage.id ? result.message : msg,
+              ),
+            };
+          } else {
+            // Nếu không tìm thấy tin nhắn tạm thời, không thay đổi gì
+            console.log(
+              `[chatStore] Temporary message ${tempMessage.id} not found, not adding real message to avoid duplication`,
+            );
+            return state;
+          }
+        });
 
         // Update conversation list with real message
         const conversationsStore = useConversationsStore.getState();
@@ -751,6 +771,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return state; // Không thay đổi state nếu tin nhắn không tồn tại
       }
 
+      // Nếu đang cập nhật tin nhắn tạm thời bằng tin nhắn thật
+      if (
+        messageId.startsWith("temp-") &&
+        "id" in updatedMessage &&
+        typeof updatedMessage.id === "string"
+      ) {
+        console.log(
+          `[chatStore] Replacing temporary message with real message ID: ${updatedMessage.id}`,
+        );
+
+        // Kiểm tra xem tin nhắn thật đã tồn tại trong danh sách chưa
+        const realMessageExists = state.messages.some(
+          (msg) => msg.id === updatedMessage.id,
+        );
+
+        if (realMessageExists) {
+          console.log(
+            `[chatStore] Real message ${updatedMessage.id} already exists, removing temporary message`,
+          );
+          // Nếu tin nhắn thật đã tồn tại, chỉ xóa tin nhắn tạm thời
+          return {
+            messages: state.messages.filter((msg) => msg.id !== messageId),
+          };
+        }
+
+        // Thay thế tin nhắn tạm thời bằng tin nhắn thật
+        return {
+          messages: state.messages.map((msg) =>
+            msg.id === messageId ? updatedMessage : msg,
+          ),
+        };
+      }
+
+      // Cập nhật thông thường
       return {
         messages: state.messages.map((msg) =>
           msg.id === messageId ? { ...msg, ...updatedMessage } : msg,
