@@ -26,13 +26,13 @@ import { useState, useCallback, useMemo, memo } from "react";
 import ProfileDialog from "./profile/ProfileDialog";
 import { LoadingWithMessage } from "./Loading";
 import { IconType } from "react-icons";
-import { LucideBookUser, LucideCircuitBoard } from "lucide-react";
+import { ClockIcon, LucideBookUser } from "lucide-react";
 
 // Định nghĩa các mục điều hướng bên ngoài component để tránh tạo lại mỗi lần render
 const NAV_ITEMS: { path: string; icon: IconType; label: string }[] = [
   { path: "/dashboard/chat", icon: BsChatDotsFill, label: "Chat" },
   { path: "/dashboard/contact", icon: LucideBookUser, label: "Contacts" },
-  { path: "/dashboard/post", icon: LucideCircuitBoard, label: "Posts" },
+  { path: "/dashboard/post", icon: ClockIcon, label: "Posts" },
 ];
 
 function Sidebar() {
