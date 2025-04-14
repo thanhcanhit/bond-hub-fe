@@ -44,6 +44,18 @@ interface ChatState {
   isSearching: boolean;
   sendTypingIndicator?: (isTyping: boolean) => void;
 
+  // Cache for messages
+  messageCache: Record<
+    string,
+    {
+      messages: Message[];
+      lastFetched: Date;
+    }
+  >;
+
+  // Flag to control whether to fetch messages from API
+  shouldFetchMessages: boolean;
+
   // Actions
   setSelectedContact: (contact: (User & { userInfo: UserInfo }) | null) => void;
   setSelectedGroup: (group: Group | null) => void;
@@ -78,6 +90,11 @@ interface ChatState {
   markMessageAsReadById: (messageId: string) => Promise<boolean>;
   markMessageAsUnreadById: (messageId: string) => Promise<boolean>;
   openChat: (userId: string) => Promise<boolean>;
+
+  // Cache control methods
+  setShouldFetchMessages: (shouldFetch: boolean) => void;
+  clearChatCache: (type: "USER" | "GROUP", id: string) => void;
+  clearAllCache: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -95,6 +112,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   searchResults: [],
   isSearching: false,
 
+  // Initialize cache
+  messageCache: {},
+
+  // By default, fetch messages from API
+  shouldFetchMessages: true,
+
   // Actions
   setSelectedContact: (contact) => {
     // Clear messages immediately to prevent showing previous conversation's messages
@@ -107,7 +130,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     if (contact) {
-      get().loadMessages(contact.id, "USER");
+      // Tạo cache key cho cuộc trò chuyện này
+      const cacheKey = `USER_${contact.id}`;
+      const cachedData = get().messageCache[cacheKey];
+      const currentTime = new Date();
+
+      // Kiểm tra xem có dữ liệu trong cache không và cache có cũ không (< 5 phút)
+      const isCacheValid =
+        cachedData &&
+        currentTime.getTime() - cachedData.lastFetched.getTime() <
+          5 * 60 * 1000;
+
+      if (isCacheValid && cachedData.messages.length > 0) {
+        console.log(`[chatStore] Using cached messages for user ${contact.id}`);
+        // Sử dụng dữ liệu từ cache
+        set({
+          messages: cachedData.messages,
+          isLoading: false,
+        });
+      } else {
+        // Nếu không có cache hoặc cache cũ, tải tin nhắn từ API
+        console.log(
+          `[chatStore] No valid cache for user ${contact.id}, fetching from API`,
+        );
+        get().loadMessages(contact.id, "USER");
+      }
     }
   },
 
@@ -122,11 +169,43 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     if (group) {
-      get().loadMessages(group.id, "GROUP");
+      // Tạo cache key cho nhóm này
+      const cacheKey = `GROUP_${group.id}`;
+      const cachedData = get().messageCache[cacheKey];
+      const currentTime = new Date();
+
+      // Kiểm tra xem có dữ liệu trong cache không và cache có cũ không (< 5 phút)
+      const isCacheValid =
+        cachedData &&
+        currentTime.getTime() - cachedData.lastFetched.getTime() <
+          5 * 60 * 1000;
+
+      if (isCacheValid && cachedData.messages.length > 0) {
+        console.log(`[chatStore] Using cached messages for group ${group.id}`);
+        // Sử dụng dữ liệu từ cache
+        set({
+          messages: cachedData.messages,
+          isLoading: false,
+        });
+      } else {
+        // Nếu không có cache hoặc cache cũ, tải tin nhắn từ API
+        console.log(
+          `[chatStore] No valid cache for group ${group.id}, fetching from API`,
+        );
+        get().loadMessages(group.id, "GROUP");
+      }
     }
   },
 
   loadMessages: async (id, type) => {
+    // Kiểm tra xem có nên tải tin nhắn từ API không
+    if (!get().shouldFetchMessages) {
+      console.log(
+        `[chatStore] Skipping API fetch as shouldFetchMessages is false`,
+      );
+      return;
+    }
+
     set({ isLoading: true });
     try {
       let result;
@@ -144,7 +223,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
           );
         });
 
-        set({ messages: sortedMessages });
+        // Cập nhật cache
+        const cacheKey = `${type}_${id}`;
+        set((state) => ({
+          messages: sortedMessages,
+          messageCache: {
+            ...state.messageCache,
+            [cacheKey]: {
+              messages: sortedMessages,
+              lastFetched: new Date(),
+            },
+          },
+        }));
       } else {
         set({ messages: [] });
       }
@@ -750,6 +840,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       console.log(`[chatStore] Adding new message ${message.id} to chat`);
+
+      // Cập nhật cache cho cuộc trò chuyện hiện tại
+      const { currentChatType, selectedContact, selectedGroup } = state;
+      let cacheKey = "";
+
+      if (currentChatType === "USER" && selectedContact) {
+        cacheKey = `USER_${selectedContact.id}`;
+      } else if (currentChatType === "GROUP" && selectedGroup) {
+        cacheKey = `GROUP_${selectedGroup.id}`;
+      }
+
+      if (cacheKey && state.messageCache[cacheKey]) {
+        // Cập nhật cache
+        const updatedCache = {
+          ...state.messageCache,
+          [cacheKey]: {
+            messages: [...state.messageCache[cacheKey].messages, message],
+            lastFetched: new Date(),
+          },
+        };
+
+        return {
+          messages: [...state.messages, message],
+          messageCache: updatedCache,
+        };
+      }
+
       return { messages: [...state.messages, message] };
     });
   },
@@ -805,29 +922,100 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       // Cập nhật thông thường
-      return {
-        messages: state.messages.map((msg) =>
-          msg.id === messageId ? { ...msg, ...updatedMessage } : msg,
-        ),
-      };
+      const updatedMessages = state.messages.map((msg) =>
+        msg.id === messageId ? { ...msg, ...updatedMessage } : msg,
+      );
+
+      // Cập nhật cache cho cuộc trò chuyện hiện tại
+      const { currentChatType, selectedContact, selectedGroup } = state;
+      let cacheKey = "";
+
+      if (currentChatType === "USER" && selectedContact) {
+        cacheKey = `USER_${selectedContact.id}`;
+      } else if (currentChatType === "GROUP" && selectedGroup) {
+        cacheKey = `GROUP_${selectedGroup.id}`;
+      }
+
+      if (cacheKey && state.messageCache[cacheKey]) {
+        // Cập nhật cache
+        const updatedCache = {
+          ...state.messageCache,
+          [cacheKey]: {
+            messages: state.messageCache[cacheKey].messages.map((msg) =>
+              msg.id === messageId ? { ...msg, ...updatedMessage } : msg,
+            ),
+            lastFetched: new Date(),
+          },
+        };
+
+        return {
+          messages: updatedMessages,
+          messageCache: updatedCache,
+        };
+      }
+
+      return { messages: updatedMessages };
     });
   },
 
   removeMessage: (messageId) => {
-    set((state) => ({
-      messages: state.messages.filter((msg) => msg.id !== messageId),
-    }));
+    set((state) => {
+      // Cập nhật cache cho cuộc trò chuyện hiện tại
+      const { currentChatType, selectedContact, selectedGroup } = state;
+      let cacheKey = "";
+
+      if (currentChatType === "USER" && selectedContact) {
+        cacheKey = `USER_${selectedContact.id}`;
+      } else if (currentChatType === "GROUP" && selectedGroup) {
+        cacheKey = `GROUP_${selectedGroup.id}`;
+      }
+
+      if (cacheKey && state.messageCache[cacheKey]) {
+        // Cập nhật cache
+        const updatedCache = {
+          ...state.messageCache,
+          [cacheKey]: {
+            messages: state.messageCache[cacheKey].messages.filter(
+              (msg) => msg.id !== messageId,
+            ),
+            lastFetched: new Date(),
+          },
+        };
+
+        return {
+          messages: state.messages.filter((msg) => msg.id !== messageId),
+          messageCache: updatedCache,
+        };
+      }
+
+      return { messages: state.messages.filter((msg) => msg.id !== messageId) };
+    });
   },
 
   clearChat: () => {
-    set({
-      messages: [],
-      selectedContact: null,
-      selectedGroup: null,
-      currentChatType: null,
-      replyingTo: null,
-      selectedMessage: null,
-      isDialogOpen: false,
+    set((state) => {
+      // Lưu cache hiện tại trước khi xóa
+      const { currentChatType, selectedContact, selectedGroup, messageCache } =
+        state;
+      let cacheKey = "";
+
+      if (currentChatType === "USER" && selectedContact) {
+        cacheKey = `USER_${selectedContact.id}`;
+      } else if (currentChatType === "GROUP" && selectedGroup) {
+        cacheKey = `GROUP_${selectedGroup.id}`;
+      }
+
+      return {
+        messages: [],
+        selectedContact: null,
+        selectedGroup: null,
+        currentChatType: null,
+        replyingTo: null,
+        selectedMessage: null,
+        isDialogOpen: false,
+        // Giữ lại cache để sử dụng sau này
+        messageCache: messageCache,
+      };
     });
   },
 
@@ -1109,5 +1297,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.error("Error opening chat:", error);
       return false;
     }
+  },
+
+  // Kiểm soát việc fetch dữ liệu từ API
+  setShouldFetchMessages: (shouldFetch) => {
+    set({ shouldFetchMessages: shouldFetch });
+  },
+
+  // Xóa cache của một cuộc trò chuyện cụ thể
+  clearChatCache: (type, id) => {
+    set((state) => {
+      const cacheKey = `${type}_${id}`;
+      const newCache = { ...state.messageCache };
+      delete newCache[cacheKey];
+
+      return { messageCache: newCache };
+    });
+  },
+
+  // Xóa toàn bộ cache
+  clearAllCache: () => {
+    set({ messageCache: {} });
   },
 }));

@@ -5,6 +5,7 @@ import { Socket } from "socket.io-client";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useNotificationStore } from "@/stores/notificationStore";
 import { Message, User, UserInfo, MessageType, Reaction } from "@/types/base";
 import { useSocket } from "@/providers/SocketProvider";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
@@ -78,6 +79,9 @@ export default function ChatSocketHandler() {
 
   // Sử dụng hook để phát âm thanh thông báo
   const playNotificationSound = useNotificationSound();
+
+  // Sử dụng store để quản lý số lượng tin nhắn chưa đọc
+  const { incrementUnread: incrementGlobalUnread } = useNotificationStore();
 
   // Function to ensure message sender has userInfo
   const ensureMessageHasUserInfo = useCallback(
@@ -221,7 +225,7 @@ export default function ChatSocketHandler() {
         );
       }
 
-      // Phát âm thanh thông báo nếu tin nhắn đến từ người khác
+      // Phát âm thanh thông báo và tăng số lượng tin nhắn chưa đọc nếu tin nhắn đến từ người khác
       if (message.senderId !== currentUser?.id) {
         // Kiểm tra xem tin nhắn có phải là tin nhắn mới không
         const messageExists = messages.some((msg) => msg.id === message.id);
@@ -230,6 +234,41 @@ export default function ChatSocketHandler() {
             `[ChatSocketHandler] Playing notification sound for new message from ${message.senderId}`,
           );
           playNotificationSound();
+
+          // Tăng số lượng tin nhắn chưa đọc toàn cục
+          incrementGlobalUnread();
+          console.log(`[ChatSocketHandler] Incrementing global unread count`);
+
+          // Kiểm tra xem tin nhắn có đến từ cuộc trò chuyện đang mở không
+          const isFromCurrentChat =
+            (currentChatType === "USER" &&
+              selectedContact &&
+              message.senderId === selectedContact.id) ||
+            (currentChatType === "GROUP" &&
+              selectedGroup &&
+              message.groupId === selectedGroup.id);
+
+          // Nếu tin nhắn không đến từ cuộc trò chuyện đang mở, tăng số lượng tin nhắn chưa đọc của cuộc trò chuyện đó
+          if (!isFromCurrentChat) {
+            if (message.messageType === MessageType.USER && message.senderId) {
+              incrementUnread(message.senderId);
+            } else if (
+              message.messageType === MessageType.GROUP &&
+              message.groupId
+            ) {
+              // Tìm conversation của nhóm
+              const groupConversation = conversations.find(
+                (conv) =>
+                  conv.type === "GROUP" && conv.group?.id === message.groupId,
+              );
+
+              if (groupConversation && groupConversation.group) {
+                updateConversation(groupConversation.group.id, {
+                  unreadCount: (groupConversation.unreadCount || 0) + 1,
+                });
+              }
+            }
+          }
         }
       }
 
@@ -457,6 +496,7 @@ export default function ChatSocketHandler() {
       updateConversation,
       ensureMessageHasUserInfo,
       playNotificationSound,
+      incrementGlobalUnread,
     ],
   );
 
