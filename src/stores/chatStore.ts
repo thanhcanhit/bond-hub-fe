@@ -645,23 +645,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     try {
+      // Get the repliedTo message ID if replying
+      const repliedToId = get().replyingTo?.id;
+
       // Send message to API
       let result;
       if (currentChatType === "USER") {
         if (files && files.length > 0) {
           // Use sendMediaMessage if we have files
-          result = await sendMediaMessage(recipientId, text, files);
+          result = await sendMediaMessage(
+            recipientId,
+            text,
+            files,
+            repliedToId,
+          );
         } else {
           // Use sendTextMessage if we only have text
-          result = await sendTextMessage(recipientId, text);
+          result = await sendTextMessage(recipientId, text, repliedToId);
         }
       } else {
         if (files && files.length > 0) {
           // Use sendGroupMediaMessage if we have files for group
-          result = await sendGroupMediaMessage(recipientId, text, files);
+          result = await sendGroupMediaMessage(
+            recipientId,
+            text,
+            files,
+            repliedToId,
+          );
         } else {
           // Use sendGroupTextMessage if we only have text for group
-          result = await sendGroupTextMessage(recipientId, text);
+          result = await sendGroupTextMessage(recipientId, text, repliedToId);
         }
       }
 
