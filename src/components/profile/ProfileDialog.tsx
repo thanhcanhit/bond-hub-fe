@@ -473,7 +473,7 @@ export default function ProfileDialog({
                         coverImageUrl ||
                         (currentUser?.userInfo?.coverImgUrl
                           ? `${currentUser.userInfo.coverImgUrl}?t=${new Date().getTime()}`
-                          : "https://i.ibb.co/yncCwjgj/default-cover.jpg");
+                          : "https://i.ibb.co/yncCwjg/default-cover.jpg");
                       setViewerImageUrl(imageUrl);
                       setViewerImageAlt("Cover Photo");
                       setIsImageViewerOpen(true);
@@ -484,7 +484,7 @@ export default function ProfileDialog({
                         coverImageUrl ||
                         (currentUser?.userInfo?.coverImgUrl
                           ? `${currentUser.userInfo.coverImgUrl}?t=${new Date().getTime()}`
-                          : "https://i.ibb.co/yncCwjgj/default-cover.jpg")
+                          : "https://i.ibb.co/yncCwjg/default-cover.jpg")
                       }
                       alt="Cover Photo"
                       fill

@@ -129,6 +129,7 @@ interface ChatState {
   setShouldFetchMessages: (shouldFetch: boolean) => void;
   clearChatCache: (type: "USER" | "GROUP", id: string) => void;
   clearAllCache: () => void;
+  openChat: (contactId: string) => Promise<boolean>;
 
   // Reaction picker control
   setActiveReactionPickerMessageId: (messageId: string | null) => void;
