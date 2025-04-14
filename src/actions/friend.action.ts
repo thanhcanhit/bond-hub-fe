@@ -97,6 +97,9 @@ export async function getReceivedFriendRequests(token?: string) {
     const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.get("/friends/requests/received");
 
+    // Log raw API response
+    console.log("Raw received friend requests:", response.data);
+
     // Transform the API response to the format expected by UI components
     const requests = response.data.map((request: FriendRequest) => ({
       id: request.id,
@@ -105,6 +108,8 @@ export async function getReceivedFriendRequests(token?: string) {
       // Get the introduce message from the API response
       message: request.introduce || "",
       timeAgo: new Date(request.createdAt).toLocaleDateString(),
+      // Add senderId for fetching complete user data
+      senderId: request.sender.id,
     }));
 
     return { success: true, requests };
@@ -123,12 +128,17 @@ export async function getSentFriendRequests(token?: string) {
     const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.get("/friends/requests/sent");
 
+    // Log raw API response
+    console.log("Raw sent friend requests:", response.data);
+
     // Transform the API response to the format expected by UI components
     const requests = response.data.map((request: FriendRequest) => ({
       id: request.id,
       fullName: request.receiver.userInfo.fullName,
       profilePictureUrl: request.receiver.userInfo.profilePictureUrl,
       timeAgo: new Date(request.createdAt).toLocaleDateString(),
+      // Add receiverId for fetching complete user data
+      receiverId: request.receiver.id,
     }));
 
     return { success: true, requests };

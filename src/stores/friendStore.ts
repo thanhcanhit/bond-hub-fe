@@ -12,14 +12,43 @@ import {
   SimpleFriend,
 } from "@/actions/friend.action";
 import { useAuthStore } from "@/stores/authStore";
+import { User } from "@/types/base";
+import { getUserDataById } from "@/actions/user.action";
 
-// Define types for friend requests
+// Define API response types
+interface ApiUserInfo {
+  fullName: string;
+  profilePictureUrl: string | null;
+}
+
+interface ApiUser {
+  id: string;
+  email?: string;
+  phoneNumber?: string;
+  userInfo: ApiUserInfo;
+}
+
+interface ApiFriendRequest {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  status: string;
+  introduce?: string;
+  createdAt: string;
+  updatedAt: string;
+  sender: ApiUser;
+  receiver?: ApiUser;
+}
+
+// Define types for friend requests in the store
 interface FriendRequest {
   id: string;
   fullName: string;
   profilePictureUrl: string;
   message: string;
   timeAgo: string;
+  userData?: User; // Thêm trường userData để lưu thông tin đầy đủ của người dùng
+  senderId: string; // Thêm senderId để có thể lấy thông tin đầy đủ của người gửi
 }
 
 interface SentRequest {
@@ -27,6 +56,8 @@ interface SentRequest {
   fullName: string;
   profilePictureUrl: string;
   timeAgo: string;
+  userData?: User; // Thêm trường userData để lưu thông tin đầy đủ của người dùng
+  receiverId: string; // Thêm receiverId để có thể lấy thông tin đầy đủ của người nhận
 }
 
 interface FriendStore {
@@ -164,8 +195,33 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
             ? newCount - currentCount
             : get().unreadReceivedRequests;
 
+        // Thêm thông tin senderId và chuẩn bị dữ liệu cho FriendRequests.tsx
+        const enhancedRequests = await Promise.all(
+          response.requests.map(async (request: ApiFriendRequest) => {
+            // Lấy thông tin đầy đủ của người gửi từ API
+            try {
+              const userResult = await getUserDataById(request.senderId);
+              if (userResult.success && userResult.user) {
+                return {
+                  ...request,
+                  userData: userResult.user,
+                };
+              }
+            } catch (error) {
+              console.error(
+                `Error fetching user data for ${request.senderId}:`,
+                error,
+              );
+            }
+            return request;
+          }),
+        );
+
+        // Log để kiểm tra enhancedRequests
+        console.log("Enhanced received requests:", enhancedRequests);
+
         set((state) => ({
-          receivedRequests: response.requests,
+          receivedRequests: enhancedRequests,
           unreadReceivedRequests: newUnreadCount,
           isLoading: {
             ...state.isLoading,
@@ -185,7 +241,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
           },
         }));
       }
-    } catch {
+    } catch (error) {
+      console.error("Error in fetchReceivedRequests:", error);
       set((state) => ({
         error: {
           ...state.error,
@@ -216,8 +273,33 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
       const token = useAuthStore.getState().accessToken || "";
       const response = await getSentFriendRequests(token);
       if (response.success) {
+        // Thêm thông tin receiverId và chuẩn bị dữ liệu cho FriendRequests.tsx
+        const enhancedRequests = await Promise.all(
+          response.requests.map(async (request: ApiFriendRequest) => {
+            // Lấy thông tin đầy đủ của người nhận từ API
+            try {
+              const userResult = await getUserDataById(request.receiverId);
+              if (userResult.success && userResult.user) {
+                return {
+                  ...request,
+                  userData: userResult.user,
+                };
+              }
+            } catch (error) {
+              console.error(
+                `Error fetching user data for ${request.receiverId}:`,
+                error,
+              );
+            }
+            return request;
+          }),
+        );
+
+        // Log để kiểm tra enhancedRequests
+        console.log("Enhanced sent requests:", enhancedRequests);
+
         set((state) => ({
-          sentRequests: response.requests,
+          sentRequests: enhancedRequests,
           isLoading: {
             ...state.isLoading,
             sentRequests: false,
@@ -235,7 +317,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
           },
         }));
       }
-    } catch {
+    } catch (error) {
+      console.error("Error in fetchSentRequests:", error);
       set((state) => ({
         error: {
           ...state.error,
