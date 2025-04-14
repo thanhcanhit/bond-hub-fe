@@ -34,11 +34,11 @@ export default function ChatMessagesDropZone({
 
   // Kiểm tra xem file có an toàn không
   const isSafeFile = (file: File): boolean => {
-    const fileType = file.type.split("/")[0]; // image, video, application, etc.
+    const fileType = file.type.split("/")[0]; // image, video, audio, application, etc.
     const fileExtension = `.${file.name.split(".").pop()?.toLowerCase() || ""}`;
 
-    // Chấp nhận hình ảnh và video
-    if (fileType === "image" || fileType === "video") {
+    // Chấp nhận hình ảnh, video và âm thanh
+    if (fileType === "image" || fileType === "video" || fileType === "audio") {
       return true;
     }
 
@@ -103,7 +103,7 @@ export default function ChatMessagesDropZone({
           `${rejectedCount} file không được chấp nhận do không an toàn`,
           {
             description:
-              "Chỉ chấp nhận hình ảnh, video và các tài liệu văn phòng phổ biến",
+              "Chỉ chấp nhận hình ảnh, video, âm thanh và các tài liệu văn phòng phổ biến",
             icon: <AlertCircle className="h-5 w-5" />,
           },
         );
@@ -132,7 +132,7 @@ export default function ChatMessagesDropZone({
         <div className="bg-white p-4 rounded-lg shadow-lg">
           <p className="text-blue-600 font-medium">Thả để gửi ngay lập tức</p>
           <p className="text-gray-500 text-sm mt-1">
-            Chỉ chấp nhận hình ảnh, video và tài liệu an toàn
+            Chỉ chấp nhận hình ảnh, video, âm thanh và tài liệu an toàn
           </p>
         </div>
       </div>

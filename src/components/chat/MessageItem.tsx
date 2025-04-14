@@ -37,6 +37,7 @@ import {
   Forward,
   CornerUpRight,
   AtSign,
+  Music,
 } from "lucide-react";
 import { getUserInitials } from "@/utils/userUtils";
 
@@ -63,6 +64,7 @@ function MediaItem({ media, onClick }: MediaItemProps) {
     const { type, metadata } = media;
     if (type === "IMAGE") return <ImageIcon className="h-5 w-5" />;
     if (type === "VIDEO") return <Video className="h-5 w-5" />;
+    if (type === "AUDIO") return <Music className="h-5 w-5" />;
 
     // For documents, show specific icons based on extension
     const ext = metadata.extension.toLowerCase();
@@ -116,6 +118,33 @@ function MediaItem({ media, onClick }: MediaItemProps) {
           </div>
           <button
             className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full shadow-sm hover:bg-white/100 transition-opacity opacity-0 hover:opacity-100 z-10"
+            onClick={handleDownload}
+          >
+            <Download className="h-4 w-4" />
+          </button>
+        </div>
+      );
+
+    case "AUDIO":
+      return (
+        <div
+          className="flex items-center p-2 bg-gray-100 rounded-lg overflow-hidden hover:bg-gray-200 transition-colors isolate cursor-pointer"
+          onClick={onClick}
+        >
+          <div className="mr-3 p-2 bg-white rounded-md flex-shrink-0 shadow-sm">
+            <Music className="h-5 w-5 text-blue-500" />
+          </div>
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <p className="text-sm font-medium truncate">{media.fileName}</p>
+            <audio
+              src={media.url}
+              controls
+              className="w-full mt-1 h-8"
+              preload="metadata"
+            />
+          </div>
+          <button
+            className="ml-2 p-1.5 bg-white rounded-full flex-shrink-0 shadow-sm hover:bg-gray-50 transition-opacity opacity-0 hover:opacity-100"
             onClick={handleDownload}
           >
             <Download className="h-4 w-4" />
