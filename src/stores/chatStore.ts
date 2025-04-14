@@ -130,6 +130,7 @@ interface ChatState {
   setShouldFetchMessages: (shouldFetch: boolean) => void;
   clearChatCache: (type: "USER" | "GROUP", id: string) => void;
   clearAllCache: () => void;
+  openChat: (contactId: string) => Promise<boolean>;
 
   openChat: (userId: string) => Promise<boolean>;
 }

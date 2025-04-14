@@ -12,25 +12,35 @@ import {
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { useDebounce } from "@/hooks/useDebounce";
-import { searchUser } from "@/actions/user.action";
-import { searchMessages } from "@/actions/message.action";
+import { searchUser, getUserDataById } from "@/actions/user.action";
+import { searchMessagesGlobal } from "@/actions/message.action";
 import { getFriendsList } from "@/actions/friend.action";
 import { isEmail, isPhoneNumber } from "@/utils/helpers";
 import { useAuthStore } from "@/stores/authStore";
-import { User } from "@/types/base";
+import { User, Message } from "@/types/base";
+import { toast } from "sonner";
+
 import ProfileDialog from "./profile/ProfileDialog";
 import QRCodeDialog from "./QRCodeDialog";
 
+// Extended Message type with search context
+interface MessageWithContext extends Message {
+  _searchContext?: {
+    userId: string;
+  };
+}
+
+// Sử dụng type đơn giản hóa cho Friend
 type Friend = {
   id: string;
   fullName: string;
   profilePictureUrl: string;
+  phoneNumber?: string;
+  email?: string;
 };
 
-// Danh sách bạn bè sẽ được lấy từ API
-
-// Type for messages
-type Message = {
+// Type cho kết quả tìm kiếm tin nhắn
+interface SearchResultMessage {
   id: string;
   sender: {
     id: string;
@@ -38,10 +48,15 @@ type Message = {
     profilePictureUrl: string;
   };
   content: string;
+  conversationName?: string;
   date: string;
   highlighted?: boolean;
-};
+  _searchContext?: {
+    userId: string;
+  };
+}
 
+// Type đơn giản hóa cho kết quả tìm kiếm người dùng
 type UserSearchResult = {
   id: string;
   fullName: string;
@@ -57,7 +72,14 @@ export default function SearchHeader() {
   const [isSearchActive, setIsSearchActive] = useState<boolean>(false);
   const [filteredFriends, setFilteredFriends] = useState<Friend[]>([]);
   const [allFriends, setAllFriends] = useState<Friend[]>([]);
-  const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
+  const [filteredMessages, setFilteredMessages] = useState<
+    SearchResultMessage[]
+  >([]);
+  // State lưu thông tin người gửi đã được lấy từ API
+  const [senderDetails, setSenderDetails] = useState<{ [key: string]: User }>(
+    {},
+  );
+
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [phoneSearchResult, setPhoneSearchResult] =
     useState<UserSearchResult | null>(null);
@@ -71,12 +93,18 @@ export default function SearchHeader() {
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const { accessToken, user: currentUser } = useAuthStore();
 
-  // Lấy danh sách bạn bè khi component mount
+  // Lấy danh sách bạn bè khi component mount và người dùng đã đăng nhập
   useEffect(() => {
     const fetchFriends = async () => {
+      // Kiểm tra xem người dùng đã đăng nhập hay chưa
+      if (!accessToken || !currentUser) {
+        setAllFriends([]);
+        return;
+      }
+
       try {
         setIsLoadingFriends(true);
-        const result = await getFriendsList(accessToken || undefined);
+        const result = await getFriendsList(accessToken);
         if (result.success && result.friends) {
           setAllFriends(result.friends);
         } else {
@@ -90,7 +118,64 @@ export default function SearchHeader() {
     };
 
     fetchFriends();
-  }, [accessToken]);
+  }, [accessToken, currentUser]);
+
+  // Effect để lấy thông tin người gửi từ API khi có kết quả tìm kiếm
+  useEffect(() => {
+    // Nếu không có tin nhắn hoặc không có token, không làm gì
+    if (filteredMessages.length === 0 || !accessToken || !currentUser) {
+      return;
+    }
+
+    // Lấy danh sách ID người gửi để lấy thông tin
+    // Loại bỏ các ID không hợp lệ ngay từ đầu
+    const senderIds = filteredMessages
+      .filter((msg) => {
+        // Kiểm tra ID hợp lệ và không phải ID hệ thống
+        return (
+          msg.sender &&
+          msg.sender.id &&
+          msg.sender.id.trim() !== "" &&
+          msg.sender.id !== "system" &&
+          msg.sender.id !== "unknown" &&
+          msg.sender.id !== "loading"
+        );
+      })
+      .map((msg) => msg.sender.id)
+      // Lọc các ID trùng lặp
+      .filter((id, index, self) => self.indexOf(id) === index);
+
+    // Nếu không có ID hợp lệ nào, không làm gì
+    if (senderIds.length === 0) {
+      return;
+    }
+
+    // Lấy thông tin người gửi từ API
+    const fetchSenderDetails = async () => {
+      for (const senderId of senderIds) {
+        // Kiểm tra xem đã có thông tin người gửi trong state chưa
+        if (!senderDetails[senderId]) {
+          try {
+            // Gọi API với ID đã được kiểm tra
+            const result = await getUserDataById(senderId);
+
+            if (result.success && result.user) {
+              // Cập nhật thông tin người gửi vào state
+              setSenderDetails((prev) => ({
+                ...prev,
+                [senderId]: result.user,
+              }));
+            }
+          } catch (error) {
+            console.error(`Error fetching user data for ${senderId}:`, error);
+            // Không làm gì khi có lỗi, để tránh gọi lại API
+          }
+        }
+      }
+    };
+
+    fetchSenderDetails();
+  }, [filteredMessages, accessToken, currentUser, senderDetails]);
 
   // Handle click outside to close search results and suggestions
   useEffect(() => {
@@ -129,16 +214,124 @@ export default function SearchHeader() {
 
     // Tìm kiếm tin nhắn dựa trên từ khóa
     const searchForMessages = async () => {
+      // Kiểm tra xem người dùng đã đăng nhập hay chưa
+      if (!accessToken || !currentUser) {
+        setFilteredMessages([]);
+        return;
+      }
+
       try {
-        const result = await searchMessages(debouncedSearchQuery);
-        if (result.success) {
-          // Đánh dấu các tin nhắn có chứa từ khóa tìm kiếm
-          const messages = result.messages.map((message: Message) => ({
-            ...message,
-            highlighted: true,
-          }));
-          setFilteredMessages(messages);
+        console.log("Searching messages with query:", debouncedSearchQuery);
+        // Hiển thị trạng thái đang tìm kiếm
+        setFilteredMessages([
+          {
+            id: "loading",
+            content: "Đang tìm kiếm tin nhắn...",
+            sender: {
+              id: "system",
+              fullName: "Hệ thống",
+              profilePictureUrl: "/images/default-avatar.png",
+            },
+            date: new Date().toLocaleDateString(),
+            highlighted: false,
+          },
+        ]);
+
+        // Lấy danh sách ID của tất cả bạn bè để tìm kiếm tin nhắn
+        const friendIds = allFriends.map((friend) => friend.id);
+
+        // Nếu không có bạn bè nào, không cần tìm kiếm
+        if (friendIds.length === 0) {
+          setFilteredMessages([]);
+          return;
+        }
+
+        // Truyền token và danh sách ID bạn bè vào hàm searchMessagesGlobal
+        const result = await searchMessagesGlobal(
+          debouncedSearchQuery,
+          friendIds,
+        );
+
+        if (result.success && result.messages && result.messages.length > 0) {
+          console.log("Found messages:", result.messages.length);
+          // Chuyển đổi từ Message từ API sang SearchResultMessage trong component
+          const messages: SearchResultMessage[] = result.messages.map(
+            (message: MessageWithContext) => {
+              try {
+                // Xử lý nội dung tin nhắn
+                let messageContent = "";
+                if (typeof message.content === "string") {
+                  messageContent = message.content;
+                } else if (
+                  message.content &&
+                  typeof message.content === "object"
+                ) {
+                  // Kiểm tra nếu content là object và có thuộc tính text
+                  messageContent = message.content.text || "";
+                }
+
+                // Sử dụng messageContent để hiển thị nội dung tin nhắn
+
+                // Xử lý thông tin người gửi dựa trên dữ liệu trả về từ API
+                // Dữ liệu trả về có dạng: sender: { id, email, phoneNumber, ... }
+
+                // Lấy thông tin về cuộc trò chuyện
+                let conversationInfo = "";
+                if (message._searchContext && message._searchContext.userId) {
+                  // Tìm tên người dùng từ danh sách bạn bè
+                  const friend = allFriends.find(
+                    (f) => f.id === message._searchContext?.userId,
+                  );
+                  if (friend) {
+                    conversationInfo = friend.fullName;
+                  }
+                }
+
+                // Lưu thông tin người gửi từ API response
+                return {
+                  id: message.id,
+                  content: messageContent,
+                  conversationName: conversationInfo,
+                  sender: {
+                    id: message.sender.id,
+                    fullName: message.sender.email
+                      ? message.sender.email.split("@")[0]
+                      : "Người dùng",
+                    profilePictureUrl: "/images/default-avatar.png",
+                  },
+                  date:
+                    typeof message.createdAt === "string"
+                      ? message.createdAt
+                      : new Date().toISOString(),
+                  highlighted: true,
+                  _searchContext: message._searchContext,
+                };
+              } catch (mapError) {
+                console.error("Error mapping message:", mapError, message);
+                // Trả về một tin nhắn mặc định nếu có lỗi khi chuyển đổi
+                return {
+                  id: message.id || "unknown-id",
+                  content: "Không thể hiển thị nội dung tin nhắn",
+                  sender: {
+                    id: "unknown",
+                    fullName: "Người dùng",
+                    profilePictureUrl: "/images/default-avatar.png",
+                  },
+                  date: new Date().toLocaleDateString(),
+                  highlighted: true,
+                };
+              }
+            },
+          );
+
+          // Lọc bỏ các tin nhắn không hợp lệ
+          const validMessages = messages.filter(
+            (msg) => msg.id !== "unknown-id",
+          );
+          setFilteredMessages(validMessages);
         } else {
+          console.log("No messages found or API returned error");
+          // Hiển thị thông báo không tìm thấy kết quả
           setFilteredMessages([]);
         }
       } catch (error) {
@@ -153,6 +346,12 @@ export default function SearchHeader() {
     if (isSearchingUser) {
       // Nếu là số điện thoại hoặc email hợp lệ, gọi API tìm kiếm
       const searchUserByValue = async () => {
+        // Kiểm tra xem người dùng đã đăng nhập hay chưa
+        if (!accessToken || !currentUser) {
+          setPhoneSearchResult(null);
+          return;
+        }
+
         try {
           // Gọi API tìm kiếm người dùng bằng số điện thoại hoặc email
           const result = await searchUser(debouncedSearchQuery);
@@ -190,7 +389,13 @@ export default function SearchHeader() {
       setFilteredFriends(filtered);
       setPhoneSearchResult(null);
     }
-  }, [debouncedSearchQuery, allFriends, isAddFriendMode]);
+  }, [
+    debouncedSearchQuery,
+    allFriends,
+    isAddFriendMode,
+    accessToken,
+    currentUser,
+  ]);
 
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -236,21 +441,38 @@ export default function SearchHeader() {
   };
 
   // Handle user profile click
-  const handleUserClick = (user: UserSearchResult) => {
-    // Chuyển đổi từ UserSearchResult sang User
-    // Sử dụng type assertion để tránh lỗi TypeScript
-    const userForProfile = {
-      id: user.id,
-      userInfo: {
-        fullName: user.fullName,
-        profilePictureUrl: user.profilePictureUrl,
-      },
-      email: user.email,
-      phoneNumber: user.phoneNumber,
-    } as unknown as User;
+  const handleUserClick = async (user: UserSearchResult) => {
+    try {
+      // Fetch complete user data using getUserDataById
+      const result = await getUserDataById(user.id);
 
-    setSelectedUser(userForProfile);
-    setShowProfileDialog(true);
+      if (result.success && result.user) {
+        // Use the complete user data from the API
+        setSelectedUser(result.user);
+      } else {
+        // Fallback to simplified user object if API call fails
+        console.error("Failed to fetch complete user data:", result.error);
+        // Chuyển đổi từ UserSearchResult sang User
+        // Sử dụng type assertion để tránh lỗi TypeScript
+        const userForProfile = {
+          id: user.id,
+          userInfo: {
+            fullName: user.fullName,
+            profilePictureUrl: user.profilePictureUrl,
+          },
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+        } as unknown as User;
+
+        setSelectedUser(userForProfile);
+      }
+
+      // Show the profile dialog
+      setShowProfileDialog(true);
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      toast.error("Không thể tải thông tin người dùng");
+    }
   };
 
   // Handle search submission
@@ -330,7 +552,7 @@ export default function SearchHeader() {
           // Active search state - Full width input with close button
           <>
             <div className="relative flex-1 mr-2">
-              <div className="flex items-center border border-gray-200 rounded-md px-2 h-8 w-full">
+              <div className="flex items-center border border-gray-200 rounded-md px-2 h-8 w-full bg-gray-50">
                 <Search className="h-4 w-4 text-gray-500" />
                 <input
                   placeholder="Tìm kiếm"
@@ -354,10 +576,10 @@ export default function SearchHeader() {
 
             <button
               onClick={deactivateSearch}
-              className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center"
+              className="h-8 px-3 rounded-md bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-sm font-medium"
               title="Đóng"
             >
-              <X className="h-5 w-5" />
+              Đóng
             </button>
           </>
         )}
@@ -428,6 +650,11 @@ export default function SearchHeader() {
             // Xử lý khi nhấn nút nhắn tin
             setShowProfileDialog(false);
           }}
+          onCall={() => {
+            // Xử lý khi nhấn nút gọi điện
+            setShowProfileDialog(false);
+            toast.info("Tính năng gọi điện đang được phát triển");
+          }}
         />
       )}
 
@@ -443,6 +670,22 @@ export default function SearchHeader() {
       {/* Search Results Dropdown */}
       {isSearchActive && showResults && searchQuery && (
         <div className="absolute left-0 top-[60px] w-full bg-white border-t border-gray-200 shadow-lg z-50 overflow-hidden">
+          {/* Tab navigation */}
+          <div className="flex border-b border-gray-200 bg-white">
+            <button className="px-4 py-2 text-[13px] font-semibold text-blue-600 border-b-2 border-blue-600">
+              Tất cả
+            </button>
+            <button className="px-4 py-2 text-[13px] font-semibold text-gray-500 hover:text-gray-700">
+              Liên hệ
+            </button>
+            <button className="px-4 py-2 text-[13px] font-semibold text-gray-500 hover:text-gray-700">
+              Tin nhắn
+            </button>
+            <button className="px-4 py-2 text-[13px] font-semibold text-gray-500 hover:text-gray-700">
+              File
+            </button>
+          </div>
+
           {/* User search section */}
           {isSearchingUser && (
             <div className="border-b border-gray-100">
@@ -497,58 +740,147 @@ export default function SearchHeader() {
           )}
 
           {filteredMessages.length > 0 && (
-            <div className="p-3 border-b border-gray-100">
-              <div className="text-sm font-medium mb-2">
-                Tin nhắn ({filteredMessages.length})
+            <div className="border-b border-gray-100">
+              <div className="text-sm font-medium p-3">
+                Tin nhắn{" "}
+                {filteredMessages.length > 20
+                  ? "(20+)"
+                  : `(${filteredMessages.length})`}
               </div>
 
               {filteredMessages.map((message) => {
-                // Tách nội dung tin nhắn để đánh dấu từ khóa tìm kiếm
+                // Nếu là tin nhắn đang tải, hiển thị trạng thái đang tải
+                if (message.id === "loading") {
+                  return (
+                    <div
+                      key="loading"
+                      className="flex items-center py-2 px-1 rounded-md"
+                    >
+                      <div className="flex-1 text-center">
+                        <div className="animate-pulse flex space-x-4 items-center">
+                          <div className="rounded-full bg-gray-200 h-10 w-10"></div>
+                          <div className="flex-1 space-y-2 py-1">
+                            <div className="h-2 bg-gray-200 rounded w-3/4"></div>
+                            <div className="h-2 bg-gray-200 rounded w-1/2"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Xử lý hiển thị tin nhắn bình thường
                 const content = message.content;
                 const lowerContent = content.toLowerCase();
                 const lowerQuery = debouncedSearchQuery.toLowerCase();
                 const startIndex = lowerContent.indexOf(lowerQuery);
 
-                const beforeText = content.substring(0, startIndex);
-                const highlightedText = content.substring(
-                  startIndex,
-                  startIndex + debouncedSearchQuery.length,
-                );
-                const afterText = content.substring(
-                  startIndex + debouncedSearchQuery.length,
-                );
+                // Tách nội dung để đánh dấu từ khóa
+                const beforeText =
+                  startIndex >= 0 ? content.substring(0, startIndex) : "";
+                const highlightedText =
+                  startIndex >= 0
+                    ? content.substring(
+                        startIndex,
+                        startIndex + debouncedSearchQuery.length,
+                      )
+                    : "";
+                const afterText =
+                  startIndex >= 0
+                    ? content.substring(
+                        startIndex + debouncedSearchQuery.length,
+                      )
+                    : content;
+
+                // Tính thời gian hiển thị
+                const messageDate = new Date(message.date);
+                const now = new Date();
+                const diffInMs = now.getTime() - messageDate.getTime();
+                const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+                const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+
+                let timeDisplay = message.date;
+                if (diffInMinutes < 60) {
+                  timeDisplay = `${diffInMinutes} phút`;
+                } else if (diffInHours < 24) {
+                  timeDisplay = `${diffInHours} giờ`;
+                } else if (diffInHours < 48) {
+                  timeDisplay = "1 ngày";
+                } else {
+                  const diffInDays = Math.floor(diffInHours / 24);
+                  timeDisplay = `${diffInDays} ngày`;
+                }
 
                 return (
                   <div
                     key={message.id}
-                    className="flex items-center py-2 hover:bg-gray-50 cursor-pointer px-1 rounded-md"
+                    className="flex py-3 hover:bg-gray-50 cursor-pointer px-3 border-b border-gray-100"
                   >
-                    {message.sender.profilePictureUrl ? (
-                      <div className="h-10 w-10 rounded-full overflow-hidden mr-3">
+                    <div className="h-10 w-10 rounded-full overflow-hidden mr-3 flex-shrink-0">
+                      {senderDetails[message.sender.id]?.userInfo
+                        ?.profilePictureUrl ? (
                         <Image
-                          src={message.sender.profilePictureUrl}
-                          alt={message.sender.fullName}
+                          src={
+                            senderDetails[message.sender.id]?.userInfo
+                              ?.profilePictureUrl || ""
+                          }
+                          alt={
+                            senderDetails[message.sender.id]?.userInfo
+                              ?.fullName || "Người dùng"
+                          }
                           width={40}
                           height={40}
                           className="object-cover"
                         />
-                      </div>
-                    ) : (
-                      <div className="h-10 w-10 rounded-full overflow-hidden mr-3 bg-blue-500 flex items-center justify-center text-white">
-                        <span>{message.sender.fullName.charAt(0)}</span>
-                      </div>
-                    )}
-                    <div className="flex-1">
-                      <div className="text-sm font-medium">
-                        {message.sender.fullName}
-                      </div>
-                      <div className="text-xs text-gray-500 flex items-center flex-wrap">
-                        <span>{beforeText}</span>
-                        <span className="text-blue-500">{highlightedText}</span>
-                        <span>{afterText}</span>
+                      ) : (
+                        <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white">
+                          <span>
+                            {(
+                              senderDetails[message.sender.id]?.userInfo
+                                ?.fullName || "Người dùng"
+                            ).charAt(0)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <div className="flex flex-col">
+                        <div className="flex justify-between items-start">
+                          <div className="text-sm font-medium">
+                            {senderDetails[message.sender.id]?.userInfo
+                              ?.fullName || "Người dùng"}
+                          </div>
+                          <div className="text-xs text-gray-500 ml-2 flex-shrink-0">
+                            {timeDisplay}
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-700 truncate">
+                          {startIndex >= 0 ? (
+                            <span>
+                              <span className="font-medium">
+                                {senderDetails[message.sender.id]?.userInfo
+                                  ?.fullName || "Người dùng"}
+                                :{" "}
+                              </span>
+                              {beforeText}
+                              <span className="text-blue-500 font-medium">
+                                {highlightedText}
+                              </span>
+                              {afterText}
+                            </span>
+                          ) : (
+                            <span>
+                              <span className="font-medium">
+                                {senderDetails[message.sender.id]?.userInfo
+                                  ?.fullName || "Người dùng"}
+                                :{" "}
+                              </span>
+                              {content}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-xs text-gray-500">{message.date}</div>
                   </div>
                 );
               })}
@@ -606,8 +938,8 @@ export default function SearchHeader() {
                             id: friend.id,
                             fullName: friend.fullName,
                             profilePictureUrl: friend.profilePictureUrl,
-                            phoneNumber: "", // Thêm trường bắt buộc
-                            email: "", // Thêm trường bắt buộc
+                            phoneNumber: friend.phoneNumber || "", // Sử dụng số điện thoại từ friend nếu có
+                            email: friend.email || "", // Sử dụng email từ friend nếu có
                           })
                         }
                       >

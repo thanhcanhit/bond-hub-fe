@@ -85,6 +85,13 @@ export const useAuthStore = create<AuthState>()(
           if (!result.success) return false;
 
           // First set the tokens and basic user data
+          console.log(
+            "Login successful, setting tokens. accessToken:",
+            result.accessToken ? "Token exists" : "No token",
+          );
+
+          // Lưu refreshToken vào state nhưng không lưu vào localStorage
+          // (partialize sẽ loại bỏ refreshToken khi lưu vào localStorage)
           set({
             accessToken: result.accessToken,
             refreshToken: result.refreshToken,
@@ -92,6 +99,10 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
+          console.log(
+            "After login, accessToken in store:",
+            useAuthStore.getState().accessToken ? "Token exists" : "No token",
+          );
 
           // Socket sẽ được khởi tạo tự động bởi SocketProvider
           // Then try to get additional user data
@@ -143,6 +154,7 @@ export const useAuthStore = create<AuthState>()(
           // Ignore errors from the API
         } finally {
           // Always reset store state to ensure UI updates
+          // Xóa cả refreshToken khỏi store
           set({
             user: null,
             accessToken: null,
@@ -156,13 +168,25 @@ export const useAuthStore = create<AuthState>()(
         return true; // Always return true to ensure UI updates
       },
       setTokens: (accessToken, refreshToken) => {
+        console.log(
+          "setTokens called with accessToken:",
+          accessToken ? "Token exists" : "No token",
+        );
+
+        // Lưu refreshToken vào state nhưng không lưu vào localStorage
+        // (được xử lý bởi partialize)
         set({
           accessToken,
           refreshToken,
           isAuthenticated: true,
           // Keep existing deviceId
         });
+
         // Socket sẽ được cập nhật tự động bởi SocketProvider khi accessToken thay đổi
+        console.log(
+          "After setTokens, accessToken in store:",
+          useAuthStore.getState().accessToken ? "Token exists" : "No token",
+        );
       },
     }),
 
@@ -171,7 +195,7 @@ export const useAuthStore = create<AuthState>()(
       storage: createJSONStorage(() => storage),
       partialize: (state) => ({
         accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
+        // Không lưu refreshToken vào localStorage
         isAuthenticated: state.isAuthenticated,
         user: state.user,
         deviceId: state.deviceId,

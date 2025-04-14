@@ -475,7 +475,7 @@ export default function ProfileDialog({
                         coverImageUrl ||
                         (currentUser?.userInfo?.coverImgUrl
                           ? `${currentUser.userInfo.coverImgUrl}?t=${new Date().getTime()}`
-                          : "https://i.ibb.co/yncCwjgj/default-cover.jpg");
+                          : "https://i.ibb.co/yncCwjg/default-cover.jpg");
                       setViewerImageUrl(imageUrl);
                       setViewerImageAlt("Cover Photo");
                       setIsImageViewerOpen(true);
@@ -486,7 +486,7 @@ export default function ProfileDialog({
                         coverImageUrl ||
                         (currentUser?.userInfo?.coverImgUrl
                           ? `${currentUser.userInfo.coverImgUrl}?t=${new Date().getTime()}`
-                          : "https://i.ibb.co/yncCwjgj/default-cover.jpg")
+                          : "https://i.ibb.co/yncCwjg/default-cover.jpg")
                       }
                       alt="Cover Photo"
                       fill
@@ -646,9 +646,9 @@ export default function ProfileDialog({
                       Đã gửi lời mời kết bạn
                     </Button>
                   ) : relationship === "PENDING_RECEIVED" ? (
-                    <div className="flex gap-2 w-full">
+                    <div className="flex gap-2 my-3 w-full">
                       <Button
-                        className="flex-1 bg-blue-500 hover:bg-blue-600"
+                        className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] h-8 !border-none !rounded-none"
                         onClick={handleAcceptRequest}
                         disabled={isAcceptingRequest}
                       >
@@ -663,7 +663,7 @@ export default function ProfileDialog({
                       </Button>
                       <Button
                         variant="outline"
-                        className="flex-1"
+                        className="flex-1 bg-[#ebecf0] font-semibold hover:bg-[#B3B6B9] py-2 px-4 h-8 !border-none !rounded-none"
                         onClick={handleRejectRequest}
                         disabled={isRejectingRequest}
                       >

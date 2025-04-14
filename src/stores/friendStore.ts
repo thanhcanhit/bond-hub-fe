@@ -12,14 +12,43 @@ import {
   SimpleFriend,
 } from "@/actions/friend.action";
 import { useAuthStore } from "@/stores/authStore";
+import { User } from "@/types/base";
+import { getUserDataById } from "@/actions/user.action";
 
-// Define types for friend requests
+// Define API response types
+interface ApiUserInfo {
+  fullName: string;
+  profilePictureUrl: string | null;
+}
+
+interface ApiUser {
+  id: string;
+  email?: string;
+  phoneNumber?: string;
+  userInfo: ApiUserInfo;
+}
+
+interface ApiFriendRequest {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  status: string;
+  introduce?: string;
+  createdAt: string;
+  updatedAt: string;
+  sender: ApiUser;
+  receiver?: ApiUser;
+}
+
+// Define types for friend requests in the store
 interface FriendRequest {
   id: string;
   fullName: string;
   profilePictureUrl: string;
   message: string;
   timeAgo: string;
+  userData?: User; // Thêm trường userData để lưu thông tin đầy đủ của người dùng
+  senderId: string; // Thêm senderId để có thể lấy thông tin đầy đủ của người gửi
 }
 
 interface SentRequest {
@@ -27,6 +56,8 @@ interface SentRequest {
   fullName: string;
   profilePictureUrl: string;
   timeAgo: string;
+  userData?: User; // Thêm trường userData để lưu thông tin đầy đủ của người dùng
+  receiverId: string; // Thêm receiverId để có thể lấy thông tin đầy đủ của người nhận
 }
 
 interface FriendStore {
@@ -84,6 +115,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
 
   // Fetch friends list
   fetchFriends: async () => {
+    console.log("fetchFriends called");
     set((state) => ({
       isLoading: {
         ...state.isLoading,
@@ -96,7 +128,11 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
     }));
 
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
+      console.log(
+        "Token in friendStore.fetchFriends:",
+        token ? `Token exists: ${token.substring(0, 10)}...` : "No token",
+      );
       const response = await getFriendsList(token);
       if (response.success) {
         set((state) => ({
@@ -146,7 +182,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
     }));
 
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await getReceivedFriendRequests(token);
       if (response.success) {
         // Get current count of received requests
@@ -159,8 +195,33 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
             ? newCount - currentCount
             : get().unreadReceivedRequests;
 
+        // Thêm thông tin senderId và chuẩn bị dữ liệu cho FriendRequests.tsx
+        const enhancedRequests = await Promise.all(
+          response.requests.map(async (request: ApiFriendRequest) => {
+            // Lấy thông tin đầy đủ của người gửi từ API
+            try {
+              const userResult = await getUserDataById(request.senderId);
+              if (userResult.success && userResult.user) {
+                return {
+                  ...request,
+                  userData: userResult.user,
+                };
+              }
+            } catch (error) {
+              console.error(
+                `Error fetching user data for ${request.senderId}:`,
+                error,
+              );
+            }
+            return request;
+          }),
+        );
+
+        // Log để kiểm tra enhancedRequests
+        console.log("Enhanced received requests:", enhancedRequests);
+
         set((state) => ({
-          receivedRequests: response.requests,
+          receivedRequests: enhancedRequests,
           unreadReceivedRequests: newUnreadCount,
           isLoading: {
             ...state.isLoading,
@@ -180,7 +241,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
           },
         }));
       }
-    } catch {
+    } catch (error) {
+      console.error("Error in fetchReceivedRequests:", error);
       set((state) => ({
         error: {
           ...state.error,
@@ -208,11 +270,36 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
     }));
 
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await getSentFriendRequests(token);
       if (response.success) {
+        // Thêm thông tin receiverId và chuẩn bị dữ liệu cho FriendRequests.tsx
+        const enhancedRequests = await Promise.all(
+          response.requests.map(async (request: ApiFriendRequest) => {
+            // Lấy thông tin đầy đủ của người nhận từ API
+            try {
+              const userResult = await getUserDataById(request.receiverId);
+              if (userResult.success && userResult.user) {
+                return {
+                  ...request,
+                  userData: userResult.user,
+                };
+              }
+            } catch (error) {
+              console.error(
+                `Error fetching user data for ${request.receiverId}:`,
+                error,
+              );
+            }
+            return request;
+          }),
+        );
+
+        // Log để kiểm tra enhancedRequests
+        console.log("Enhanced sent requests:", enhancedRequests);
+
         set((state) => ({
-          sentRequests: response.requests,
+          sentRequests: enhancedRequests,
           isLoading: {
             ...state.isLoading,
             sentRequests: false,
@@ -230,7 +317,8 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
           },
         }));
       }
-    } catch {
+    } catch (error) {
+      console.error("Error in fetchSentRequests:", error);
       set((state) => ({
         error: {
           ...state.error,
@@ -258,7 +346,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
     }));
 
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await getBlockedUsers(token);
       if (response.success) {
         set((state) => ({
@@ -315,7 +403,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Accept a friend request
   acceptRequest: async (requestId: string) => {
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await acceptFriendRequest(requestId, token);
       if (response.success) {
         // Remove from received requests and refresh friends list
@@ -338,7 +426,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   rejectRequest: async (requestId: string) => {
     console.log("friendStore.rejectRequest called with requestId:", requestId);
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       console.log("Calling rejectFriendRequest with token:", !!token);
       const response = await rejectFriendRequest(requestId, token);
       console.log("rejectFriendRequest response:", response);
@@ -368,7 +456,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Cancel a sent friend request
   cancelRequest: async (requestId: string) => {
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await cancelFriendRequest(requestId, token);
       if (response.success) {
         // Remove from sent requests
@@ -389,7 +477,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Block a user
   blockFriend: async (userId: string) => {
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await blockUser(userId, token);
       if (response.success) {
         // Refresh friends list and blocked users
@@ -407,7 +495,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   // Unblock a user
   unblockFriend: async (userId: string) => {
     try {
-      const token = useAuthStore.getState().accessToken || undefined;
+      const token = useAuthStore.getState().accessToken || "";
       const response = await unblockUser(userId, token);
       if (response.success) {
         // Refresh blocked users
