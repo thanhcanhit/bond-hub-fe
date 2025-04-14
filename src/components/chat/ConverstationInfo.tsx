@@ -8,7 +8,9 @@ import { Bell, ChevronRight, FileImage, Trash, UserX, X } from "lucide-react";
 import Image from "next/image";
 
 interface ContactInfoProps {
-  contact: (User & { userInfo: UserInfo }) | null;
+  contact:
+    | (User & { userInfo: UserInfo; online?: boolean; lastSeen?: Date })
+    | null;
   onClose: () => void;
 }
 
@@ -17,7 +19,7 @@ export default function ContactInfo({ contact, onClose }: ContactInfoProps) {
 
   return (
     <div className="h-full w-full flex flex-col bg-white">
-      <div className="p-3 border-b flex items-center justify-between shrink-0">
+      <div className="p-3 h-[69px] border-b flex items-center justify-between shrink-0">
         <h3 className="font-semibold">Thông tin hội thoại</h3>
         <Button variant="ghost" size="icon" onClick={onClose}>
           <X className="h-5 w-5" />
@@ -27,18 +29,28 @@ export default function ContactInfo({ contact, onClose }: ContactInfoProps) {
       <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
         {/* Contact Profile */}
         <div className="flex flex-col items-center text-center">
-          <Avatar className="h-20 w-20 mb-2">
-            <AvatarImage
-              src={contact.userInfo.profilePictureUrl || ""}
-              className="object-cover"
-            />
-            <AvatarFallback>
-              {contact.userInfo.fullName?.slice(0, 2).toUpperCase() || "??"}
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative">
+            <Avatar className="h-20 w-20 mb-2">
+              <AvatarImage
+                src={contact.userInfo.profilePictureUrl || ""}
+                className="object-cover"
+              />
+              <AvatarFallback>
+                {contact.userInfo.fullName?.slice(0, 2).toUpperCase() || "??"}
+              </AvatarFallback>
+            </Avatar>
+            {/* Online status indicator */}
+            {contact.online && (
+              <span className="absolute bottom-2 right-0 h-4 w-4 rounded-full bg-green-500 border-2 border-white"></span>
+            )}
+          </div>
           <h3 className="font-semibold text-lg">{contact.userInfo.fullName}</h3>
           <p className="text-sm text-gray-500">
-            {contact.userInfo.statusMessage}
+            {contact.online
+              ? "Đang hoạt động"
+              : contact.lastSeen
+                ? `Hoạt động ${new Date(contact.lastSeen).toLocaleString()}`
+                : contact.userInfo.statusMessage || "Không có trạng thái"}
           </p>
 
           <div className="flex gap-2 mt-3">

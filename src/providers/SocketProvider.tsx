@@ -129,6 +129,7 @@ export function SocketChatProvider({ children }: SocketProviderProps) {
         window.messageSocket = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   return (

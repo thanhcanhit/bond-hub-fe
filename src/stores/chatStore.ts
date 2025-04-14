@@ -56,6 +56,9 @@ interface ChatState {
   // Flag to control whether to fetch messages from API
   shouldFetchMessages: boolean;
 
+  // ID of message with open reaction picker
+  activeReactionPickerMessageId: string | null;
+
   // Actions
   setSelectedContact: (contact: (User & { userInfo: UserInfo }) | null) => void;
   setSelectedGroup: (group: Group | null) => void;
@@ -95,6 +98,9 @@ interface ChatState {
   setShouldFetchMessages: (shouldFetch: boolean) => void;
   clearChatCache: (type: "USER" | "GROUP", id: string) => void;
   clearAllCache: () => void;
+
+  // Reaction picker control
+  setActiveReactionPickerMessageId: (messageId: string | null) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -117,6 +123,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // By default, fetch messages from API
   shouldFetchMessages: true,
+
+  // No active reaction picker initially
+  activeReactionPickerMessageId: null,
 
   // Actions
   setSelectedContact: (contact) => {
@@ -1111,6 +1120,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   markMessageAsReadById: async (messageId) => {
     try {
+      // Kiểm tra xem tin nhắn đã được đọc chưa trước khi gọi API
+      const currentUser = useAuthStore.getState().user;
+      if (!currentUser) return false;
+
+      const state = get();
+      const message = state.messages.find((msg) => msg.id === messageId);
+
+      // Nếu không tìm thấy tin nhắn hoặc tin nhắn đã được đọc rồi, không cần gọi API
+      if (
+        !message ||
+        (Array.isArray(message.readBy) &&
+          message.readBy.includes(currentUser.id))
+      ) {
+        console.log(
+          `[chatStore] Message ${messageId} already read or not found, skipping API call`,
+        );
+        return true;
+      }
+
       const result = await markMessageAsRead(messageId);
       if (result.success && result.message) {
         // Update in chat store
@@ -1318,5 +1346,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Xóa toàn bộ cache
   clearAllCache: () => {
     set({ messageCache: {} });
+  },
+
+  // Cập nhật ID của tin nhắn đang mở reaction picker
+  setActiveReactionPickerMessageId: (messageId: string | null) => {
+    set({ activeReactionPickerMessageId: messageId });
   },
 }));

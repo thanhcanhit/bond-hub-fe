@@ -9,6 +9,7 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { Message, User, UserInfo, MessageType, Reaction } from "@/types/base";
 import { useSocket } from "@/providers/SocketProvider";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
+import { getUserDataById } from "@/actions/user.action";
 
 // Extend Window interface to include our socket and message tracking
 declare global {
@@ -370,18 +371,54 @@ export default function ChatSocketHandler() {
             ) {
               incrementUnread(message.senderId);
             }
-          } else if (message.sender && message.sender.userInfo) {
+          } else {
+            // Cuộc trò chuyện chưa tồn tại, cần tạo mới
             console.log(
               `[ChatSocketHandler] Creating new conversation with ${contactId}`,
             );
-            // Create new conversation if it doesn't exist
-            addConversation({
-              contact: message.sender as User & { userInfo: UserInfo },
-              lastMessage: message,
-              unreadCount: message.senderId !== currentUser?.id ? 1 : 0,
-              lastActivity: new Date(message.createdAt),
-              type: "USER",
-            });
+
+            // Nếu tin nhắn từ người dùng hiện tại, người nhận là người liên hệ
+            if (message.senderId === currentUser?.id && message.receiver) {
+              addConversation({
+                contact: message.receiver as User & { userInfo: UserInfo },
+                lastMessage: message,
+                unreadCount: 0, // Tin nhắn của chính mình nên unreadCount = 0
+                lastActivity: new Date(message.createdAt),
+                type: "USER",
+              });
+            }
+            // Nếu tin nhắn từ người khác, người gửi là người liên hệ
+            else if (message.sender && message.sender.userInfo) {
+              addConversation({
+                contact: message.sender as User & { userInfo: UserInfo },
+                lastMessage: message,
+                unreadCount: 1, // Tin nhắn từ người khác nên unreadCount = 1
+                lastActivity: new Date(message.createdAt),
+                type: "USER",
+              });
+            }
+            // Trường hợp không có thông tin người gửi/nhận, cần lấy thông tin từ API
+            else {
+              // Lấy thông tin người dùng từ API
+              getUserDataById(contactId)
+                .then((result) => {
+                  if (result.success && result.user) {
+                    addConversation({
+                      contact: result.user as User & { userInfo: UserInfo },
+                      lastMessage: message,
+                      unreadCount: message.senderId !== currentUser?.id ? 1 : 0,
+                      lastActivity: new Date(message.createdAt),
+                      type: "USER",
+                    });
+                  }
+                })
+                .catch((error) => {
+                  console.error(
+                    `[ChatSocketHandler] Error fetching user data for ${contactId}:`,
+                    error,
+                  );
+                });
+            }
           }
         }
       } else if (

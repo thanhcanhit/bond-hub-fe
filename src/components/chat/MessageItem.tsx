@@ -89,9 +89,7 @@ function MediaItem({ media, onClick }: MediaItemProps) {
             unoptimized
           />
           <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-all duration-200"></div>
-          <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded">
-            HD
-          </div>
+
           <button
             className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full shadow-sm hover:bg-white/100 transition-opacity opacity-0 hover:opacity-100"
             onClick={handleDownload}
@@ -229,7 +227,16 @@ export default function MessageItem({
   const [isForwardDialogOpen, setIsForwardDialogOpen] = useState(false);
   const formattedTime = formatMessageTime(message.createdAt);
   const currentUser = useAuthStore((state) => state.user);
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  // Sử dụng state toàn cục cho reaction picker thay vì state cục bộ
+  const activeReactionPickerMessageId = useChatStore(
+    (state) => state.activeReactionPickerMessageId,
+  );
+  const setActiveReactionPickerMessageId = useChatStore(
+    (state) => state.setActiveReactionPickerMessageId,
+  );
+
+  // Kiểm tra xem tin nhắn này có đang mở reaction picker không
+  const showReactionPicker = activeReactionPickerMessageId === message.id;
   const chatStore = useChatStore();
 
   // Biến để tái sử dụng về sau
@@ -305,7 +312,7 @@ export default function MessageItem({
         reactionType,
       );
       if (success) {
-        setShowReactionPicker(false);
+        setActiveReactionPickerMessageId(null);
       }
     } catch (error) {
       console.error("Error reacting to message:", error);
@@ -375,10 +382,11 @@ export default function MessageItem({
           <div className="mr-2 flex-shrink-0">
             <Avatar className="h-8 w-8">
               <AvatarImage
+                className="select-none relative"
                 src={
                   userInfo?.profilePictureUrl ||
                   message.sender?.userInfo?.profilePictureUrl ||
-                  "/placeholder-avatar.svg"
+                  undefined
                 }
               />
               <AvatarFallback>{getUserInitials(message.sender)}</AvatarFallback>
@@ -671,37 +679,12 @@ export default function MessageItem({
               {isCurrentUser && (
                 <span className="ml-1">
                   {isRead ? (
-                    <span title="Đã đọc" className="text-blue-500">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M18 6 7 17l-5-5" />
-                        <path d="m22 10-7.5 7.5L13 16" />
-                      </svg>
+                    <span title="Đã xem" className="text-gray-500">
+                      Đã xem
                     </span>
                   ) : isSent ? (
                     <span title="Đã gửi" className="text-gray-400">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="m5 12 5 5L20 7" />
-                      </svg>
+                      Đã gửi
                     </span>
                   ) : (
                     <span title="Đang gửi" className="text-gray-300">
@@ -811,8 +794,10 @@ export default function MessageItem({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-5 w-5 rounded-full shadow-sm hover:bg-gray-100 bg-white p-0"
-                          onMouseEnter={() => setShowReactionPicker(true)}
+                          className="h-5 w-5 rounded-full shadow-sm hover:bg-gray-100 bg-white p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                          onMouseEnter={() =>
+                            setActiveReactionPickerMessageId(message.id)
+                          }
                           title="Thêm biểu cảm"
                         >
                           <ThumbsUp className="h-3 w-3 text-gray-600" />
@@ -821,9 +806,13 @@ export default function MessageItem({
                         {/* Reaction picker - visible only when hovering the reaction button */}
                         {showReactionPicker && (
                           <div
-                            className="absolute bottom-full right-0 mb-2 bg-white rounded-full shadow-lg p-1 flex items-center gap-1 z-50"
-                            onMouseEnter={() => setShowReactionPicker(true)}
-                            onMouseLeave={() => setShowReactionPicker(false)}
+                            className={`absolute ${isCurrentUser ? "bottom-full right-0 mb-2" : "top-0 left-1/2 -translate-x-1/2 mt-8"} bg-white rounded-full shadow-lg p-1 flex items-center gap-1 z-[999999]`}
+                            onMouseEnter={() =>
+                              setActiveReactionPickerMessageId(message.id)
+                            }
+                            onMouseLeave={() =>
+                              setActiveReactionPickerMessageId(null)
+                            }
                           >
                             <button
                               className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-all duration-150 hover:scale-125 hover:shadow-md group/reaction"

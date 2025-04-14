@@ -3,16 +3,16 @@
 import type React from "react";
 
 import { useState, useEffect, useRef } from "react";
-import type { Message, Media } from "@/types/base";
+import type { Message, Media, UserInfo } from "@/types/base";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime } from "@/utils/dateUtils";
+import { getUserInitials } from "@/utils/userUtils";
 import Image from "next/image";
 import {
   Download,
   X,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   Share2,
   Forward,
   ZoomIn,
@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { createPortal } from "react-dom";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
+import { useAuthStore } from "@/stores/authStore";
 import { Popover, PopoverContent } from "@/components/ui/popover";
 import { CheckCircle2 } from "lucide-react";
 
@@ -32,15 +33,16 @@ interface MessageDetailDialogProps {
   message: Message | null;
   isOpen: boolean;
   onClose: () => void;
+  userInfo?: UserInfo; // Add userInfo for the sender
 }
 
 export default function MessageDetailDialog({
   message,
   isOpen,
   onClose,
+  userInfo,
 }: MessageDetailDialogProps) {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
-  const [showGrid, setShowGrid] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isForwardMenuOpen, setIsForwardMenuOpen] = useState(false);
   const [selectedRecipients, setSelectedRecipients] = useState<
@@ -58,6 +60,7 @@ export default function MessageDetailDialog({
 
   const { forwardMessageToRecipients } = useChatStore();
   const { conversations } = useConversationsStore();
+  const currentUser = useAuthStore((state) => state.user);
 
   // Helper functions for file handling
   const isOfficeDocument = (extension?: string) => {
@@ -538,14 +541,17 @@ export default function MessageDetailDialog({
       <header className="h-12 flex items-center justify-between px-4 bg-black/90 text-white border-b border-gray-800">
         <div className="text-sm font-medium truncate">
           {currentMedia?.fileName ||
-            message.sender?.userInfo?.fullName ||
-            "Tin nhắn"}
+            (message.senderId === currentUser?.id
+              ? currentUser?.userInfo?.fullName || "Bạn"
+              : userInfo?.fullName ||
+                message.sender?.userInfo?.fullName ||
+                "Tin nhắn")}
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="icon"
-            className="text-white hover:bg-white/10 rounded-full h-8 w-8"
+            className="text-white hover:bg-white/10 rounded-full h-8 w-8 hover:text-white"
             onClick={() => setShowSidebar(!showSidebar)}
           >
             {showSidebar ? (
@@ -557,7 +563,7 @@ export default function MessageDetailDialog({
           <Button
             variant="ghost"
             size="icon"
-            className="text-white hover:bg-white/10 rounded-full h-8 w-8"
+            className="text-white hover:bg-white/10 rounded-full h-8 w-8 hover:text-white"
             onClick={onClose}
           >
             <X className="h-4 w-4" />
@@ -569,228 +575,152 @@ export default function MessageDetailDialog({
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {!showGrid ? (
-            // Hiển thị media đơn lẻ
-            <div className="flex-1 flex items-center justify-center relative overflow-hidden">
-              {currentMedia && (
-                <>
-                  {currentMedia.type === "IMAGE" ? (
-                    <div
-                      ref={containerRef}
-                      className="relative max-h-full max-w-full w-auto h-auto "
-                      onWheel={handleWheel}
-                      onMouseDown={handleMouseDown}
-                      onMouseMove={handleMouseMove}
-                      onMouseUp={handleMouseUp}
-                      onMouseLeave={handleMouseUp}
-                      style={{ cursor: zoomLevel > 1 ? "grab" : "default" }}
-                    >
-                      <Image
-                        ref={imageRef}
-                        src={currentMedia.url || "/placeholder.svg"}
-                        alt={currentMedia.fileName}
-                        className="object-contain max-h-[calc(100vh-96px)] w-auto h-auto will-change-transform"
-                        width={1200}
-                        height={800}
-                        unoptimized
-                        style={{
-                          maxWidth: "100%",
-                          transform: `scale(${zoomLevel})`,
-                          transformOrigin: "center",
-                          translate: `${imagePosition.x}px ${imagePosition.y}px`,
-                          transition: isDragging
-                            ? "none"
-                            : "transform 0.1s ease-out, translate 0.1s ease-out",
-                        }}
-                      />
-                      {zoomLevel > 1 && (
-                        <div className="absolute top-4 right-4 text-white text-[10px] px-2 py-0.5 rounded drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]">
-                          {Math.round(zoomLevel * 100)}%
-                        </div>
-                      )}
-                      {zoomLevel > 1 && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute bottom-4 left-4 bg-white/20 text-white hover:bg-white/40 rounded-full"
-                          onClick={resetZoom}
-                        >
-                          <RefreshCcw className="h-5 w-5" />
-                        </Button>
-                      )}
-                    </div>
-                  ) : currentMedia.type === "VIDEO" ? (
-                    <div className="relative max-h-full max-w-full w-auto h-auto">
-                      <video
-                        src={currentMedia.url}
-                        controls
-                        className="max-h-[calc(100vh-96px)] w-auto h-auto"
-                        style={{ maxWidth: "100%" }}
-                      />
-                    </div>
-                  ) : (
-                    <div className="bg-white rounded-lg max-w-5xl w-full max-h-[calc(100vh-96px)] flex flex-col overflow-hidden">
-                      {/* Clean header with file info only */}
-                      <div className="p-3 border-b flex items-center bg-gray-50">
-                        <div className="flex items-center gap-3">
-                          <div className="flex-shrink-0">
-                            {getFileIcon(currentMedia.metadata.extension, 24)}
-                          </div>
-                          <div className="truncate">
-                            <h3 className="font-medium text-base truncate max-w-[500px]">
-                              {currentMedia.fileName}
-                            </h3>
-                            <p className="text-xs text-gray-500">
-                              {currentMedia.metadata.sizeFormatted}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Content area */}
-                      <div
-                        className={`flex-1 ${
-                          currentMedia.metadata.extension === "pdf"
-                            ? "overflow-hidden"
-                            : "overflow-auto"
-                        } min-h-[300px] max-h-[calc(100vh-144px)]`}
-                      >
-                        {currentMedia.metadata.extension === "pdf" ? (
-                          <iframe
-                            src={`${currentMedia.url}#toolbar=0`}
-                            className="w-full h-full min-h-[500px] border-0"
-                            title={currentMedia.fileName}
-                            style={{ height: "calc(100vh - 144px)" }}
-                          />
-                        ) : isOfficeDocument(
-                            currentMedia.metadata.extension,
-                          ) ? (
-                          <iframe
-                            src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(
-                              currentMedia.url,
-                            )}`}
-                            className="w-full h-full min-h-[500px] border-0"
-                            title={currentMedia.fileName}
-                          />
-                        ) : isTextFile(currentMedia.metadata.extension) ? (
-                          <div className="p-4 font-mono text-sm whitespace-pre-wrap h-full overflow-auto">
-                            {fileContent || (
-                              <div className="flex items-center justify-center h-full">
-                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-                            <div className="mb-4 p-6 bg-gray-50 rounded-full">
-                              {getFileIcon(currentMedia.metadata.extension, 64)}
-                            </div>
-                            <p className="text-gray-500 mb-4">
-                              Không thể hiển thị trực tiếp tệp này. Vui lòng tải
-                              xuống để xem.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Nút điều hướng giữa các media */}
-              {hasMultipleMedia && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute left-12 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-10 w-10"
-                    onClick={handlePrevMedia}
+          <div className="flex-1 flex items-center justify-center relative overflow-hidden">
+            {currentMedia && (
+              <>
+                {currentMedia.type === "IMAGE" ? (
+                  <div
+                    ref={containerRef}
+                    className="relative max-h-full max-w-full w-auto h-auto "
+                    onWheel={handleWheel}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    style={{ cursor: zoomLevel > 1 ? "grab" : "default" }}
                   >
-                    <ChevronLeft className="h-6 w-6" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-12 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-10 w-10"
-                    onClick={handleNextMedia}
-                  >
-                    <ChevronRight className="h-6 w-6" />
-                  </Button>
-                </>
-              )}
-            </div>
-          ) : (
-            // Hiển thị grid tất cả media
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-3 gap-1 max-w-4xl mx-auto">
-                {message.content.media &&
-                  message.content.media.map((media, index) => (
-                    <div
-                      key={media.fileId}
-                      className={`relative aspect-square cursor-pointer ${
-                        index === currentMediaIndex
-                          ? "ring-2 ring-blue-500"
-                          : ""
-                      }`}
-                      onClick={() => {
-                        setCurrentMediaIndex(index);
-                        setShowGrid(false);
+                    <Image
+                      ref={imageRef}
+                      src={currentMedia.url || "/placeholder.svg"}
+                      alt={currentMedia.fileName}
+                      className="object-contain max-h-[calc(100vh-96px)] w-auto h-auto will-change-transform"
+                      width={1200}
+                      height={800}
+                      unoptimized
+                      style={{
+                        maxWidth: "100%",
+                        transform: `scale(${zoomLevel})`,
+                        transformOrigin: "center",
+                        translate: `${imagePosition.x}px ${imagePosition.y}px`,
+                        transition: isDragging
+                          ? "none"
+                          : "transform 0.1s ease-out, translate 0.1s ease-out",
                       }}
+                    />
+                    {zoomLevel > 1 && (
+                      <div className="absolute top-4 right-4 text-white text-[10px] px-2 py-0.5 rounded drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]">
+                        {Math.round(zoomLevel * 100)}%
+                      </div>
+                    )}
+                    {zoomLevel > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute bottom-4 left-4 bg-white/20 text-white hover:bg-white/40 rounded-full"
+                        onClick={resetZoom}
+                      >
+                        <RefreshCcw className="h-5 w-5" />
+                      </Button>
+                    )}
+                  </div>
+                ) : currentMedia.type === "VIDEO" ? (
+                  <div className="relative max-h-full max-w-full w-auto h-auto">
+                    <video
+                      src={currentMedia.url}
+                      controls
+                      className="max-h-[calc(100vh-96px)] w-auto h-auto"
+                      style={{ maxWidth: "100%" }}
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-lg max-w-5xl w-full max-h-[calc(100vh-96px)] flex flex-col overflow-hidden">
+                    {/* Clean header with file info only */}
+                    <div className="p-3 border-b flex items-center bg-gray-50">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-shrink-0">
+                          {getFileIcon(currentMedia.metadata.extension, 24)}
+                        </div>
+                        <div className="truncate">
+                          <h3 className="font-medium text-base truncate max-w-[500px]">
+                            {currentMedia.fileName}
+                          </h3>
+                          <p className="text-xs text-gray-500">
+                            {currentMedia.metadata.sizeFormatted}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Content area */}
+                    <div
+                      className={`flex-1 ${
+                        currentMedia.metadata.extension === "pdf"
+                          ? "overflow-hidden"
+                          : "overflow-auto"
+                      } min-h-[300px] max-h-[calc(100vh-144px)]`}
                     >
-                      {media.type === "IMAGE" ? (
-                        <>
-                          <div className="absolute top-1 left-1 z-10 bg-black/50 text-white text-xs px-1 py-0.5 rounded">
-                            HD
-                          </div>
-                          <Image
-                            src={media.url || "/placeholder.svg"}
-                            alt={media.fileName}
-                            className="object-cover w-full h-full"
-                            width={150}
-                            height={150}
-                            unoptimized
-                          />
-                        </>
-                      ) : media.type === "VIDEO" ? (
-                        <>
-                          <div className="absolute top-1 left-1 z-10 bg-black/50 text-white text-xs px-1 py-0.5 rounded">
-                            HD
-                          </div>
-                          <div className="w-full h-full bg-gray-800 flex items-center justify-center relative">
-                            {media.thumbnailUrl ? (
-                              <Image
-                                src={media.thumbnailUrl || "/placeholder.svg"}
-                                alt={media.fileName}
-                                className="object-cover w-full h-full"
-                                width={150}
-                                height={150}
-                                unoptimized
-                              />
-                            ) : (
-                              <video
-                                src={media.url}
-                                className="object-cover w-full h-full"
-                                style={{ objectFit: "cover" }}
-                              />
-                            )}
-                          </div>
-                        </>
+                      {currentMedia.metadata.extension === "pdf" ? (
+                        <iframe
+                          src={`${currentMedia.url}#toolbar=0`}
+                          className="w-full h-full min-h-[500px] border-0"
+                          title={currentMedia.fileName}
+                          style={{ height: "calc(100vh - 144px)" }}
+                        />
+                      ) : isOfficeDocument(currentMedia.metadata.extension) ? (
+                        <iframe
+                          src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(
+                            currentMedia.url,
+                          )}`}
+                          className="w-full h-full min-h-[500px] border-0"
+                          title={currentMedia.fileName}
+                        />
+                      ) : isTextFile(currentMedia.metadata.extension) ? (
+                        <div className="p-4 font-mono text-sm whitespace-pre-wrap h-full overflow-auto">
+                          {fileContent || (
+                            <div className="flex items-center justify-center h-full">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+                            </div>
+                          )}
+                        </div>
                       ) : (
-                        <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center p-2">
-                          <div className="absolute top-1 left-1 z-10 bg-black/50 text-white text-xs px-1 py-0.5 rounded">
-                            HD
+                        <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                          <div className="mb-4 p-6 bg-gray-50 rounded-full">
+                            {getFileIcon(currentMedia.metadata.extension, 64)}
                           </div>
-                          {getFileIcon(media.metadata.extension, 32)}
-                          <span className="text-xs mt-1 text-center truncate w-full">
-                            {media.fileName}
-                          </span>
+                          <p className="text-gray-500 mb-4">
+                            Không thể hiển thị trực tiếp tệp này. Vui lòng tải
+                            xuống để xem.
+                          </p>
                         </div>
                       )}
                     </div>
-                  ))}
-              </div>
-            </div>
-          )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Nút điều hướng giữa các media */}
+            {hasMultipleMedia && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute left-12 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-10 w-10"
+                  onClick={handlePrevMedia}
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-12 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-10 w-10"
+                  onClick={handleNextMedia}
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </Button>
+              </>
+            )}
+          </div>
 
           {/* Footer controls */}
           <div className="h-12 flex items-center justify-between px-4 bg-black/90 border-t border-gray-800">
@@ -801,30 +731,11 @@ export default function MessageDetailDialog({
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Nút chuyển đổi giữa chế độ xem đơn lẻ và grid */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-white hover:bg-white/10 rounded-full h-8 w-8"
-                onClick={() => setShowGrid(!showGrid)}
-              >
-                {showGrid ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <div className="grid grid-cols-2 gap-0.5">
-                    <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                    <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                    <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                    <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                  </div>
-                )}
-              </Button>
-
               {/* Nút tải xuống */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-white hover:bg-white/10 rounded-full h-8 w-8"
+                className="text-white hover:bg-white/10 rounded-full h-8 w-8 hover:text-white"
                 onClick={() => currentMedia && handleDownload(currentMedia)}
               >
                 <Download className="h-4 w-4" />
@@ -842,18 +753,27 @@ export default function MessageDetailDialog({
                 <Avatar className="h-8 w-8">
                   <AvatarImage
                     src={
-                      message.sender?.userInfo?.profilePictureUrl || undefined
+                      message.senderId === currentUser?.id
+                        ? currentUser?.userInfo?.profilePictureUrl || undefined
+                        : userInfo?.profilePictureUrl ||
+                          message.sender?.userInfo?.profilePictureUrl ||
+                          undefined
                     }
+                    className="object-cover"
                   />
                   <AvatarFallback>
-                    {message.sender?.userInfo?.fullName
-                      ?.slice(0, 2)
-                      .toUpperCase() || "??"}
+                    {message.senderId === currentUser?.id
+                      ? getUserInitials(currentUser)
+                      : getUserInitials(message.sender)}
                   </AvatarFallback>
                 </Avatar>
                 <div>
                   <h3 className="text-sm font-medium text-white">
-                    {message.sender?.userInfo?.fullName || "Người dùng"}
+                    {message.senderId === currentUser?.id
+                      ? currentUser?.userInfo?.fullName || "Bạn"
+                      : userInfo?.fullName ||
+                        message.sender?.userInfo?.fullName ||
+                        "Người dùng"}
                   </h3>
                   <p className="text-xs text-gray-400">
                     {formatMessageTime(message.createdAt)}
@@ -881,7 +801,6 @@ export default function MessageDetailDialog({
                       }`}
                       onClick={() => {
                         setCurrentMediaIndex(index);
-                        setShowGrid(false);
                       }}
                     >
                       {media.type === "IMAGE" ? (
@@ -942,7 +861,7 @@ export default function MessageDetailDialog({
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-white hover:bg-white/10"
+                className="text-white hover:bg-white/10 hover:text-white"
                 onClick={() =>
                   navigator.share &&
                   navigator.share({
@@ -957,7 +876,7 @@ export default function MessageDetailDialog({
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-white hover:bg-white/10"
+                className="text-white hover:bg-white/10 hover:text-white"
                 onClick={() => setIsForwardMenuOpen(true)}
               >
                 <Forward className="h-4 w-4 mr-2" />
@@ -974,7 +893,7 @@ export default function MessageDetailDialog({
           <Button
             variant="ghost"
             size="icon"
-            className="text-white hover:bg-white/10 rounded-full h-8 w-8"
+            className="text-white hover:bg-white/10 rounded-full h-8 w-8 hover:text-white"
             onClick={zoomIn}
           >
             <ZoomIn className="h-4 w-4" />
@@ -991,7 +910,7 @@ export default function MessageDetailDialog({
           <Button
             variant="ghost"
             size="icon"
-            className="text-white hover:bg-white/10 rounded-full h-8 w-8"
+            className="text-white hover:bg-white/10 rounded-full h-8 w-8 hover:text-white"
             onClick={zoomOut}
           >
             <ZoomOut className="h-4 w-4" />

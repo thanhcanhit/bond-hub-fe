@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, UserPlus, Users } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime } from "@/utils/dateUtils";
@@ -22,19 +22,15 @@ export default function ContactList({ onSelectContact }: ContactListProps) {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <div className="p-4 border-b flex items-center justify-between shrink-0">
+      <div className="p-4 bg-white border-b flex items-center justify-between shrink-0">
         <div className="flex items-center space-x-2 border rounded-md pl-2 h-9 flex-1 bg-gray-50">
           <Search className="h-4 w-4 text-gray-500" />
           <Input
             placeholder="Tìm kiếm"
-            className="border-0 h-8 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
+            className="border-0 shadow-none h-8 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-        </div>
-        <div className="flex gap-2 ml-2">
-          <UserPlus className="h-5 w-5 text-gray-600 cursor-pointer" />
-          <Users className="h-5 w-5 text-gray-600 cursor-pointer" />
         </div>
       </div>
 
@@ -54,15 +50,21 @@ export default function ContactList({ onSelectContact }: ContactListProps) {
               }`}
               onClick={() => onSelectContact(conversation.contact.id)}
             >
-              <Avatar className="h-12 w-12 border">
-                <AvatarImage
-                  src={conversation.contact.userInfo?.profilePictureUrl || ""}
-                  className="object-cover"
-                />
-                <AvatarFallback>
-                  {getUserInitials(conversation.contact)}
-                </AvatarFallback>
-              </Avatar>
+              <div className="relative">
+                <Avatar className="h-12 w-12 border">
+                  <AvatarImage
+                    src={conversation.contact.userInfo?.profilePictureUrl || ""}
+                    className="object-cover"
+                  />
+                  <AvatarFallback>
+                    {getUserInitials(conversation.contact)}
+                  </AvatarFallback>
+                </Avatar>
+                {/* Online status indicator */}
+                {conversation.contact.online && (
+                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white"></span>
+                )}
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-center">
                   <p className="font-medium truncate">

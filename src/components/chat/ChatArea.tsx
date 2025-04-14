@@ -341,6 +341,9 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
         message={selectedMessage}
         isOpen={isDialogOpen}
         onClose={() => setIsDialogOpen(false)}
+        userInfo={
+          selectedMessage?.sender?.userInfo || selectedContact?.userInfo
+        }
       />
     </div>
   );

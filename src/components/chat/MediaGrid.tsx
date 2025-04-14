@@ -111,9 +111,6 @@ export default function MediaGrid({
                 unoptimized
               />
               <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-all duration-200" />
-              <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded">
-                HD
-              </div>
               <button
                 className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full shadow-sm hover:bg-white/100 transition-opacity opacity-0 hover:opacity-100"
                 onClick={(e) => {
@@ -144,9 +141,6 @@ export default function MediaGrid({
                 )}
                 <div className="absolute inset-0 bg-black/30 flex items-center justify-center hover:bg-black/50 transition-all duration-200">
                   <Play className="h-10 w-10 text-white" />
-                </div>
-                <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded">
-                  HD
                 </div>
                 <button
                   className="absolute bottom-2 right-2 bg-white/80 p-1 rounded-full shadow-sm hover:bg-white/100 transition-opacity opacity-0 hover:opacity-100"
