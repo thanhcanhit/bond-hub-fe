@@ -54,11 +54,6 @@ export default function LoginForm() {
         toast.success("Đăng nhập thành công!");
         // Không cần chuyển hướng tại đây, AuthProvider sẽ tự động chuyển hướng
         // router.push("/dashboard");
-
-        // Chỉ ẩn loading sau 1 giây để tránh nháy màn hình
-        setTimeout(() => {
-          setIsLoading(false);
-        }, 1000);
       } else {
         setIsLoading(false);
         toast.error("Đăng nhập thất bại! Vui lòng kiểm tra lại thông tin!");

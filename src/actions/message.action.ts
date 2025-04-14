@@ -520,3 +520,67 @@ export async function searchGroupMessages(
     };
   }
 }
+
+/**
+ * Tìm kiếm tin nhắn trên toàn bộ cuộc trò chuyện
+ * @param searchText Nội dung tìm kiếm
+ * @param userIds Danh sách ID người dùng cần tìm kiếm (tùy chọn)
+ * @param page Số trang (mặc định là 1)
+ * @returns Danh sách tin nhắn tìm thấy từ nhiều cuộc trò chuyện
+ */
+export async function searchMessagesGlobal(
+  searchText: string,
+  userIds?: string[],
+  page: number = 1,
+) {
+  try {
+    // Nếu có danh sách userIds cụ thể, tìm kiếm trong các cuộc trò chuyện đó
+    if (userIds && userIds.length > 0) {
+      // Tạo mảng các promise để tìm kiếm song song
+      const searchPromises = userIds.map((userId) =>
+        axiosInstance.get(`/messages/user/${userId}/search`, {
+          params: { searchText, page },
+        }),
+      );
+
+      // Thực hiện tất cả các tìm kiếm cùng lúc
+      const results = await Promise.all(searchPromises);
+
+      // Gộp kết quả từ tất cả các cuộc trò chuyện
+      let allMessages: Message[] = [];
+      results.forEach((response, index) => {
+        const messages = response.data as Message[];
+        // Thêm thông tin về người dùng mà tin nhắn này thuộc về
+        const messagesWithUserContext = messages.map((msg) => ({
+          ...msg,
+          _searchContext: {
+            userId: userIds[index],
+          },
+        }));
+        allMessages = [...allMessages, ...messagesWithUserContext];
+      });
+
+      // Sắp xếp tin nhắn theo thời gian
+      allMessages.sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+
+      return { success: true, messages: allMessages };
+    } else {
+      // Nếu không có danh sách userIds, sử dụng API endpoint tìm kiếm toàn cục (nếu có)
+      // Hiện tại backend chưa có endpoint này, nên ta sẽ trả về lỗi
+      console.error("Global search requires a list of userIds");
+      return {
+        success: false,
+        error: "Vui lòng cung cấp danh sách người dùng để tìm kiếm",
+      };
+    }
+  } catch (error) {
+    console.error("Global search messages failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
