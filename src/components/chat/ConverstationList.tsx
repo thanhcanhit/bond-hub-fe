@@ -1,12 +1,13 @@
 "use client";
 
-import { Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+// import { Search } from "lucide-react";
+// import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime } from "@/utils/dateUtils";
 import { getUserInitials, getUserDisplayName } from "@/utils/userUtils";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { useChatStore } from "@/stores/chatStore";
+import SearchHeader from "../SearchHeader";
 
 interface ContactListProps {
   onSelectContact: (contactId: string | null) => void;
@@ -14,15 +15,18 @@ interface ContactListProps {
 
 export default function ContactList({ onSelectContact }: ContactListProps) {
   const selectedContact = useChatStore((state) => state.selectedContact);
-  const { isLoading, searchQuery, setSearchQuery, getFilteredConversations } =
-    useConversationsStore();
+  const {
+    isLoading,
+    // searchQuery, setSearchQuery,
+    getFilteredConversations,
+  } = useConversationsStore();
 
   // Get filtered conversations based on search query
   const filteredConversations = getFilteredConversations();
 
   return (
     <div className="flex flex-col h-full w-full">
-      <div className="p-4 bg-white border-b flex items-center justify-between shrink-0">
+      {/* <div className="p-4 bg-white border-b flex items-center justify-between shrink-0">
         <div className="flex items-center space-x-2 border rounded-md pl-2 h-9 flex-1 bg-gray-50">
           <Search className="h-4 w-4 text-gray-500" />
           <Input
@@ -32,7 +36,8 @@ export default function ContactList({ onSelectContact }: ContactListProps) {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-      </div>
+      </div> */}
+      <SearchHeader />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {isLoading ? (
