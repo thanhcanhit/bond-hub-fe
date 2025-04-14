@@ -79,18 +79,7 @@ export default function ContactList({ onSelectContact }: ContactListProps) {
 
   return (
     <div className="flex flex-col h-full w-full">
-      {/* <div className="p-4 bg-white border-b flex items-center justify-between shrink-0">
-        <div className="flex items-center space-x-2 border rounded-md pl-2 h-9 flex-1 bg-gray-50">
-          <Search className="h-4 w-4 text-gray-500" />
-          <Input
-            placeholder="Tìm kiếm"
-            className="border-0 shadow-none h-8 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-      </div> */}
-      <SearchHeader />
+      <SearchHeader className="w-full" />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {isLoading ? (

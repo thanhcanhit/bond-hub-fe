@@ -22,6 +22,7 @@ import { toast } from "sonner";
 
 import ProfileDialog from "./profile/ProfileDialog";
 import QRCodeDialog from "./QRCodeDialog";
+import { cn } from "@/lib/utils";
 
 // Extended Message type with search context
 interface MessageWithContext extends Message {
@@ -65,7 +66,7 @@ type UserSearchResult = {
   email?: string;
 };
 
-export default function SearchHeader() {
+export default function SearchHeader({ className }: { className?: string }) {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [showResults, setShowResults] = useState<boolean>(false);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
@@ -514,7 +515,10 @@ export default function SearchHeader() {
   const friendsByLetter = groupFriendsByLetter();
 
   return (
-    <div className="w-[300px] p-4 relative border-r bg-white" ref={searchRef}>
+    <div
+      className={cn(`w-[300px] p-4 relative border-r bg-white`, className)}
+      ref={searchRef}
+    >
       {/* Header with search input and buttons */}
       <div className="flex items-center justify-between w-full">
         {!isSearchActive ? (
