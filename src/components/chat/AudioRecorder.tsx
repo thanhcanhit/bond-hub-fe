@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Mic, Square, Send, Trash2, Play, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface AudioRecorderProps {
   onSend: (audioBlob: Blob, duration?: number) => void;
@@ -337,7 +338,9 @@ export default function AudioRecorder({
           <Button
             variant={isRecording ? "destructive" : "default"}
             size="icon"
-            className="h-10 w-10 rounded-full"
+            className={cn("h-10 w-10 rounded-full", {
+              "bg-blue-500 text-white hover:bg-blue-700": !isRecording,
+            })}
             onClick={isRecording ? stopRecording : startRecording}
           >
             {isRecording ? (
@@ -401,25 +404,26 @@ export default function AudioRecorder({
                 </span>
               </div>
               {renderProgressBar()}
-              <div className="flex justify-between mt-2 text-xs text-gray-500">
-                <span className="font-medium">{formatTime(playbackTime)}</span>
-                <span>
-                  {formatTime(Math.max(0, audioDuration - playbackTime))}
-                </span>
-              </div>
             </div>
-          </div>
+            <div className="flex justify-end gap-2 mt-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className=""
+                onClick={handleCancel}
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
 
-          <div className="flex justify-end gap-2 mt-1">
-            <Button variant="ghost" size="sm" onClick={handleCancel}>
-              <Trash2 className="h-4 w-4 mr-1" />
-              Xóa
-            </Button>
-
-            <Button variant="default" size="sm" onClick={handleSend}>
-              <Send className="h-4 w-4 mr-1" />
-              Gửi
-            </Button>
+              <Button
+                variant="default"
+                size="icon"
+                className="rounded-full bg-blue-500 hover:bg-blue-600"
+                onClick={handleSend}
+              >
+                <Send className="h-4 w-4 " />
+              </Button>
+            </div>
           </div>
         </div>
       )}
