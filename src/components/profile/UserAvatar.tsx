@@ -2,6 +2,7 @@ import { User } from "@/types/base";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { cn } from "@/lib/utils";
 import { HTMLProps, useMemo } from "react";
+import { getUserInitials } from "@/utils/userUtils";
 
 export default function UserAvatar({
   user,
@@ -27,9 +28,12 @@ export default function UserAvatar({
         className,
       )}
     >
-      <AvatarImage className="object-cover" src={profileImageSrc} />
+      <AvatarImage
+        className="object-cover"
+        src={profileImageSrc || undefined}
+      />
       <AvatarFallback className="text-gray">
-        {user?.userInfo?.fullName?.split(" ")?.map((w) => w[0])}
+        {getUserInitials(user)}
       </AvatarFallback>
     </Avatar>
   );
