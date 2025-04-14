@@ -18,6 +18,7 @@ import { getFriendsList } from "@/actions/friend.action";
 import { isEmail, isPhoneNumber } from "@/utils/helpers";
 import { useAuthStore } from "@/stores/authStore";
 import { User, Message } from "@/types/base";
+import { toast } from "sonner";
 
 import ProfileDialog from "./profile/ProfileDialog";
 import QRCodeDialog from "./QRCodeDialog";
@@ -34,6 +35,8 @@ type Friend = {
   id: string;
   fullName: string;
   profilePictureUrl: string;
+  phoneNumber?: string;
+  email?: string;
 };
 
 // Type cho kết quả tìm kiếm tin nhắn
@@ -419,21 +422,38 @@ export default function SearchHeader() {
   };
 
   // Handle user profile click
-  const handleUserClick = (user: UserSearchResult) => {
-    // Chuyển đổi từ UserSearchResult sang User
-    // Sử dụng type assertion để tránh lỗi TypeScript
-    const userForProfile = {
-      id: user.id,
-      userInfo: {
-        fullName: user.fullName,
-        profilePictureUrl: user.profilePictureUrl,
-      },
-      email: user.email,
-      phoneNumber: user.phoneNumber,
-    } as unknown as User;
+  const handleUserClick = async (user: UserSearchResult) => {
+    try {
+      // Fetch complete user data using getUserDataById
+      const result = await getUserDataById(user.id);
 
-    setSelectedUser(userForProfile);
-    setShowProfileDialog(true);
+      if (result.success && result.user) {
+        // Use the complete user data from the API
+        setSelectedUser(result.user);
+      } else {
+        // Fallback to simplified user object if API call fails
+        console.error("Failed to fetch complete user data:", result.error);
+        // Chuyển đổi từ UserSearchResult sang User
+        // Sử dụng type assertion để tránh lỗi TypeScript
+        const userForProfile = {
+          id: user.id,
+          userInfo: {
+            fullName: user.fullName,
+            profilePictureUrl: user.profilePictureUrl,
+          },
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+        } as unknown as User;
+
+        setSelectedUser(userForProfile);
+      }
+
+      // Show the profile dialog
+      setShowProfileDialog(true);
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      toast.error("Không thể tải thông tin người dùng");
+    }
   };
 
   // Handle search submission
@@ -610,6 +630,11 @@ export default function SearchHeader() {
           onChat={() => {
             // Xử lý khi nhấn nút nhắn tin
             setShowProfileDialog(false);
+          }}
+          onCall={() => {
+            // Xử lý khi nhấn nút gọi điện
+            setShowProfileDialog(false);
+            toast.info("Tính năng gọi điện đang được phát triển");
           }}
         />
       )}
@@ -894,8 +919,8 @@ export default function SearchHeader() {
                             id: friend.id,
                             fullName: friend.fullName,
                             profilePictureUrl: friend.profilePictureUrl,
-                            phoneNumber: "", // Thêm trường bắt buộc
-                            email: "", // Thêm trường bắt buộc
+                            phoneNumber: friend.phoneNumber || "", // Sử dụng số điện thoại từ friend nếu có
+                            email: friend.email || "", // Sử dụng email từ friend nếu có
                           })
                         }
                       >
