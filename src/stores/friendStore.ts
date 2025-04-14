@@ -35,6 +35,7 @@ interface FriendStore {
   receivedRequests: FriendRequest[];
   sentRequests: SentRequest[];
   blockedUsers: SimpleFriend[];
+  unreadReceivedRequests: number;
   isLoading: {
     friends: boolean;
     receivedRequests: boolean;
@@ -53,11 +54,13 @@ interface FriendStore {
   fetchReceivedRequests: () => Promise<void>;
   fetchSentRequests: () => Promise<void>;
   fetchBlockedUsers: () => Promise<void>;
+  refreshAllFriendData: () => Promise<void>; // Method to refresh all friend data at once
   acceptRequest: (requestId: string) => Promise<boolean>;
   rejectRequest: (requestId: string) => Promise<boolean>;
   cancelRequest: (requestId: string) => Promise<boolean>;
   blockFriend: (userId: string) => Promise<boolean>;
   unblockFriend: (userId: string) => Promise<boolean>;
+  markFriendRequestsAsRead: () => void; // Mark all friend requests as read
 }
 
 export const useFriendStore = create<FriendStore>((set, get) => ({
@@ -65,6 +68,7 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
   receivedRequests: [],
   sentRequests: [],
   blockedUsers: [],
+  unreadReceivedRequests: 0,
   isLoading: {
     friends: false,
     receivedRequests: false,
@@ -145,8 +149,19 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
       const token = useAuthStore.getState().accessToken || undefined;
       const response = await getReceivedFriendRequests(token);
       if (response.success) {
+        // Get current count of received requests
+        const currentCount = get().receivedRequests.length;
+        const newCount = response.requests.length;
+
+        // If there are new requests, update the unread count
+        const newUnreadCount =
+          newCount > currentCount
+            ? newCount - currentCount
+            : get().unreadReceivedRequests;
+
         set((state) => ({
           receivedRequests: response.requests,
+          unreadReceivedRequests: newUnreadCount,
           isLoading: {
             ...state.isLoading,
             receivedRequests: false,
@@ -277,6 +292,24 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
         },
       }));
     }
+  },
+
+  // Refresh all friend-related data at once
+  refreshAllFriendData: async () => {
+    console.log("Refreshing all friend data...");
+    // Start all fetch operations in parallel
+    await Promise.all([
+      get().fetchFriends(),
+      get().fetchReceivedRequests(),
+      get().fetchSentRequests(),
+      get().fetchBlockedUsers(),
+    ]);
+    console.log("All friend data refreshed");
+  },
+
+  // Mark all friend requests as read
+  markFriendRequestsAsRead: () => {
+    set({ unreadReceivedRequests: 0 });
   },
 
   // Accept a friend request

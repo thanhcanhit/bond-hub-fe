@@ -12,7 +12,11 @@ export default function UserAvatar({
 }) {
   // Add cache-busting timestamp to ensure the latest image is always shown
   const profileImageSrc = useMemo(() => {
-    if (!user?.userInfo?.profilePictureUrl) return undefined;
+    if (
+      !user?.userInfo?.profilePictureUrl ||
+      user.userInfo.profilePictureUrl === ""
+    )
+      return null;
     return `${user.userInfo.profilePictureUrl}?t=${new Date().getTime()}`;
   }, [user?.userInfo?.profilePictureUrl]);
 

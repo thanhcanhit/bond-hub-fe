@@ -4,6 +4,7 @@ import { memo, useMemo } from "react";
 import { useSocketConnection } from "@/hooks/useSocketConnection";
 import { useUserDataSync } from "@/hooks/useUserDataSync";
 import { useAuthStore } from "@/stores/authStore";
+import { useFriendSocket } from "@/hooks/useFriendSocket";
 
 // Sử dụng memo để tránh re-render không cần thiết
 function SocketProvider({ children }: { children: React.ReactNode }) {
@@ -18,6 +19,9 @@ function SocketProvider({ children }: { children: React.ReactNode }) {
 
   // Chỉ khởi tạo socket connection nếu đã đăng nhập
   useSocketConnection(isAuthenticated);
+
+  // Khởi tạo kết nối socket cho namespace /friends để lắng nghe sự kiện reload
+  useFriendSocket();
 
   // Đồng bộ dữ liệu người dùng từ database với interval dài hơn
   // Chỉ hoạt động khi đã đăng nhập

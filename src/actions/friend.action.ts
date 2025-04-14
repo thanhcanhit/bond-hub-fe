@@ -481,65 +481,54 @@ export async function getBlockedUsers(token?: string) {
 }
 
 // Lấy mối quan hệ với một người dùng cụ thể
-export async function getRelationship(targetId: string) {
+export async function getRelationship(targetId: string, token?: string) {
   try {
-    // TEMPORARY MOCK FOR TESTING - Assume all users in contact list are friends
-    // This is a temporary solution until the API is fixed
-    console.log("MOCK: Returning FRIEND relationship for user ID:", targetId);
-    return {
-      success: true,
-      data: {
-        status: "FRIEND",
-        message: "Bạn bè từ 2023",
-        relationship: {
-          id: "mock-relationship-id",
-          senderId: "sender-id",
-          receiverId: targetId,
-          status: "ACCEPTED",
-          introduce: "Xin chào",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          sender: {
-            id: "sender-id",
-            email: "sender@example.com",
-            phoneNumber: "0123456789",
-            userInfo: {
-              fullName: "Người gửi",
-              profilePictureUrl: "https://i.pravatar.cc/150?img=1",
-            },
-          },
-          receiver: {
-            id: targetId,
-            email: "receiver@example.com",
-            phoneNumber: "0987654321",
-            userInfo: {
-              fullName: "Người nhận",
-              profilePictureUrl: "https://i.pravatar.cc/150?img=2",
-            },
-          },
-        },
-        targetUser: {
-          id: targetId,
-          email: "target@example.com",
-          phoneNumber: "0123456789",
-          userInfo: {
-            fullName: "Người dùng",
-            profilePictureUrl: "https://i.pravatar.cc/150?img=3",
-          },
-        },
-      },
-    };
-
-    // ORIGINAL CODE - Uncomment when API is fixed
-    /*
     // Sử dụng serverAxios để gửi token xác thực
     const serverAxios = createServerAxiosInstance(token);
     const response = await serverAxios.get(`/friends/relationship/${targetId}`);
     console.log("Relationship response:", response.data);
     return { success: true, data: response.data };
-    */
   } catch (error) {
     console.error("Get relationship failed:", error);
+
+    // Log chi tiết hơn về lỗi
+    if (axios.isAxiosError(error) && error.response) {
+      console.error("Error response:", {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers,
+      });
+
+      // Return specific error message based on status code
+      if (error.response.status === 401) {
+        return {
+          success: false,
+          error: "Bạn cần đăng nhập để thực hiện hành động này",
+        };
+      }
+
+      if (error.response.status === 403) {
+        return {
+          success: false,
+          error: "Bạn không có quyền thực hiện hành động này",
+        };
+      }
+
+      if (error.response.status === 404) {
+        return {
+          success: false,
+          error: "Không tìm thấy người dùng",
+        };
+      }
+
+      if (error.response.data?.message) {
+        return {
+          success: false,
+          error: error.response.data.message,
+        };
+      }
+    }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

@@ -80,6 +80,7 @@ export default function ContactPage() {
     fetchFriends,
     fetchReceivedRequests,
     fetchSentRequests,
+    markFriendRequestsAsRead,
   } = useFriendStore();
 
   // Fetch data when component mounts
@@ -87,7 +88,18 @@ export default function ContactPage() {
     fetchFriends();
     fetchReceivedRequests();
     fetchSentRequests();
-  }, [fetchFriends, fetchReceivedRequests, fetchSentRequests]);
+
+    // Mark friend requests as read if we're on the requests tab
+    if (activeTab === "requests") {
+      markFriendRequestsAsRead();
+    }
+  }, [
+    fetchFriends,
+    fetchReceivedRequests,
+    fetchSentRequests,
+    activeTab,
+    markFriendRequestsAsRead,
+  ]);
 
   // Get title and count based on active tab
   const { title, count } = useMemo(() => {

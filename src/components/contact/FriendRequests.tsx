@@ -1,9 +1,10 @@
 "use client";
 import { memo, useState } from "react";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { useFriendStore } from "@/stores/friendStore";
 import { toast } from "sonner";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import Image from "next/image";
 
 type FriendRequestProps = {
   id: string;
@@ -64,15 +65,18 @@ function FriendRequestItem({
     <div className="bg-white rounded-md p-4 mb-4 w-[302px] shadow-sm">
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center">
-          <div className="h-10 w-10 mr-3 rounded-full overflow-hidden relative flex-shrink-0">
-            <Image
-              src={profilePictureUrl}
-              alt={fullName}
-              fill
-              sizes="40px"
-              className="object-cover"
-            />
-          </div>
+          <Avatar className="h-10 w-10 mr-3 flex-shrink-0">
+            {profilePictureUrl && profilePictureUrl !== "" && (
+              <AvatarImage
+                src={profilePictureUrl}
+                alt={fullName}
+                className="object-cover"
+              />
+            )}
+            <AvatarFallback className="text-sm font-medium bg-gray-200 text-gray-700">
+              {fullName.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
           <div>
             <div className="font-semibold text-sm">{fullName}</div>
             <div className="text-xs text-gray-500">{timeAgo}</div>
@@ -158,15 +162,18 @@ function SentRequestItem({
     <div className="bg-white rounded-md p-4 mb-4 w-[302px] shadow-sm">
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center">
-          <div className="h-10 w-10 mr-3 rounded-full overflow-hidden relative flex-shrink-0">
-            <Image
-              src={profilePictureUrl}
-              alt={fullName}
-              fill
-              sizes="40px"
-              className="object-cover"
-            />
-          </div>
+          <Avatar className="h-10 w-10 mr-3 flex-shrink-0">
+            {profilePictureUrl && profilePictureUrl !== "" && (
+              <AvatarImage
+                src={profilePictureUrl}
+                alt={fullName}
+                className="object-cover"
+              />
+            )}
+            <AvatarFallback className="text-sm font-medium bg-gray-200 text-gray-700">
+              {fullName.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
           <div>
             <div className="font-semibold text-sm">{fullName}</div>
             <div className="text-xs text-gray-500">{timeAgo}</div>

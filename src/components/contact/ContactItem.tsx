@@ -1,10 +1,10 @@
 "use client";
 import { memo, useState, useEffect } from "react";
-import Image from "next/image";
 import { removeFriend, blockUser } from "@/actions/friend.action";
 import { getUserDataById } from "@/actions/user.action";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,6 +58,8 @@ function ContactItem({ user, onRemove }: ContactItemProps) {
   const [showProfileDialog, setShowProfileDialog] = useState(false);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
+  const [showRemoveFriendDialog, setShowRemoveFriendDialog] = useState(false);
+  const [isRemovingFriend, setIsRemovingFriend] = useState(false);
 
   // Effect to ensure cleanup when component unmounts
   useEffect(() => {
@@ -91,25 +93,33 @@ function ContactItem({ user, onRemove }: ContactItemProps) {
   const handleRemoveFriend = async () => {
     if (!id) return;
 
-    if (!confirm(`Bạn có chắc chắn muốn xóa kết bạn với ${fullName}?`)) {
-      return;
-    }
-
+    setIsRemovingFriend(true);
     try {
       const accessToken = useAuthStore.getState().accessToken || undefined;
       const result = await removeFriend(id, accessToken);
       if (result.success) {
         toast.success(`Đã xóa kết bạn với ${fullName}`);
-        // Call the callback if provided
-        if (onRemove) {
-          onRemove(id);
-        }
+
+        // Force cleanup of any potential overlay issues
+        document.body.style.pointerEvents = "auto";
+
+        // Close dialog with a slight delay
+        setTimeout(() => {
+          setShowRemoveFriendDialog(false);
+
+          // Call the callback if provided
+          if (onRemove) {
+            onRemove(id);
+          }
+        }, 50);
       } else {
         toast.error(`Không thể xóa kết bạn: ${result.error}`);
       }
     } catch (error) {
       console.error("Error removing friend:", error);
       toast.error("Đã xảy ra lỗi khi xóa kết bạn");
+    } finally {
+      setIsRemovingFriend(false);
     }
   };
 
@@ -154,19 +164,18 @@ function ContactItem({ user, onRemove }: ContactItemProps) {
           className="flex items-center cursor-pointer"
           onClick={() => setShowProfileDialog(true)}
         >
-          <div className="h-11 w-11 mr-3 rounded-full overflow-hidden relative">
-            <Image
-              src={profilePictureUrl}
-              alt={fullName}
-              fill
-              sizes="44px"
-              className="object-cover"
-            />
-            {/* Fallback if image fails to load */}
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-200 opacity-0">
-              {fullName.charAt(0)}
-            </div>
-          </div>
+          <Avatar className="h-11 w-11 mr-3">
+            {profilePictureUrl && profilePictureUrl !== "" && (
+              <AvatarImage
+                src={profilePictureUrl}
+                alt={fullName}
+                className="object-cover"
+              />
+            )}
+            <AvatarFallback className="text-base font-medium bg-gray-200 text-gray-700">
+              {fullName.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
           <div className="font-medium text-sm">{fullName}</div>
         </div>
         <div className="flex items-center">
@@ -212,7 +221,7 @@ function ContactItem({ user, onRemove }: ContactItemProps) {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="cursor-pointer text-red-500"
-                onClick={handleRemoveFriend}
+                onClick={() => setShowRemoveFriendDialog(true)}
               >
                 Xóa bạn
               </DropdownMenuItem>
@@ -292,6 +301,51 @@ function ContactItem({ user, onRemove }: ContactItemProps) {
                 </>
               ) : (
                 "Chặn"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remove Friend Confirmation Dialog */}
+      <AlertDialog
+        open={showRemoveFriendDialog}
+        onOpenChange={(open) => {
+          console.log("Remove friend dialog onOpenChange:", open);
+          // Always set the state immediately
+          setShowRemoveFriendDialog(open);
+
+          // If dialog is closing, ensure cleanup
+          if (!open) {
+            // Force cleanup of any potential overlay issues
+            document.body.style.pointerEvents = "auto";
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa bạn bè</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa kết bạn với {fullName}? Hành động này sẽ
+              xóa tất cả các cuộc trò chuyện chung và không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRemovingFriend}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRemoveFriend}
+              disabled={isRemovingFriend}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {isRemovingFriend ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                  Đang xóa...
+                </>
+              ) : (
+                "Xóa bạn bè"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

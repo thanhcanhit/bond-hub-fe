@@ -5,6 +5,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   AlertTriangle,
@@ -29,6 +39,7 @@ import {
   getRelationship,
   sendFriendRequest,
   removeFriend,
+  blockUser,
 } from "@/actions/friend.action";
 import ImageViewerDialog from "./ImageViewerDialog";
 import { useFriendStore } from "@/stores/friendStore";
@@ -66,6 +77,10 @@ export default function ProfileDialog({
   const [isAcceptingRequest, setIsAcceptingRequest] = useState(false);
   const [isRejectingRequest, setIsRejectingRequest] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const [showBlockDialog, setShowBlockDialog] = useState(false);
+  const [isBlocking, setIsBlocking] = useState(false);
+  const [showRemoveFriendDialog, setShowRemoveFriendDialog] = useState(false);
+  const [isRemovingFriend, setIsRemovingFriend] = useState(false);
   const profilePictureInputRef = useRef<HTMLInputElement>(null);
 
   // State for image viewer
@@ -96,8 +111,9 @@ export default function ProfileDialog({
     const checkRelationship = async () => {
       try {
         setIsLoadingRelationship(true);
+        const accessToken = useAuthStore.getState().accessToken || undefined;
         console.log("Calling getRelationship with userId:", user.id);
-        const result = await getRelationship(user.id);
+        const result = await getRelationship(user.id, accessToken);
         console.log("Full relationship response:", result);
 
         if (result.success && result.data) {
@@ -219,22 +235,62 @@ export default function ProfileDialog({
   const handleRemoveFriend = async () => {
     if (!user?.id) return;
 
-    if (!confirm("Bạn có chắc chắn muốn xóa kết bạn với người dùng này?")) {
-      return;
-    }
-
+    setIsRemovingFriend(true);
     try {
       const accessToken = useAuthStore.getState().accessToken || undefined;
       const result = await removeFriend(user.id, accessToken);
       if (result.success) {
         toast.success("Xóa kết bạn thành công!");
         setRelationship("NONE");
+
+        // Force cleanup of any potential overlay issues
+        document.body.style.pointerEvents = "auto";
+
+        // Close dialog with a slight delay
+        setTimeout(() => {
+          setShowRemoveFriendDialog(false);
+        }, 50);
       } else {
         toast.error(`Không thể xóa kết bạn: ${result.error}`);
       }
     } catch (error) {
       console.error("Error removing friend:", error);
       toast.error("Đã xảy ra lỗi khi xóa kết bạn");
+    } finally {
+      setIsRemovingFriend(false);
+    }
+  };
+
+  // Handle block user
+  const handleBlockUser = async () => {
+    if (!user?.id) return;
+
+    setIsBlocking(true);
+    try {
+      const accessToken = useAuthStore.getState().accessToken || undefined;
+      const result = await blockUser(user.id, accessToken);
+      if (result.success) {
+        toast.success(`Đã chặn ${user.userInfo?.fullName || "người dùng này"}`);
+
+        // Force cleanup of any potential overlay issues
+        document.body.style.pointerEvents = "auto";
+
+        // Close dialogs with a slight delay
+        setTimeout(() => {
+          setShowBlockDialog(false);
+          onOpenChange(false); // Close the profile dialog
+        }, 50);
+
+        // Update relationship status
+        setRelationship("BLOCKED");
+      } else {
+        toast.error(`Không thể chặn người dùng: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error blocking user:", error);
+      toast.error("Đã xảy ra lỗi khi chặn người dùng");
+    } finally {
+      setIsBlocking(false);
     }
   };
 
@@ -566,7 +622,7 @@ export default function ProfileDialog({
                   ) : relationship === "PENDING_SENT" ? (
                     <Button
                       disabled
-                      className="w-full bg-gray-300 text-gray-700 cursor-not-allowed"
+                      className="w-full bg-gray-300 text-gray-700 font-semibold cursor-not-allowed"
                     >
                       Đã gửi lời mời kết bạn
                     </Button>
@@ -609,7 +665,7 @@ export default function ProfileDialog({
                           placeholder="Xin chào, tôi muốn kết bạn với bạn..."
                           value={requestMessage}
                           onChange={(e) => setRequestMessage(e.target.value)}
-                          className="mt-1 w-full p-2 border border-gray-300 rounded-md text-sm"
+                          className="mt-1 w-full p-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-0 focus:border-gray-300"
                           maxLength={150}
                         />
                         <div className="text-xs text-right text-gray-500 mt-1">
@@ -617,22 +673,22 @@ export default function ProfileDialog({
                         </div>
                       </div>
 
-                      <div className="flex gap-3">
+                      <div className="flex gap-6 w-full p-2 pb-4">
                         <Button
                           variant="outline"
                           onClick={toggleFriendRequestForm}
-                          className="flex-1"
+                          className="flex-1 bg-[#ebecf0] font-semibold hover:bg-[#B3B6B9] py-2 px-4 h-8 !border-none !rounded-none"
                         >
                           Hủy
                         </Button>
                         <Button
                           onClick={handleSendFriendRequest}
-                          className="flex-1 bg-blue-500 hover:bg-blue-600"
+                          className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 h-8 !border-none !rounded-none"
                           disabled={isSendingRequest}
                         >
                           {isSendingRequest ? (
                             <>
-                              <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                              <div className="animate-spin h-4 w-4 border-2 border-[#094bad] rounded-full border-t-transparent mr-2"></div>
                               Đang gửi...
                             </>
                           ) : (
@@ -644,7 +700,7 @@ export default function ProfileDialog({
                   ) : (
                     <Button
                       onClick={toggleFriendRequestForm}
-                      className="w-full bg-blue-500 hover:bg-blue-600"
+                      className="w-full bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 my-3 h-8 !border-none !rounded-none"
                     >
                       <UserPlus className="mr-2 h-4 w-4" />
                       Kết bạn
@@ -785,6 +841,7 @@ export default function ProfileDialog({
                   <Button
                     variant="ghost"
                     className="justify-start w-full h-10 px-3"
+                    onClick={() => setShowBlockDialog(true)}
                   >
                     <Ban className="h-5 w-5 mr-2 text-gray-500 flex-shrink-0" />
                     <span className="text-sm">Chặn tin nhắn và cuộc gọi</span>
@@ -800,7 +857,7 @@ export default function ProfileDialog({
                     <Button
                       variant="ghost"
                       className="justify-start w-full h-10 px-3 text-red-500"
-                      onClick={handleRemoveFriend}
+                      onClick={() => setShowRemoveFriendDialog(true)}
                     >
                       <UserMinus className="h-5 w-5 mr-2 flex-shrink-0" />
                       <span className="text-sm">Xóa bạn bè</span>
@@ -836,6 +893,92 @@ export default function ProfileDialog({
         imageUrl={viewerImageUrl}
         alt={viewerImageAlt}
       />
+
+      {/* Block User Confirmation Dialog */}
+      <AlertDialog
+        open={showBlockDialog}
+        onOpenChange={(open) => {
+          setShowBlockDialog(open);
+
+          // If dialog is closing, ensure cleanup
+          if (!open) {
+            // Force cleanup of any potential overlay issues
+            document.body.style.pointerEvents = "auto";
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Chặn người dùng</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn chặn{" "}
+              {user?.userInfo?.fullName || "người dùng này"}? Người này sẽ không
+              thể gửi tin nhắn hoặc gọi điện cho bạn nữa.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBlocking}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBlockUser}
+              disabled={isBlocking}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {isBlocking ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                  Đang chặn...
+                </>
+              ) : (
+                "Chặn"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remove Friend Confirmation Dialog */}
+      <AlertDialog
+        open={showRemoveFriendDialog}
+        onOpenChange={(open) => {
+          setShowRemoveFriendDialog(open);
+
+          // If dialog is closing, ensure cleanup
+          if (!open) {
+            // Force cleanup of any potential overlay issues
+            document.body.style.pointerEvents = "auto";
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa bạn bè</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa kết bạn với{" "}
+              {user?.userInfo?.fullName || "người dùng này"}? Hành động này sẽ
+              xóa tất cả các cuộc trò chuyện chung và không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRemovingFriend}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRemoveFriend}
+              disabled={isRemovingFriend}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {isRemovingFriend ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                  Đang xóa...
+                </>
+              ) : (
+                "Xóa bạn bè"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
