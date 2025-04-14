@@ -128,11 +128,27 @@ export default function SearchHeader() {
     }
 
     // Lấy danh sách ID người gửi để lấy thông tin
+    // Loại bỏ các ID không hợp lệ ngay từ đầu
     const senderIds = filteredMessages
-      .filter((msg) => msg.sender && msg.sender.id)
+      .filter((msg) => {
+        // Kiểm tra ID hợp lệ và không phải ID hệ thống
+        return (
+          msg.sender &&
+          msg.sender.id &&
+          msg.sender.id.trim() !== "" &&
+          msg.sender.id !== "system" &&
+          msg.sender.id !== "unknown" &&
+          msg.sender.id !== "loading"
+        );
+      })
       .map((msg) => msg.sender.id)
       // Lọc các ID trùng lặp
       .filter((id, index, self) => self.indexOf(id) === index);
+
+    // Nếu không có ID hợp lệ nào, không làm gì
+    if (senderIds.length === 0) {
+      return;
+    }
 
     // Lấy thông tin người gửi từ API
     const fetchSenderDetails = async () => {
@@ -140,7 +156,9 @@ export default function SearchHeader() {
         // Kiểm tra xem đã có thông tin người gửi trong state chưa
         if (!senderDetails[senderId]) {
           try {
+            // Gọi API với ID đã được kiểm tra
             const result = await getUserDataById(senderId);
+
             if (result.success && result.user) {
               // Cập nhật thông tin người gửi vào state
               setSenderDetails((prev) => ({
@@ -150,6 +168,7 @@ export default function SearchHeader() {
             }
           } catch (error) {
             console.error(`Error fetching user data for ${senderId}:`, error);
+            // Không làm gì khi có lỗi, để tránh gọi lại API
           }
         }
       }
