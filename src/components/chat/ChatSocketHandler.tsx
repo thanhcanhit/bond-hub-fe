@@ -7,7 +7,7 @@ import { useConversationsStore } from "@/stores/conversationsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { Message, Reaction } from "@/types/base";
-import { useSocket } from "@/providers/SocketProvider";
+import { useSocket } from "@/providers/SocketChatProvider";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 
 // Extend Window interface to include our socket and message tracking

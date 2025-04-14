@@ -54,10 +54,13 @@ interface ChatState {
   selectedMessage: Message | null;
   isDialogOpen: boolean;
   isLoading: boolean;
+  isLoadingOlder: boolean;
   isForwarding: boolean;
   searchText: string;
   searchResults: Message[];
   isSearching: boolean;
+  currentPage: number;
+  hasMoreMessages: boolean;
   sendTypingIndicator?: (isTyping: boolean) => void;
 
   // Cache for messages
@@ -79,6 +82,7 @@ interface ChatState {
   setSelectedContact: (contact: (User & { userInfo: UserInfo }) | null) => void;
   setSelectedGroup: (group: Group | null) => void;
   loadMessages: (id: string, type: "USER" | "GROUP") => Promise<void>;
+  loadOlderMessages: () => Promise<boolean>;
   sendMessage: (
     text: string,
     files?: File[],
@@ -290,10 +294,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   selectedMessage: null,
   isDialogOpen: false,
   isLoading: false,
+  isLoadingOlder: false,
   isForwarding: false,
   searchText: "",
   searchResults: [],
   isSearching: false,
+  currentPage: 1,
+  hasMoreMessages: true,
 
   // Initialize cache
   messageCache: {},
@@ -313,6 +320,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentChatType: contact ? "USER" : null,
       messages: [], // Clear messages immediately
       isLoading: contact ? true : false, // Set loading state if we're selecting a contact
+      currentPage: 1, // Reset page number
+      hasMoreMessages: true, // Reset hasMoreMessages flag
     });
 
     if (contact) {
@@ -352,6 +361,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentChatType: group ? "GROUP" : null,
       messages: [], // Clear messages immediately
       isLoading: group ? true : false, // Set loading state if we're selecting a group
+      currentPage: 1, // Reset page number
+      hasMoreMessages: true, // Reset hasMoreMessages flag
     });
 
     if (group) {
@@ -392,13 +403,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    set({ isLoading: true });
+    set({ isLoading: true, currentPage: 1, hasMoreMessages: true });
     try {
       let result;
       if (type === "USER") {
-        result = await getMessagesBetweenUsers(id);
+        result = await getMessagesBetweenUsers(id, 1);
       } else {
-        result = await getGroupMessages(id);
+        result = await getGroupMessages(id, 1);
       }
 
       if (result.success && result.messages) {
@@ -409,10 +420,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
           );
         });
 
+        // Check if we have more messages to load
+        const hasMore = result.messages.length === 30; // PAGE_SIZE from backend
+
         // Cập nhật cache
         const cacheKey = `${type}_${id}`;
         set((state) => ({
           messages: sortedMessages,
+          hasMoreMessages: hasMore,
           messageCache: {
             ...state.messageCache,
             [cacheKey]: {
@@ -422,14 +437,111 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
         }));
       } else {
-        set({ messages: [] });
+        set({ messages: [], hasMoreMessages: false });
       }
     } catch (error) {
       console.error("Error fetching messages:", error);
-      set({ messages: [] });
+      set({ messages: [], hasMoreMessages: false });
     } finally {
       set({ isLoading: false });
     }
+  },
+
+  loadOlderMessages: async (): Promise<boolean> => {
+    const {
+      currentChatType,
+      selectedContact,
+      selectedGroup,
+      currentPage,
+      messages,
+    } = get();
+
+    if (
+      !currentChatType ||
+      (!selectedContact && !selectedGroup) ||
+      !get().hasMoreMessages
+    ) {
+      return false; // Trả về false nếu không thể tải thêm
+    }
+
+    const nextPage = currentPage + 1;
+    const id =
+      currentChatType === "USER" ? selectedContact!.id : selectedGroup!.id;
+
+    set({ isLoadingOlder: true });
+
+    try {
+      let result;
+      if (currentChatType === "USER") {
+        result = await getMessagesBetweenUsers(id, nextPage);
+      } else {
+        result = await getGroupMessages(id, nextPage);
+      }
+
+      if (result.success && result.messages && result.messages.length > 0) {
+        // Sort messages chronologically
+        const sortedNewMessages = [...result.messages].sort((a, b) => {
+          return (
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        });
+
+        // Check for duplicates and merge with existing messages
+        const existingMessageIds = new Set(messages.map((msg) => msg.id));
+        const uniqueNewMessages = sortedNewMessages.filter(
+          (msg) => !existingMessageIds.has(msg.id),
+        );
+
+        // If we got no new unique messages, we've reached the end
+        if (uniqueNewMessages.length === 0) {
+          set({
+            hasMoreMessages: false,
+            currentPage: nextPage,
+            isLoadingOlder: false,
+          });
+          return true; // Vẫn trả về true vì đã hoàn thành yêu cầu
+        }
+
+        // Merge messages and update state - add older messages to the beginning
+        const allMessages = [...uniqueNewMessages, ...messages];
+
+        // Sort all messages by date to ensure correct order
+        const sortedAllMessages = allMessages.sort((a, b) => {
+          return (
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        });
+
+        // Check if we have more messages to load (if we got less than PAGE_SIZE, we're at the end)
+        const hasMore = result.messages.length === 30; // PAGE_SIZE from backend
+
+        // Update cache
+        const cacheKey = `${currentChatType}_${id}`;
+        set((state) => ({
+          messages: sortedAllMessages,
+          currentPage: nextPage,
+          hasMoreMessages: hasMore,
+          messageCache: {
+            ...state.messageCache,
+            [cacheKey]: {
+              messages: sortedAllMessages,
+              lastFetched: new Date(),
+            },
+          },
+        }));
+      } else {
+        // No more messages to load
+        set({ hasMoreMessages: false });
+        return true; // Vẫn trả về true vì đã hoàn thành yêu cầu
+      }
+    } catch (error) {
+      console.error("Error fetching older messages:", error);
+      return false; // Trả về false nếu có lỗi
+    } finally {
+      set({ isLoadingOlder: false });
+    }
+
+    return true; // Trả về true khi hoàn thành
   },
 
   sendMessage: async (text, files, currentUser) => {

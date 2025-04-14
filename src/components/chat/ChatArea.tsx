@@ -31,16 +31,20 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     searchResults,
     isSearching,
     isLoading,
+    isLoadingOlder,
+    hasMoreMessages,
     clearSearch,
     setReplyingTo,
     setSelectedMessage,
     setIsDialogOpen,
     sendMessage,
+    loadOlderMessages,
   } = useChatStore();
 
   const { markAsRead, updateLastMessage, conversations } =
     useConversationsStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const [isTyping, setIsTyping] = useState(false);
 
   // Fetch complete user data and mark messages as read when viewing a conversation
@@ -104,7 +108,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
 
     // Only scroll if it's a new message, not a reaction update
     if (shouldScrollToBottom()) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      messagesEndRef.current?.scrollIntoView();
     }
 
     // Update last message in conversations list when messages change
@@ -121,6 +125,41 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
   }, []);
+
+  // Handle scroll event to load older messages
+  useEffect(() => {
+    const chatContainer = chatContainerRef.current;
+    if (!chatContainer) return;
+
+    const handleScroll = () => {
+      // Kiểm tra xem người dùng đã cuộn đến gần đầu chưa (trong khoảng 50px từ đầu)
+      if (chatContainer.scrollTop < 50 && !isLoadingOlder && hasMoreMessages) {
+        // Lưu lại chiều cao của nội dung và vị trí cuộn hiện tại
+        const scrollHeight = chatContainer.scrollHeight;
+        const scrollPosition = chatContainer.scrollTop;
+
+        // Tải tin nhắn cũ hơn
+        loadOlderMessages().then(() => {
+          // Sau khi tải xong, khôi phục vị trí cuộn tương đối
+          // Chờ một chút để DOM được cập nhật
+          setTimeout(() => {
+            if (chatContainerRef.current) {
+              // Tính toán vị trí cuộn mới dựa trên sự thay đổi chiều cao
+              const newScrollHeight = chatContainerRef.current.scrollHeight;
+              const heightDifference = newScrollHeight - scrollHeight;
+              chatContainerRef.current.scrollTop =
+                scrollPosition + heightDifference;
+            }
+          }, 100);
+        });
+      }
+    };
+
+    chatContainer.addEventListener("scroll", handleScroll);
+    return () => {
+      chatContainer.removeEventListener("scroll", handleScroll);
+    };
+  }, [isLoadingOlder, hasMoreMessages, loadOlderMessages]);
 
   // Theo dõi trạng thái đang nhập từ conversationsStore
   useEffect(() => {
@@ -303,7 +342,10 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
       <ChatMessagesDropZone
         onFileDrop={(files) => handleSendMessage("", files)}
       >
-        <div className="overflow-y-auto overflow-x-hidden bg-gray-50 p-4 custom-scrollbar h-full">
+        <div
+          ref={chatContainerRef}
+          className="overflow-y-auto overflow-x-hidden bg-gray-50 p-4 custom-scrollbar h-full"
+        >
           {selectedContact ? (
             isLoading ? (
               <div className="h-full flex items-center justify-center">
@@ -313,7 +355,17 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
                 </div>
               </div>
             ) : (
-              renderMessageContent()
+              <>
+                {isLoadingOlder && (
+                  <div className="flex justify-center mb-4">
+                    <div className="flex items-center text-xs text-gray-500">
+                      <div className="w-4 h-4 border-2 border-t-blue-500 border-b-blue-300 border-l-blue-300 border-r-blue-300 rounded-full animate-spin mr-2"></div>
+                      Đang tải tin nhắn cũ hơn...
+                    </div>
+                  </div>
+                )}
+                {renderMessageContent()}
+              </>
             )
           ) : (
             <div className="h-full flex items-center justify-center">
