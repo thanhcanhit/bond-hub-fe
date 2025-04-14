@@ -6,9 +6,14 @@ import { AxiosError } from "axios";
  * Gửi tin nhắn văn bản đến người dùng
  * @param receiverId ID của người nhận tin nhắn
  * @param content Nội dung tin nhắn (text)
+ * @param repliedTo ID của tin nhắn được trả lời (nếu có)
  * @returns Thông tin tin nhắn đã gửi
  */
-export async function sendTextMessage(receiverId: string, text: string) {
+export async function sendTextMessage(
+  receiverId: string,
+  text: string,
+  repliedTo?: string,
+) {
   try {
     // Check if we have a valid token
 
@@ -18,11 +23,13 @@ export async function sendTextMessage(receiverId: string, text: string) {
       content: {
         text: text.substring(0, 20) + (text.length > 20 ? "..." : ""),
       },
+      repliedTo: repliedTo || null,
     });
 
     const response = await axiosInstance.post("/messages/user", {
       receiverId,
       content: { text },
+      repliedTo,
     });
 
     console.log("Message sent successfully:", { messageId: response.data?.id });
@@ -47,17 +54,24 @@ export async function sendTextMessage(receiverId: string, text: string) {
  * @param receiverId ID của người nhận tin nhắn
  * @param text Nội dung tin nhắn (text)
  * @param files Danh sách file hình ảnh
+ * @param repliedTo ID của tin nhắn được trả lời (nếu có)
  * @returns Thông tin tin nhắn đã gửi
  */
 export async function sendMediaMessage(
   receiverId: string,
   text: string,
   files: File[],
+  repliedTo?: string,
 ) {
   try {
     const formData = new FormData();
     formData.append("receiverId", receiverId);
     formData.append("content[text]", text);
+
+    // Thêm repliedTo nếu có
+    if (repliedTo) {
+      formData.append("repliedTo", repliedTo);
+    }
 
     // Thêm các file vào formData
     files.forEach((file) => {
@@ -375,13 +389,19 @@ export async function forwardMessage(
  * Gửi tin nhắn cho nhóm
  * @param groupId ID của nhóm
  * @param text Nội dung tin nhắn (text)
+ * @param repliedTo ID của tin nhắn được trả lời (nếu có)
  * @returns Thông tin tin nhắn đã gửi
  */
-export async function sendGroupTextMessage(groupId: string, text: string) {
+export async function sendGroupTextMessage(
+  groupId: string,
+  text: string,
+  repliedTo?: string,
+) {
   try {
     const response = await axiosInstance.post("/messages/group", {
       groupId,
       content: { text },
+      repliedTo,
     });
 
     const message = response.data as Message;
@@ -405,17 +425,24 @@ export async function sendGroupTextMessage(groupId: string, text: string) {
  * @param groupId ID của nhóm
  * @param text Nội dung tin nhắn (text)
  * @param files Danh sách file hình ảnh
+ * @param repliedTo ID của tin nhắn được trả lời (nếu có)
  * @returns Thông tin tin nhắn đã gửi
  */
 export async function sendGroupMediaMessage(
   groupId: string,
   text: string,
   files: File[],
+  repliedTo?: string,
 ) {
   try {
     const formData = new FormData();
     formData.append("groupId", groupId);
     formData.append("content[text]", text);
+
+    // Thêm repliedTo nếu có
+    if (repliedTo) {
+      formData.append("repliedTo", repliedTo);
+    }
 
     // Thêm các file vào formData
     files.forEach((file) => {

@@ -20,6 +20,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
   RefreshCcw,
+  Music,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createPortal } from "react-dom";
@@ -82,6 +83,13 @@ export default function MessageDetailDialog({
       "csv",
     ];
     return textExtensions.includes(extension.toLowerCase());
+  };
+
+  // Check if file is an audio file by extension
+  const isAudioFile = (extension?: string) => {
+    if (!extension) return false;
+    const audioExtensions = ["mp3", "wav", "ogg", "m4a", "aac", "flac"];
+    return audioExtensions.includes(extension.toLowerCase());
   };
 
   const getFileIcon = (extension?: string, size = 32) => {
@@ -221,6 +229,17 @@ export default function MessageDetailDialog({
           </svg>
         );
       default:
+        // Check if it's an audio file
+        if (isAudioFile(extension)) {
+          return (
+            <Music
+              size={iconSize}
+              strokeWidth={strokeWidth}
+              className="text-purple-600"
+            />
+          );
+        }
+        // Default file icon
         return (
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -631,6 +650,46 @@ export default function MessageDetailDialog({
                       className="max-h-[calc(100vh-96px)] w-auto h-auto"
                       style={{ maxWidth: "100%" }}
                     />
+                  </div>
+                ) : currentMedia.type === "AUDIO" ? (
+                  <div className="bg-white rounded-lg max-w-5xl w-full max-h-[calc(100vh-96px)] flex flex-col overflow-hidden">
+                    {/* Audio header with file info */}
+                    <div className="p-3 border-b flex items-center bg-gray-50">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-shrink-0">
+                          <Music className="h-6 w-6 text-purple-600" />
+                        </div>
+                        <div className="truncate">
+                          <h3 className="font-medium text-base truncate max-w-[500px]">
+                            {currentMedia.fileName}
+                          </h3>
+                          <p className="text-xs text-gray-500">
+                            {currentMedia.metadata.sizeFormatted}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Audio player */}
+                    <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
+                      <div className="w-full max-w-md">
+                        <audio
+                          src={currentMedia.url}
+                          controls
+                          className="w-full"
+                          autoPlay={false}
+                          controlsList="nodownload"
+                          preload="metadata"
+                        />
+                        <div className="mt-4 text-center">
+                          <p className="text-sm text-gray-500">
+                            {currentMedia.metadata.mimeType
+                              ?.split("/")[1]
+                              ?.toUpperCase() || "Audio"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="bg-white rounded-lg max-w-5xl w-full max-h-[calc(100vh-96px)] flex flex-col overflow-hidden">

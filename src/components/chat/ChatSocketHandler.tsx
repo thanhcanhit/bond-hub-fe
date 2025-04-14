@@ -6,10 +6,9 @@ import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useNotificationStore } from "@/stores/notificationStore";
-import { Message, User, UserInfo, MessageType, Reaction } from "@/types/base";
+import { Message, Reaction } from "@/types/base";
 import { useSocket } from "@/providers/SocketProvider";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
-import { getUserDataById } from "@/actions/user.action";
 
 // Extend Window interface to include our socket and message tracking
 declare global {
@@ -62,21 +61,9 @@ interface UserStatusEventData {
 export default function ChatSocketHandler() {
   const { messageSocket } = useSocket();
   const currentUser = useAuthStore((state) => state.user);
-  const {
-    addMessage,
-    updateMessage,
-    selectedContact,
-    selectedGroup,
-    currentChatType,
-    messages,
-  } = useChatStore();
-  const {
-    updateLastMessage,
-    incrementUnread,
-    addConversation,
-    conversations,
-    updateConversation,
-  } = useConversationsStore();
+  const { selectedContact, selectedGroup, currentChatType, messages } =
+    useChatStore();
+  const { conversations } = useConversationsStore();
 
   // Sử dụng hook để phát âm thanh thông báo
   const playNotificationSound = useNotificationSound();
@@ -137,6 +124,8 @@ export default function ChatSocketHandler() {
       console.log("[ChatSocketHandler] New message received:", data);
 
       const message = ensureMessageHasUserInfo(data.message);
+      const conversationsStore = useConversationsStore.getState();
+      const chatStore = useChatStore.getState();
 
       // QUAN TRỌNG: Kiểm tra xem tin nhắn có phải là tin nhắn vừa gửi từ người dùng hiện tại không
       if (message.senderId === currentUser?.id) {
@@ -170,16 +159,18 @@ export default function ChatSocketHandler() {
           );
 
           // Đây là trường hợp tin nhắn thật từ server trả về cho tin nhắn tạm thời
-          // Chúng ta sẽ thay thế tin nhắn tạm thời bằng tin nhắn thật này
-          const chatStore = useChatStore.getState();
-
           // Thay thế tin nhắn tạm thời đầu tiên tìm thấy bằng tin nhắn thật
-          chatStore.updateMessage(tempMessages[0].id, message);
+          chatStore.updateMessage(tempMessages[0].id, message, {
+            notifyConversationStore: true, // Đồng bộ với conversationsStore
+            updateCache: true, // Cập nhật cache
+          });
 
           // Xóa các tin nhắn tạm thời khác (nếu có)
           if (tempMessages.length > 1) {
             for (let i = 1; i < tempMessages.length; i++) {
-              chatStore.removeMessage(tempMessages[i].id);
+              chatStore.removeMessage(tempMessages[i].id, {
+                notifyConversationStore: false, // Không cần đồng bộ với conversationsStore vì đã được xử lý ở trên
+              });
             }
           }
 
@@ -239,298 +230,66 @@ export default function ChatSocketHandler() {
           // Tăng số lượng tin nhắn chưa đọc toàn cục
           incrementGlobalUnread();
           console.log(`[ChatSocketHandler] Incrementing global unread count`);
-
-          // Kiểm tra xem tin nhắn có đến từ cuộc trò chuyện đang mở không
-          const isFromCurrentChat =
-            (currentChatType === "USER" &&
-              selectedContact &&
-              message.senderId === selectedContact.id) ||
-            (currentChatType === "GROUP" &&
-              selectedGroup &&
-              message.groupId === selectedGroup.id);
-
-          // Nếu tin nhắn không đến từ cuộc trò chuyện đang mở, tăng số lượng tin nhắn chưa đọc của cuộc trò chuyện đó
-          if (!isFromCurrentChat) {
-            if (message.messageType === MessageType.USER && message.senderId) {
-              incrementUnread(message.senderId);
-            } else if (
-              message.messageType === MessageType.GROUP &&
-              message.groupId
-            ) {
-              // Tìm conversation của nhóm
-              const groupConversation = conversations.find(
-                (conv) =>
-                  conv.type === "GROUP" && conv.group?.id === message.groupId,
-              );
-
-              if (groupConversation && groupConversation.group) {
-                updateConversation(groupConversation.group.id, {
-                  unreadCount: (groupConversation.unreadCount || 0) + 1,
-                });
-              }
-            }
-          }
         }
       }
 
-      // If the message is for the current chat, add it to the messages list
-      if (currentChatType === "USER" && selectedContact) {
-        if (
-          (message.senderId === selectedContact.id &&
-            message.receiverId === currentUser?.id) ||
-          (message.senderId === currentUser?.id &&
-            message.receiverId === selectedContact.id)
-        ) {
-          console.log(
-            `[ChatSocketHandler] Adding message to current USER chat with ${selectedContact.id}`,
-          );
+      // Kiểm tra xem tin nhắn có thuộc cuộc trò chuyện đang mở không
+      const isFromCurrentChat =
+        (currentChatType === "USER" &&
+          selectedContact &&
+          (message.senderId === selectedContact.id ||
+            message.receiverId === selectedContact.id)) ||
+        (currentChatType === "GROUP" &&
+          selectedGroup &&
+          message.groupId === selectedGroup.id);
 
-          // Check if message already exists in the chat
-          const messageExists = messages.some((msg) => msg.id === message.id);
-          if (messageExists) {
-            console.log(
-              `[ChatSocketHandler] Message ${message.id} already exists in chat, skipping`,
-            );
-          } else {
-            // Add message to chat store
-            addMessage(message);
-
-            // Mark as read if it's from the selected contact
-            if (message.senderId === selectedContact.id) {
-              // Update the message in the backend to mark it as read
-              // This will be handled by the server and broadcast to other clients
-              const chatStore = useChatStore.getState();
-              chatStore.markMessageAsReadById(message.id);
-            }
-          }
-        }
-      } else if (
-        currentChatType === "GROUP" &&
-        selectedGroup &&
-        message.groupId === selectedGroup.id
-      ) {
-        console.log(
-          `[ChatSocketHandler] Adding message to current GROUP chat with ${selectedGroup.id}`,
-        );
-
-        // Check if message already exists in the chat
+      // Nếu tin nhắn thuộc cuộc trò chuyện đang mở, thêm vào danh sách tin nhắn
+      if (isFromCurrentChat) {
+        // Kiểm tra xem tin nhắn đã tồn tại trong danh sách chưa
         const messageExists = messages.some((msg) => msg.id === message.id);
-        if (messageExists) {
-          console.log(
-            `[ChatSocketHandler] Message ${message.id} already exists in chat, skipping`,
-          );
-        } else {
-          // Add message to chat store for group chat
-          addMessage(message);
+        if (!messageExists) {
+          console.log(`[ChatSocketHandler] Adding message to current chat`);
 
-          // Mark as read if we're currently viewing this group
+          // Sử dụng hàm processNewMessage để xử lý tin nhắn mới
+          chatStore.processNewMessage(message, {
+            // Không cần đồng bộ với conversationsStore vì sẽ được xử lý riêng
+            notifyConversationStore: false,
+            // Cập nhật cache
+            updateCache: true,
+            // Bỏ qua kiểm tra trùng lặp vì đã kiểm tra ở trên
+            skipDuplicateCheck: true,
+          });
+
+          // Đánh dấu đã đọc nếu tin nhắn từ người khác
           if (message.senderId !== currentUser?.id) {
-            const chatStore = useChatStore.getState();
             chatStore.markMessageAsReadById(message.id);
           }
         }
       }
 
-      // Update the conversation list
-      if (message.messageType === MessageType.USER) {
-        const contactId =
-          message.senderId === currentUser?.id
-            ? message.receiverId
-            : message.senderId;
+      // Xử lý tin nhắn trong conversationsStore
+      const shouldMarkAsRead = Boolean(
+        currentUser && isFromCurrentChat && message.senderId !== currentUser.id,
+      );
+      const shouldIncrementUnread = Boolean(
+        message.senderId !== currentUser?.id && !isFromCurrentChat,
+      );
 
-        if (contactId) {
-          // Check if conversation exists
-          const existingConversation = conversations.find(
-            (conv) => conv.contact.id === contactId,
-          );
-
-          if (existingConversation) {
-            // Kiểm tra xem tin nhắn này có phải là tin nhắn mới nhất không
-            const isNewerMessage =
-              !existingConversation.lastMessage ||
-              new Date(message.createdAt).getTime() >=
-                new Date(existingConversation.lastMessage.createdAt).getTime();
-
-            if (isNewerMessage) {
-              console.log(
-                `[ChatSocketHandler] Updating last message for conversation with ${contactId}`,
-              );
-              // Update existing conversation
-              updateLastMessage(contactId, message);
-            } else {
-              console.log(
-                `[ChatSocketHandler] Message is older than current last message, skipping conversation update`,
-              );
-            }
-
-            // Increment unread count if message is not from current user and not from selected contact
-            if (
-              message.senderId !== currentUser?.id &&
-              (currentChatType !== "USER" ||
-                message.senderId !== selectedContact?.id)
-            ) {
-              incrementUnread(message.senderId);
-            }
-          } else {
-            // Cuộc trò chuyện chưa tồn tại, cần tạo mới
-            console.log(
-              `[ChatSocketHandler] Creating new conversation with ${contactId}`,
-            );
-
-            // Nếu tin nhắn từ người dùng hiện tại, người nhận là người liên hệ
-            if (message.senderId === currentUser?.id && message.receiver) {
-              addConversation({
-                contact: message.receiver as User & { userInfo: UserInfo },
-                lastMessage: message,
-                unreadCount: 0, // Tin nhắn của chính mình nên unreadCount = 0
-                lastActivity: new Date(message.createdAt),
-                type: "USER",
-              });
-            }
-            // Nếu tin nhắn từ người khác, người gửi là người liên hệ
-            else if (message.sender && message.sender.userInfo) {
-              addConversation({
-                contact: message.sender as User & { userInfo: UserInfo },
-                lastMessage: message,
-                unreadCount: 1, // Tin nhắn từ người khác nên unreadCount = 1
-                lastActivity: new Date(message.createdAt),
-                type: "USER",
-              });
-            }
-            // Trường hợp không có thông tin người gửi/nhận, cần lấy thông tin từ API
-            else {
-              // Lấy thông tin người dùng từ API
-              getUserDataById(contactId)
-                .then((result) => {
-                  if (result.success && result.user) {
-                    addConversation({
-                      contact: result.user as User & { userInfo: UserInfo },
-                      lastMessage: message,
-                      unreadCount: message.senderId !== currentUser?.id ? 1 : 0,
-                      lastActivity: new Date(message.createdAt),
-                      type: "USER",
-                    });
-                  }
-                })
-                .catch((error) => {
-                  console.error(
-                    `[ChatSocketHandler] Error fetching user data for ${contactId}:`,
-                    error,
-                  );
-                });
-            }
-          }
-        }
-      } else if (
-        message.messageType === MessageType.GROUP &&
-        message.groupId &&
-        message.group
-      ) {
-        // Handle group message updates for conversation list
-        const existingConversation = conversations.find(
-          (conv) => conv.type === "GROUP" && conv.group?.id === message.groupId,
-        );
-
-        if (existingConversation) {
-          // Kiểm tra xem tin nhắn này có phải là tin nhắn mới nhất không
-          const isNewerMessage =
-            !existingConversation.lastMessage ||
-            new Date(message.createdAt).getTime() >=
-              new Date(existingConversation.lastMessage.createdAt).getTime();
-
-          if (isNewerMessage) {
-            console.log(
-              `[ChatSocketHandler] Updating last message for group conversation with ${message.groupId}`,
-            );
-            // Update existing group conversation
-            // For groups, we use the group ID as the key for updateConversation
-            updateConversation(message.groupId, {
-              lastMessage: message,
-              lastActivity: new Date(message.createdAt),
-              unreadCount:
-                message.senderId !== currentUser?.id &&
-                (currentChatType !== "GROUP" ||
-                  selectedGroup?.id !== message.groupId)
-                  ? existingConversation.unreadCount + 1
-                  : existingConversation.unreadCount,
-            });
-          } else {
-            console.log(
-              `[ChatSocketHandler] Message is older than current last message, skipping group conversation update`,
-            );
-          }
-        } else if (message.group) {
-          console.log(
-            `[ChatSocketHandler] Creating new group conversation with ${message.groupId}`,
-          );
-          // Create new group conversation
-          // We need to create a placeholder contact since the Conversation type requires it
-          const placeholderContact: User & { userInfo: UserInfo } = {
-            id: message.senderId,
-            email: "",
-            phoneNumber: "",
-            passwordHash: "",
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            userInfo: {
-              id: message.senderId,
-              fullName: "Group Member",
-              profilePictureUrl: null,
-              statusMessage: "",
-              blockStrangers: false,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              userAuth: null as unknown as User,
-            },
-            refreshTokens: [],
-            qrCodes: [],
-            posts: [],
-            stories: [],
-            groupMembers: [],
-            cloudFiles: [],
-            pinnedItems: [],
-            sentFriends: [],
-            receivedFriends: [],
-            contacts: [],
-            contactOf: [],
-            settings: [],
-            postReactions: [],
-            hiddenPosts: [],
-            addedBy: [],
-            notifications: [],
-            sentMessages: [],
-            receivedMessages: [],
-            comments: [],
-          };
-
-          addConversation({
-            contact: placeholderContact,
-            group: {
-              id: message.group.id,
-              name: message.group.name,
-              avatarUrl: message.group.avatarUrl,
-              createdAt: message.group.createdAt,
-            },
-            lastMessage: message,
-            unreadCount: message.senderId !== currentUser?.id ? 1 : 0,
-            lastActivity: new Date(message.createdAt),
-            type: "GROUP",
-          });
-        }
-      }
+      conversationsStore.processNewMessage(message, {
+        // Tăng số lượng tin nhắn chưa đọc nếu tin nhắn từ người khác và không phải cuộc trò chuyện đang mở
+        incrementUnreadCount: shouldIncrementUnread,
+        // Đánh dấu đã đọc nếu tin nhắn thuộc cuộc trò chuyện đang mở
+        markAsRead: shouldMarkAsRead,
+        // Luôn cập nhật lastActivity
+        updateLastActivity: true,
+      });
     },
     [
       currentUser,
       selectedContact,
       selectedGroup,
       currentChatType,
-      conversations,
       messages,
-      addMessage,
-      updateLastMessage,
-      incrementUnread,
-      addConversation,
-      updateConversation,
       ensureMessageHasUserInfo,
       playNotificationSound,
       incrementGlobalUnread,
@@ -545,62 +304,37 @@ export default function ChatSocketHandler() {
       // Update the message in the current chat
       const messageToUpdate = messages.find((msg) => msg.id === data.messageId);
       if (messageToUpdate) {
-        // Update in chat store
-        updateMessage(data.messageId, {
+        // Create updated message with new readBy array
+        const updatedMessage = {
           ...messageToUpdate,
           readBy: data.readBy,
+        };
+
+        // Update in chat store using the utility function
+        const chatStore = useChatStore.getState();
+        chatStore.updateMessage(data.messageId, updatedMessage, {
+          // Đồng bộ với conversationsStore sẽ được xử lý riêng
+          notifyConversationStore: false,
         });
 
-        // Check if this is the last message in a conversation and update it in conversations store
+        // Use the conversationsStore utility function to update the conversation
         const conversationsStore = useConversationsStore.getState();
-        const affectedConversation = conversationsStore.conversations.find(
-          (conv) => conv.lastMessage?.id === data.messageId,
-        );
+        const conversation =
+          conversationsStore.findConversationByMessage(updatedMessage);
 
-        if (affectedConversation) {
-          if (affectedConversation.type === "USER") {
-            // Update last message in user conversation
-            conversationsStore.updateLastMessage(
-              affectedConversation.contact.id,
-              {
-                ...messageToUpdate,
-                readBy: data.readBy,
-              },
-            );
+        if (conversation) {
+          // If the current user read the message, mark as read
+          const shouldMarkAsRead = data.userId === currentUser?.id;
 
-            // If the current user read the message, mark the conversation as read
-            if (data.userId === currentUser?.id) {
-              conversationsStore.markAsRead(affectedConversation.contact.id);
-            }
-          } else if (
-            affectedConversation.type === "GROUP" &&
-            affectedConversation.group
-          ) {
-            // Update last message in group conversation
-            conversationsStore.updateConversation(
-              affectedConversation.group.id,
-              {
-                lastMessage: {
-                  ...messageToUpdate,
-                  readBy: data.readBy,
-                },
-              },
-            );
-
-            // If the current user read the message, mark the conversation as read
-            if (data.userId === currentUser?.id) {
-              conversationsStore.updateConversation(
-                affectedConversation.group.id,
-                {
-                  unreadCount: 0,
-                },
-              );
-            }
-          }
+          conversationsStore.processNewMessage(updatedMessage, {
+            incrementUnreadCount: false,
+            markAsRead: shouldMarkAsRead,
+            updateLastActivity: false, // Don't update lastActivity for read events
+          });
         }
       }
     },
-    [messages, updateMessage, currentUser],
+    [messages, currentUser],
   );
 
   // Handle message recalled event
@@ -615,80 +349,52 @@ export default function ChatSocketHandler() {
           `[ChatSocketHandler] Found message to recall: ${data.messageId}`,
         );
 
-        // Update in chat store
-        const chatStore = useChatStore.getState();
-
-        // Sử dụng phương thức updateMessage trực tiếp từ store để đảm bảo cập nhật state
-        chatStore.updateMessage(data.messageId, {
+        // Create recalled message
+        const recalledMessage = {
           ...messageToUpdate,
           recalled: true,
-        });
+        };
 
-        // Get the conversations store directly to ensure we have the latest state
+        // Update in chat store
+        const chatStore = useChatStore.getState();
+        chatStore.updateMessage(data.messageId, recalledMessage);
+
+        // Update in conversations store using the utility function
         const conversationsStore = useConversationsStore.getState();
-
-        // If this is the last message in a conversation, update the conversation
-        const conversation = conversationsStore.conversations.find(
-          (conv) => conv.lastMessage?.id === data.messageId,
-        );
-
-        if (conversation) {
-          console.log(
-            `[ChatSocketHandler] Updating recalled message in conversation`,
-          );
-
-          if (conversation.type === "USER") {
-            // Update last message in user conversation
-            conversationsStore.updateLastMessage(conversation.contact.id, {
-              ...messageToUpdate,
-              recalled: true,
-            });
-          } else if (conversation.type === "GROUP" && conversation.group) {
-            // Update last message in group conversation
-            conversationsStore.updateConversation(conversation.group.id, {
-              lastMessage: {
-                ...messageToUpdate,
-                recalled: true,
-              },
-            });
-          }
-        }
+        conversationsStore.processNewMessage(recalledMessage, {
+          incrementUnreadCount: false,
+          markAsRead: false,
+          updateLastActivity: false, // Don't update lastActivity for recall events
+        });
       } else {
         console.log(
-          `[ChatSocketHandler] Message ${data.messageId} not found in current chat, fetching from API`,
+          `[ChatSocketHandler] Message ${data.messageId} not found in current chat, checking conversations`,
         );
 
-        // Nếu tin nhắn không có trong danh sách hiện tại, cần cập nhật lại danh sách tin nhắn
-        // Đây có thể là tin nhắn từ một cuộc trò chuyện khác
+        // If message not in current chat, find all affected conversations
         const conversationsStore = useConversationsStore.getState();
-
-        // Tìm tất cả các cuộc trò chuyện có thể chứa tin nhắn này
         const affectedConversations = conversationsStore.conversations.filter(
           (conv) => conv.lastMessage?.id === data.messageId,
         );
 
-        // Cập nhật tất cả các cuộc trò chuyện bị ảnh hưởng
+        // Update all affected conversations
         affectedConversations.forEach((conversation) => {
           if (conversation.lastMessage) {
             console.log(
               `[ChatSocketHandler] Updating recalled message in conversation ${conversation.type === "USER" ? conversation.contact.id : conversation.group?.id}`,
             );
 
-            const updatedMessage = {
+            const recalledMessage = {
               ...conversation.lastMessage,
               recalled: true,
             };
 
-            if (conversation.type === "USER") {
-              conversationsStore.updateLastMessage(
-                conversation.contact.id,
-                updatedMessage,
-              );
-            } else if (conversation.type === "GROUP" && conversation.group) {
-              conversationsStore.updateConversation(conversation.group.id, {
-                lastMessage: updatedMessage,
-              });
-            }
+            // Use the utility function to update the conversation
+            conversationsStore.processNewMessage(recalledMessage, {
+              incrementUnreadCount: false,
+              markAsRead: false,
+              updateLastActivity: false,
+            });
           }
         });
       }
@@ -704,47 +410,26 @@ export default function ChatSocketHandler() {
       // Update the message in the current chat
       const messageToUpdate = messages.find((msg) => msg.id === data.messageId);
       if (messageToUpdate) {
-        // Update in chat store
-        updateMessage(data.messageId, {
+        // Create updated message with new reactions
+        const updatedMessage = {
           ...messageToUpdate,
           reactions: data.reactions,
-        });
+        };
 
-        // Check if this is the last message in a conversation and update it in conversations store
+        // Update in chat store
+        const chatStore = useChatStore.getState();
+        chatStore.updateMessage(data.messageId, updatedMessage);
+
+        // Update in conversations store using the utility function
         const conversationsStore = useConversationsStore.getState();
-        const affectedConversation = conversationsStore.conversations.find(
-          (conv) => conv.lastMessage?.id === data.messageId,
-        );
-
-        if (affectedConversation) {
-          if (affectedConversation.type === "USER") {
-            // Update last message in user conversation
-            conversationsStore.updateLastMessage(
-              affectedConversation.contact.id,
-              {
-                ...messageToUpdate,
-                reactions: data.reactions,
-              },
-            );
-          } else if (
-            affectedConversation.type === "GROUP" &&
-            affectedConversation.group
-          ) {
-            // Update last message in group conversation
-            conversationsStore.updateConversation(
-              affectedConversation.group.id,
-              {
-                lastMessage: {
-                  ...messageToUpdate,
-                  reactions: data.reactions,
-                },
-              },
-            );
-          }
-        }
+        conversationsStore.processNewMessage(updatedMessage, {
+          incrementUnreadCount: false,
+          markAsRead: false,
+          updateLastActivity: false, // Don't update lastActivity for reaction events
+        });
       }
     },
-    [messages, updateMessage],
+    [messages],
   );
 
   // Handle user typing event
@@ -801,7 +486,8 @@ export default function ChatSocketHandler() {
       );
 
       if (conversation) {
-        updateConversation(data.userId, {
+        const conversationsStore = useConversationsStore.getState();
+        conversationsStore.updateConversation(data.userId, {
           contact: {
             ...conversation.contact,
             online: data.status === "online",
@@ -813,7 +499,7 @@ export default function ChatSocketHandler() {
         });
       }
     },
-    [conversations, updateConversation],
+    [conversations],
   );
 
   // Send typing indicator

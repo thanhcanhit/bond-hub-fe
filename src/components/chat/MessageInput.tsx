@@ -13,6 +13,7 @@ import {
   Play,
   Trash2,
   AlertCircle,
+  Music,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Message } from "@/types/base";
@@ -46,6 +47,7 @@ export default function MessageInput({
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -93,7 +95,7 @@ export default function MessageInput({
           `${rejectedCount} file không được chấp nhận do không an toàn`,
           {
             description:
-              "Chỉ chấp nhận hình ảnh, video và các tài liệu văn phòng phổ biến",
+              "Chỉ chấp nhận hình ảnh, video, âm thanh và các tài liệu văn phòng phổ biến",
             icon: <AlertCircle className="h-5 w-5" />,
           },
         );
@@ -105,11 +107,11 @@ export default function MessageInput({
 
   // Kiểm tra xem file có an toàn không
   const isSafeFile = (file: File): boolean => {
-    const fileType = file.type.split("/")[0]; // image, video, application, etc.
+    const fileType = file.type.split("/")[0]; // image, video, audio, application, etc.
     const fileExtension = `.${file.name.split(".").pop()?.toLowerCase() || ""}`;
 
-    // Chấp nhận hình ảnh và video
-    if (fileType === "image" || fileType === "video") {
+    // Chấp nhận hình ảnh, video và âm thanh
+    if (fileType === "image" || fileType === "video" || fileType === "audio") {
       return true;
     }
 
@@ -135,6 +137,9 @@ export default function MessageInput({
       } else if (fileType === "video") {
         const url = URL.createObjectURL(file);
         setPreviewUrls((prev) => [...prev, { file, url, type: "video" }]);
+      } else if (fileType === "audio") {
+        const url = URL.createObjectURL(file);
+        setPreviewUrls((prev) => [...prev, { file, url, type: "audio" }]);
       } else {
         // For other file types (documents, etc.)
         setPreviewUrls((prev) => [...prev, { file, url: "", type: "file" }]);
@@ -174,7 +179,7 @@ export default function MessageInput({
           `${rejectedCount} file không được chấp nhận do không an toàn`,
           {
             description:
-              "Chỉ chấp nhận hình ảnh, video và các tài liệu văn phòng phổ biến",
+              "Chỉ chấp nhận hình ảnh, video, âm thanh và các tài liệu văn phòng phổ biến",
             icon: <AlertCircle className="h-5 w-5" />,
           },
         );
@@ -217,6 +222,11 @@ export default function MessageInput({
   // Xử lý khi nhấn nút đính kèm hình ảnh/video
   const handleImageAttachClick = () => {
     imageInputRef.current?.click();
+  };
+
+  // Xử lý khi nhấn nút đính kèm âm thanh
+  const handleAudioAttachClick = () => {
+    audioInputRef.current?.click();
   };
 
   // Xử lý khi nhấn nút đính kèm tài liệu
@@ -423,6 +433,13 @@ export default function MessageInput({
                       <Play className="h-6 w-6 text-white" />
                     </div>
                   </div>
+                ) : item.type === "audio" ? (
+                  <div className="w-16 h-16 rounded overflow-hidden border bg-gray-100 flex flex-col items-center justify-center p-1">
+                    <Music className="h-6 w-6 text-gray-500" />
+                    <span className="text-xs text-gray-500 truncate w-full text-center mt-1">
+                      {item.file.name.split(".").pop()?.toUpperCase()}
+                    </span>
+                  </div>
                 ) : (
                   <div className="w-16 h-16 rounded overflow-hidden border bg-gray-100 flex flex-col items-center justify-center p-1">
                     <FileText className="h-6 w-6 text-gray-500" />
@@ -470,6 +487,14 @@ export default function MessageInput({
         />
         <input
           type="file"
+          ref={audioInputRef}
+          className="hidden"
+          onChange={handleFileChange}
+          multiple
+          accept="audio/*"
+        />
+        <input
+          type="file"
           ref={documentInputRef}
           className="hidden"
           onChange={handleFileChange}
@@ -487,6 +512,16 @@ export default function MessageInput({
             title="Đính kèm hình ảnh hoặc video"
           >
             <ImageIcon className="h-5 w-5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={disabled}
+            onClick={handleAudioAttachClick}
+            title="Đính kèm âm thanh"
+          >
+            <Music className="h-5 w-5" />
           </Button>
 
           <Button

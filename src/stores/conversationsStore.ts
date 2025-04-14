@@ -1,8 +1,9 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { User, UserInfo, Message, Media } from "@/types/base";
+import { User, UserInfo, Message, Media, MessageType } from "@/types/base";
 import { getAllUsers, getUserDataById } from "@/actions/user.action";
 import { getConversations } from "@/actions/message.action";
+import { useAuthStore } from "./authStore";
 
 // Helper function to sort conversations by lastActivity (newest first)
 const sortConversationsByActivity = (conversations: Conversation[]) => {
@@ -80,6 +81,13 @@ interface ApiConversation {
   updatedAt: string;
 }
 
+// Utility types for handling messages
+interface MessageHandlingOptions {
+  incrementUnreadCount?: boolean;
+  markAsRead?: boolean;
+  updateLastActivity?: boolean;
+}
+
 interface ConversationsState {
   // State
   conversations: Conversation[];
@@ -101,6 +109,18 @@ interface ConversationsState {
   getFilteredConversations: () => Conversation[];
   clearConversations: () => void;
   setTypingStatus: (contactId: string, isTyping: boolean) => void;
+
+  // New utility functions for better message handling
+  processNewMessage: (
+    message: Message,
+    options?: MessageHandlingOptions,
+  ) => void;
+  findConversationByMessage: (message: Message) => Conversation | undefined;
+  ensureConversationExists: (message: Message) => void;
+  isMessageNewerThanLastMessage: (
+    conversation: Conversation,
+    message: Message,
+  ) => boolean;
 }
 
 // Custom storage that handles SSR
@@ -594,6 +614,257 @@ export const useConversationsStore = create<ConversationsState>()(
 
           return { conversations: updatedConversations };
         });
+      },
+
+      // Utility function to find a conversation based on a message
+      findConversationByMessage: (message) => {
+        const { conversations } = get();
+        const currentUser = useAuthStore.getState().user;
+
+        if (!currentUser) return undefined;
+
+        // Determine if this is a user or group message
+        const isGroupMessage = message.messageType === MessageType.GROUP;
+
+        if (isGroupMessage && message.groupId) {
+          // Find group conversation
+          return conversations.find(
+            (conv) =>
+              conv.type === "GROUP" && conv.group?.id === message.groupId,
+          );
+        } else {
+          // For user messages, find the conversation with the other user
+          const otherUserId =
+            message.senderId === currentUser.id
+              ? message.receiverId
+              : message.senderId;
+
+          if (!otherUserId) return undefined;
+
+          return conversations.find(
+            (conv) => conv.type === "USER" && conv.contact.id === otherUserId,
+          );
+        }
+      },
+
+      // Utility function to check if a message is newer than the last message in a conversation
+      isMessageNewerThanLastMessage: (conversation, message) => {
+        if (!conversation.lastMessage) return true;
+
+        return (
+          new Date(message.createdAt).getTime() >=
+          new Date(conversation.lastMessage.createdAt).getTime()
+        );
+      },
+
+      // Utility function to ensure a conversation exists for a message
+      ensureConversationExists: (message) => {
+        const { conversations, addConversation } = get();
+        const currentUser = useAuthStore.getState().user;
+
+        if (!currentUser) return;
+
+        // Determine if this is a user or group message
+        const isGroupMessage = message.messageType === MessageType.GROUP;
+
+        if (isGroupMessage && message.groupId && message.group) {
+          // Check if group conversation exists
+          const existingConversation = conversations.find(
+            (conv) =>
+              conv.type === "GROUP" && conv.group?.id === message.groupId,
+          );
+
+          if (!existingConversation) {
+            console.log(
+              `[conversationsStore] Creating new group conversation with ${message.groupId}`,
+            );
+
+            // Create placeholder contact for group conversation
+            const placeholderContact: User & { userInfo: UserInfo } = {
+              id: message.senderId || "unknown",
+              email: "",
+              phoneNumber: "",
+              passwordHash: "",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              userInfo: {
+                id: message.senderId || "unknown",
+                fullName: "Group Member",
+                profilePictureUrl: null,
+                statusMessage: "",
+                blockStrangers: false,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                userAuth: null as unknown as User,
+              },
+              refreshTokens: [],
+              qrCodes: [],
+              posts: [],
+              stories: [],
+              groupMembers: [],
+              cloudFiles: [],
+              pinnedItems: [],
+              sentFriends: [],
+              receivedFriends: [],
+              contacts: [],
+              contactOf: [],
+              settings: [],
+              postReactions: [],
+              hiddenPosts: [],
+              addedBy: [],
+              notifications: [],
+              sentMessages: [],
+              receivedMessages: [],
+              comments: [],
+            };
+
+            // Add new group conversation
+            addConversation({
+              contact: placeholderContact,
+              group: {
+                id: message.group.id,
+                name: message.group.name,
+                avatarUrl: message.group.avatarUrl,
+                createdAt: message.group.createdAt,
+              },
+              lastMessage: message,
+              unreadCount: message.senderId !== currentUser.id ? 1 : 0,
+              lastActivity: new Date(message.createdAt),
+              type: "GROUP",
+            });
+          }
+        } else {
+          // Handle user conversation
+          const contactId =
+            message.senderId === currentUser.id
+              ? message.receiverId
+              : message.senderId;
+
+          if (!contactId) return;
+
+          // Check if user conversation exists
+          const existingConversation = conversations.find(
+            (conv) => conv.type === "USER" && conv.contact.id === contactId,
+          );
+
+          if (!existingConversation) {
+            console.log(
+              `[conversationsStore] Creating new user conversation with ${contactId}`,
+            );
+
+            // If message is from current user, use receiver as contact
+            if (message.senderId === currentUser.id && message.receiver) {
+              addConversation({
+                contact: message.receiver as User & { userInfo: UserInfo },
+                lastMessage: message,
+                unreadCount: 0, // Message from self, so unreadCount = 0
+                lastActivity: new Date(message.createdAt),
+                type: "USER",
+              });
+            }
+            // If message is from other user, use sender as contact
+            else if (message.sender && message.sender.userInfo) {
+              addConversation({
+                contact: message.sender as User & { userInfo: UserInfo },
+                lastMessage: message,
+                unreadCount: 1, // Message from other user, so unreadCount = 1
+                lastActivity: new Date(message.createdAt),
+                type: "USER",
+              });
+            }
+            // If no sender/receiver info, fetch from API
+            else {
+              getUserDataById(contactId)
+                .then((result) => {
+                  if (result.success && result.user) {
+                    addConversation({
+                      contact: result.user as User & { userInfo: UserInfo },
+                      lastMessage: message,
+                      unreadCount: message.senderId !== currentUser.id ? 1 : 0,
+                      lastActivity: new Date(message.createdAt),
+                      type: "USER",
+                    });
+                  }
+                })
+                .catch((error) => {
+                  console.error(
+                    `[conversationsStore] Error fetching user data for ${contactId}:`,
+                    error,
+                  );
+                });
+            }
+          }
+        }
+      },
+
+      // Main function to process new messages
+      processNewMessage: (message, options = {}) => {
+        const {
+          incrementUnreadCount = true,
+          markAsRead = false,
+          updateLastActivity = true,
+        } = options;
+
+        const currentUser = useAuthStore.getState().user;
+        if (!currentUser) return;
+
+        // First ensure the conversation exists
+        get().ensureConversationExists(message);
+
+        // Find the conversation for this message
+        const conversation = get().findConversationByMessage(message);
+        if (!conversation) return;
+
+        // Check if this message is newer than the current last message
+        const isNewer = get().isMessageNewerThanLastMessage(
+          conversation,
+          message,
+        );
+
+        if (isNewer) {
+          console.log(
+            `[conversationsStore] Processing new message ${message.id} for conversation`,
+          );
+
+          // Update based on conversation type
+          if (conversation.type === "USER") {
+            // Update last message for user conversation
+            get().updateLastMessage(conversation.contact.id, message);
+
+            // Increment unread count if needed
+            if (incrementUnreadCount && message.senderId !== currentUser.id) {
+              get().incrementUnread(conversation.contact.id);
+            }
+
+            // Mark as read if needed
+            if (markAsRead) {
+              get().markAsRead(conversation.contact.id);
+            }
+          } else if (conversation.type === "GROUP" && conversation.group) {
+            // Update group conversation
+            const updates: Partial<Conversation> = {
+              lastMessage: message,
+            };
+
+            if (updateLastActivity) {
+              updates.lastActivity = new Date(message.createdAt);
+            }
+
+            if (incrementUnreadCount && message.senderId !== currentUser.id) {
+              updates.unreadCount = (conversation.unreadCount || 0) + 1;
+            }
+
+            if (markAsRead) {
+              updates.unreadCount = 0;
+            }
+
+            get().updateConversation(conversation.group.id, updates);
+          }
+        } else {
+          console.log(
+            `[conversationsStore] Message ${message.id} is older than current last message, skipping update`,
+          );
+        }
       },
     }),
     {
