@@ -28,11 +28,23 @@ const extractNameFromEmail = (email?: string | null): string => {
 
 // Define a conversation type that includes the last message
 export interface Conversation {
-  contact: User & { userInfo: UserInfo };
+  contact: User & {
+    userInfo: UserInfo;
+    online?: boolean;
+    lastSeen?: Date;
+  };
+  group?: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+    createdAt?: Date;
+  };
   lastMessage?: Message;
   unreadCount: number;
   lastActivity: Date;
-  type: string;
+  type: "USER" | "GROUP";
+  isTyping?: boolean;
+  typingTimestamp?: Date;
 }
 
 // Define the API conversation interface
@@ -88,6 +100,7 @@ interface ConversationsState {
   setSearchQuery: (query: string) => void;
   getFilteredConversations: () => Conversation[];
   clearConversations: () => void;
+  setTypingStatus: (contactId: string, isTyping: boolean) => void;
 }
 
 // Custom storage that handles SSR
@@ -349,9 +362,53 @@ export const useConversationsStore = create<ConversationsState>()(
 
       updateConversation: (contactId, updates) => {
         set((state) => {
-          const updatedConversations = state.conversations.map((conv) =>
-            conv.contact.id === contactId ? { ...conv, ...updates } : conv,
-          );
+          // Tìm conversation dựa trên contactId hoặc groupId
+          const updatedConversations = state.conversations.map((conv) => {
+            // Kiểm tra nếu là conversation cần cập nhật
+            const isTargetConversation =
+              conv.contact.id === contactId || // User conversation
+              (conv.type === "GROUP" && conv.group?.id === contactId); // Group conversation
+
+            if (!isTargetConversation) return conv;
+
+            // Nếu cập nhật bao gồm lastMessage, kiểm tra xem có cần cập nhật không
+            if (
+              updates.lastMessage &&
+              conv.lastMessage &&
+              updates.lastMessage.id === conv.lastMessage.id
+            ) {
+              console.log(
+                `[conversationsStore] Message ${updates.lastMessage.id} is already the last message for ${contactId}, checking for updates`,
+              );
+
+              // So sánh các trường quan trọng để xem có thay đổi không
+              const hasChanges =
+                conv.lastMessage.recalled !== updates.lastMessage.recalled ||
+                JSON.stringify(conv.lastMessage.readBy) !==
+                  JSON.stringify(updates.lastMessage.readBy) ||
+                JSON.stringify(conv.lastMessage.reactions) !==
+                  JSON.stringify(updates.lastMessage.reactions);
+
+              if (!hasChanges) {
+                console.log(
+                  `[conversationsStore] No changes detected for message ${updates.lastMessage.id}, skipping lastMessage update`,
+                );
+                // Cập nhật các trường khác nhưng giữ nguyên lastMessage
+                const { lastMessage, ...otherUpdates } = updates;
+                return { ...conv, ...otherUpdates };
+              }
+
+              console.log(
+                `[conversationsStore] Changes detected for message ${updates.lastMessage.id}, updating`,
+              );
+            } else if (updates.lastMessage) {
+              console.log(
+                `[conversationsStore] Updating last message to ${updates.lastMessage.id} for ${contactId}`,
+              );
+            }
+
+            return { ...conv, ...updates };
+          });
 
           // If lastActivity was updated, sort conversations
           if (updates.lastActivity) {
@@ -396,6 +453,39 @@ export const useConversationsStore = create<ConversationsState>()(
           );
 
           if (conversationIndex === -1) return state;
+
+          // Kiểm tra xem tin nhắn đã là tin nhắn cuối cùng chưa
+          const currentLastMessage =
+            state.conversations[conversationIndex].lastMessage;
+          if (currentLastMessage && currentLastMessage.id === message.id) {
+            // Nếu tin nhắn đã là tin nhắn cuối cùng, chỉ cập nhật nếu có thay đổi
+            console.log(
+              `[conversationsStore] Message ${message.id} is already the last message, checking for updates`,
+            );
+
+            // So sánh các trường quan trọng để xem có thay đổi không
+            const hasChanges =
+              currentLastMessage.recalled !== message.recalled ||
+              JSON.stringify(currentLastMessage.readBy) !==
+                JSON.stringify(message.readBy) ||
+              JSON.stringify(currentLastMessage.reactions) !==
+                JSON.stringify(message.reactions);
+
+            if (!hasChanges) {
+              console.log(
+                `[conversationsStore] No changes detected for message ${message.id}, skipping update`,
+              );
+              return state;
+            }
+
+            console.log(
+              `[conversationsStore] Changes detected for message ${message.id}, updating`,
+            );
+          } else {
+            console.log(
+              `[conversationsStore] Updating last message to ${message.id} for contact ${contactId}`,
+            );
+          }
 
           // Create a new array with the updated conversation
           const updatedConversations = [...state.conversations];
@@ -466,6 +556,38 @@ export const useConversationsStore = create<ConversationsState>()(
 
       clearConversations: () => {
         set({ conversations: [], searchQuery: "" });
+      },
+
+      setTypingStatus: (contactId, isTyping) => {
+        set((state) => {
+          // Tìm conversation dựa trên contactId hoặc groupId
+          const updatedConversations = state.conversations.map((conv) => {
+            const isTargetConversation =
+              conv.contact.id === contactId || // User conversation
+              (conv.type === "GROUP" && conv.group?.id === contactId); // Group conversation
+
+            if (!isTargetConversation) return conv;
+
+            // Nếu đang nhập, cập nhật trạng thái và thời gian
+            if (isTyping) {
+              return {
+                ...conv,
+                isTyping: true,
+                typingTimestamp: new Date(),
+              };
+            }
+            // Nếu dừng nhập, xóa trạng thái
+            else {
+              return {
+                ...conv,
+                isTyping: false,
+                typingTimestamp: undefined,
+              };
+            }
+          });
+
+          return { conversations: updatedConversations };
+        });
       },
     }),
     {

@@ -26,6 +26,7 @@ import {
 } from "@/actions/message.action";
 import { getUserDataById } from "@/actions/user.action";
 import { useConversationsStore } from "./conversationsStore";
+import { useAuthStore } from "./authStore";
 
 interface ChatState {
   // Current chat state
@@ -41,6 +42,7 @@ interface ChatState {
   searchText: string;
   searchResults: Message[];
   isSearching: boolean;
+  sendTypingIndicator?: (isTyping: boolean) => void;
 
   // Actions
   setSelectedContact: (contact: (User & { userInfo: UserInfo }) | null) => void;
@@ -175,6 +177,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
+    console.log(
+      `[chatStore] Sending message to ${currentChatType === "USER" ? "user" : "group"} ${recipientId}`,
+    );
+
     // Create a temporary message to show immediately
     const tempMessage: Message = {
       id: `temp-${Date.now()}`,
@@ -224,17 +230,59 @@ export const useChatStore = create<ChatState>((set, get) => ({
       repliedTo: get().replyingTo?.id,
     };
 
+    console.log(
+      `[chatStore] Created temporary message with ID: ${tempMessage.id}`,
+    );
+
     // Add temporary message to UI
-    set((state) => ({
-      messages: [...state.messages, tempMessage],
-      replyingTo: null, // Clear reply state after sending
-    }));
+    set((state) => {
+      // Kiểm tra xem tin nhắn đã tồn tại trong danh sách chưa
+      const messageExists = state.messages.some((msg) => {
+        // Kiểm tra ID
+        if (msg.id === tempMessage.id) {
+          console.log(
+            `[chatStore] Temporary message with ID ${tempMessage.id} already exists, skipping`,
+          );
+          return true;
+        }
+
+        // Kiểm tra nội dung, người gửi và thời gian gửi gần nhau
+        if (
+          msg.senderId === tempMessage.senderId &&
+          msg.content.text === tempMessage.content.text &&
+          Math.abs(
+            new Date(msg.createdAt).getTime() -
+              new Date(tempMessage.createdAt).getTime(),
+          ) < 2000
+        ) {
+          console.log(
+            `[chatStore] Duplicate temporary message content detected, skipping`,
+          );
+          return true;
+        }
+
+        return false;
+      });
+
+      if (messageExists) {
+        console.log(
+          `[chatStore] Temporary message already exists in chat, skipping UI update`,
+        );
+        return { replyingTo: null }; // Chỉ xóa trạng thái reply, không thêm tin nhắn
+      }
+
+      console.log(`[chatStore] Adding temporary message to UI`);
+      return {
+        messages: [...state.messages, tempMessage],
+        replyingTo: null, // Clear reply state after sending
+      };
+    });
 
     // Update conversation list with temporary message
-    if (currentChatType === "USER" && selectedContact) {
-      // Get the conversations store
-      const conversationsStore = useConversationsStore.getState();
+    // Get the conversations store
+    const conversationsStore = useConversationsStore.getState();
 
+    if (currentChatType === "USER" && selectedContact) {
       // Check if conversation exists
       const existingConversation = conversationsStore.conversations.find(
         (conv) => conv.contact.id === selectedContact.id,
@@ -251,6 +299,72 @@ export const useChatStore = create<ChatState>((set, get) => ({
           unreadCount: 0,
           lastActivity: new Date(),
           type: "USER",
+        });
+      }
+    } else if (currentChatType === "GROUP" && selectedGroup) {
+      // Check if group conversation exists
+      const existingConversation = conversationsStore.conversations.find(
+        (conv) => conv.type === "GROUP" && conv.group?.id === selectedGroup.id,
+      );
+
+      if (existingConversation) {
+        // Update existing group conversation
+        conversationsStore.updateConversation(selectedGroup.id, {
+          lastMessage: tempMessage,
+          lastActivity: new Date(),
+        });
+      } else {
+        // Create new group conversation with placeholder contact
+        const placeholderContact: User & { userInfo: UserInfo } = {
+          id: currentUser.id,
+          email: currentUser.email || "",
+          phoneNumber: currentUser.phoneNumber || "",
+          passwordHash: currentUser.passwordHash,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          userInfo: currentUser.userInfo || {
+            id: currentUser.id,
+            fullName: "Group Member",
+            profilePictureUrl: null,
+            statusMessage: "",
+            blockStrangers: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            userAuth: currentUser,
+          },
+          refreshTokens: [],
+          qrCodes: [],
+          posts: [],
+          stories: [],
+          groupMembers: [],
+          cloudFiles: [],
+          pinnedItems: [],
+          sentFriends: [],
+          receivedFriends: [],
+          contacts: [],
+          contactOf: [],
+          settings: [],
+          postReactions: [],
+          hiddenPosts: [],
+          addedBy: [],
+          notifications: [],
+          sentMessages: [],
+          receivedMessages: [],
+          comments: [],
+        };
+
+        conversationsStore.addConversation({
+          contact: placeholderContact,
+          group: {
+            id: selectedGroup.id,
+            name: selectedGroup.name,
+            avatarUrl: selectedGroup.avatarUrl,
+            createdAt: selectedGroup.createdAt,
+          },
+          lastMessage: tempMessage,
+          unreadCount: 0,
+          lastActivity: new Date(),
+          type: "GROUP",
         });
       }
     }
@@ -277,6 +391,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       if (result.success && result.message) {
+        console.log(
+          `[chatStore] Message sent successfully, received real message with ID: ${result.message.id}`,
+        );
+
+        // Đánh dấu tin nhắn thật để tránh xử lý trùng lặp từ socket
+        if (typeof window !== "undefined") {
+          if (!window.sentMessageIds) {
+            window.sentMessageIds = new Set();
+          }
+
+          // Lưu cả ID và nội dung để kiểm tra chặt chẽ hơn
+          const messageKey = `${result.message.id}|${result.message.content.text}|${result.message.senderId}`;
+          window.sentMessageIds.add(messageKey);
+          console.log(`[chatStore] Added message to tracking: ${messageKey}`);
+
+          // Xóa ID sau 10 giây để tránh trường hợp người dùng gửi cùng nội dung nhiều lần
+          setTimeout(() => {
+            if (window.sentMessageIds) {
+              window.sentMessageIds.delete(messageKey);
+              console.log(
+                `[chatStore] Removed message from tracking: ${messageKey}`,
+              );
+            }
+          }, 10000);
+        }
+
         // Replace temporary message with real one from server
         set((state) => ({
           messages: state.messages.map((msg) =>
@@ -285,10 +425,82 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }));
 
         // Update conversation list with real message
+        const conversationsStore = useConversationsStore.getState();
+
         if (currentChatType === "USER" && selectedContact) {
-          useConversationsStore
-            .getState()
-            .updateLastMessage(selectedContact.id, result.message);
+          // Update user conversation
+          conversationsStore.updateLastMessage(
+            selectedContact.id,
+            result.message,
+          );
+        } else if (currentChatType === "GROUP" && selectedGroup) {
+          // Update group conversation
+          // For groups, we need to use updateConversation with the group ID
+          const existingConversation = conversationsStore.conversations.find(
+            (conv) =>
+              conv.type === "GROUP" && conv.group?.id === selectedGroup.id,
+          );
+
+          if (existingConversation) {
+            conversationsStore.updateConversation(selectedGroup.id, {
+              lastMessage: result.message,
+              lastActivity: new Date(result.message.createdAt),
+            });
+          } else {
+            // Create new group conversation if it doesn't exist
+            // We need a placeholder contact since the Conversation type requires it
+            const placeholderContact: User & { userInfo: UserInfo } = {
+              id: currentUser.id,
+              email: currentUser.email || "",
+              phoneNumber: currentUser.phoneNumber || "",
+              passwordHash: currentUser.passwordHash,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              userInfo: currentUser.userInfo || {
+                id: currentUser.id,
+                fullName: "Group Member",
+                profilePictureUrl: null,
+                statusMessage: "",
+                blockStrangers: false,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                userAuth: currentUser,
+              },
+              refreshTokens: [],
+              qrCodes: [],
+              posts: [],
+              stories: [],
+              groupMembers: [],
+              cloudFiles: [],
+              pinnedItems: [],
+              sentFriends: [],
+              receivedFriends: [],
+              contacts: [],
+              contactOf: [],
+              settings: [],
+              postReactions: [],
+              hiddenPosts: [],
+              addedBy: [],
+              notifications: [],
+              sentMessages: [],
+              receivedMessages: [],
+              comments: [],
+            };
+
+            conversationsStore.addConversation({
+              contact: placeholderContact,
+              group: {
+                id: selectedGroup.id,
+                name: selectedGroup.name,
+                avatarUrl: selectedGroup.avatarUrl,
+                createdAt: selectedGroup.createdAt,
+              },
+              lastMessage: result.message,
+              unreadCount: 0,
+              lastActivity: new Date(result.message.createdAt),
+              type: "GROUP",
+            });
+          }
         }
       } else {
         // If sending failed, mark the message as failed
@@ -364,16 +576,67 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   recallMessageById: async (messageId) => {
     try {
+      console.log(`[chatStore] Recalling message with ID: ${messageId}`);
       const result = await recallMessage(messageId);
+
       if (result.success && result.message) {
-        set((state) => ({
-          messages: state.messages.map((msg) =>
-            msg.id === messageId ? result.message : msg,
-          ),
-        }));
+        console.log(`[chatStore] Successfully recalled message: ${messageId}`);
+
+        // Update in chat store
+        set((state) => {
+          console.log(`[chatStore] Updating message in chat store`);
+          return {
+            messages: state.messages.map((msg) =>
+              msg.id === messageId ? { ...msg, recalled: true } : msg,
+            ),
+          };
+        });
+
+        // Update in conversations store if this is the last message
+        const conversationsStore = useConversationsStore.getState();
+        const affectedConversation = conversationsStore.conversations.find(
+          (conv) => conv.lastMessage?.id === messageId,
+        );
+
+        if (affectedConversation) {
+          console.log(`[chatStore] Updating recalled message in conversation`);
+
+          if (affectedConversation.type === "USER") {
+            // Update last message in user conversation
+            const updatedMessage = {
+              ...affectedConversation.lastMessage,
+              recalled: true,
+            };
+            conversationsStore.updateLastMessage(
+              affectedConversation.contact.id,
+              updatedMessage,
+            );
+          } else if (
+            affectedConversation.type === "GROUP" &&
+            affectedConversation.group
+          ) {
+            // Update last message in group conversation
+            const updatedMessage = {
+              ...affectedConversation.lastMessage,
+              recalled: true,
+            };
+            conversationsStore.updateConversation(
+              affectedConversation.group.id,
+              {
+                lastMessage: updatedMessage,
+              },
+            );
+          }
+        }
+
+        return true;
+      } else {
+        console.error("[chatStore] Failed to recall message:", result.error);
+        return false;
       }
     } catch (error) {
-      console.error("Error recalling message:", error);
+      console.error("[chatStore] Error recalling message:", error);
+      return false;
     }
   },
 
@@ -409,15 +672,91 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   addMessage: (message) => {
-    set((state) => ({ messages: [...state.messages, message] }));
+    set((state) => {
+      // Kiểm tra xem tin nhắn đã tồn tại trong danh sách chưa
+      const messageExists = state.messages.some((msg) => {
+        // Kiểm tra ID
+        if (msg.id === message.id) {
+          console.log(
+            `[chatStore] Message with ID ${message.id} already exists, skipping`,
+          );
+          return true;
+        }
+
+        // Kiểm tra nội dung, người gửi và thời gian gửi gần nhau
+        if (
+          msg.senderId === message.senderId &&
+          msg.content.text === message.content.text &&
+          Math.abs(
+            new Date(msg.createdAt).getTime() -
+              new Date(message.createdAt).getTime(),
+          ) < 2000
+        ) {
+          console.log(
+            `[chatStore] Duplicate message content detected, skipping`,
+          );
+          return true;
+        }
+
+        return false;
+      });
+
+      // Kiểm tra xem tin nhắn có phải là tin nhắn vừa gửi từ người dùng hiện tại không
+      const currentUser = useAuthStore.getState().user;
+      if (message.senderId === currentUser?.id) {
+        // Tạo khóa tin nhắn để kiểm tra
+        const messageKey = `${message.id}|${message.content.text}|${message.senderId}`;
+
+        // Kiểm tra xem tin nhắn này có trong danh sách đã gửi không
+        if (typeof window !== "undefined" && window.sentMessageIds) {
+          // Kiểm tra theo ID chính xác
+          if (
+            window.sentMessageIds.has(messageKey) ||
+            window.sentMessageIds.has(message.id)
+          ) {
+            console.log(
+              `[chatStore] Message was just sent by current user, skipping`,
+            );
+            return state;
+          }
+        }
+      }
+
+      if (messageExists) {
+        console.log(
+          `[chatStore] Message ${message.id} already exists or is duplicate, skipping`,
+        );
+        return state; // Không thay đổi state nếu tin nhắn đã tồn tại
+      }
+
+      console.log(`[chatStore] Adding new message ${message.id} to chat`);
+      return { messages: [...state.messages, message] };
+    });
   },
 
   updateMessage: (messageId, updatedMessage) => {
-    set((state) => ({
-      messages: state.messages.map((msg) =>
-        msg.id === messageId ? { ...msg, ...updatedMessage } : msg,
-      ),
-    }));
+    set((state) => {
+      console.log(
+        `[chatStore] Updating message ${messageId} with:`,
+        updatedMessage,
+      );
+
+      // Kiểm tra xem tin nhắn có tồn tại trong danh sách không
+      const messageExists = state.messages.some((msg) => msg.id === messageId);
+
+      if (!messageExists) {
+        console.log(
+          `[chatStore] Message ${messageId} not found in current chat, skipping update`,
+        );
+        return state; // Không thay đổi state nếu tin nhắn không tồn tại
+      }
+
+      return {
+        messages: state.messages.map((msg) =>
+          msg.id === messageId ? { ...msg, ...updatedMessage } : msg,
+        ),
+      };
+    });
   },
 
   removeMessage: (messageId) => {
@@ -442,11 +781,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const result = await addReactionToMessage(messageId, reaction);
       if (result.success && result.message) {
+        // Update in chat store
         set((state) => ({
           messages: state.messages.map((msg) =>
             msg.id === messageId ? result.message : msg,
           ),
         }));
+
+        // Update in conversations store if this is the last message
+        const conversationsStore = useConversationsStore.getState();
+        const affectedConversation = conversationsStore.conversations.find(
+          (conv) => conv.lastMessage?.id === messageId,
+        );
+
+        if (affectedConversation) {
+          if (affectedConversation.type === "USER") {
+            // Update last message in user conversation
+            conversationsStore.updateLastMessage(
+              affectedConversation.contact.id,
+              result.message,
+            );
+          } else if (
+            affectedConversation.type === "GROUP" &&
+            affectedConversation.group
+          ) {
+            // Update last message in group conversation
+            conversationsStore.updateConversation(
+              affectedConversation.group.id,
+              {
+                lastMessage: result.message,
+              },
+            );
+          }
+        }
       }
       return result.success;
     } catch (error) {
@@ -459,11 +826,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const result = await removeReactionFromMessage(messageId);
       if (result.success && result.message) {
+        // Update in chat store
         set((state) => ({
           messages: state.messages.map((msg) =>
             msg.id === messageId ? result.message : msg,
           ),
         }));
+
+        // Update in conversations store if this is the last message
+        const conversationsStore = useConversationsStore.getState();
+        const affectedConversation = conversationsStore.conversations.find(
+          (conv) => conv.lastMessage?.id === messageId,
+        );
+
+        if (affectedConversation) {
+          if (affectedConversation.type === "USER") {
+            // Update last message in user conversation
+            conversationsStore.updateLastMessage(
+              affectedConversation.contact.id,
+              result.message,
+            );
+          } else if (
+            affectedConversation.type === "GROUP" &&
+            affectedConversation.group
+          ) {
+            // Update last message in group conversation
+            conversationsStore.updateConversation(
+              affectedConversation.group.id,
+              {
+                lastMessage: result.message,
+              },
+            );
+          }
+        }
       }
       return result.success;
     } catch (error) {
@@ -476,11 +871,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const result = await markMessageAsRead(messageId);
       if (result.success && result.message) {
+        // Update in chat store
         set((state) => ({
           messages: state.messages.map((msg) =>
             msg.id === messageId ? result.message : msg,
           ),
         }));
+
+        // Update in conversations store if this is the last message
+        const conversationsStore = useConversationsStore.getState();
+        const affectedConversation = conversationsStore.conversations.find(
+          (conv) => conv.lastMessage?.id === messageId,
+        );
+
+        if (affectedConversation) {
+          if (affectedConversation.type === "USER") {
+            // Update last message in user conversation
+            conversationsStore.updateLastMessage(
+              affectedConversation.contact.id,
+              result.message,
+            );
+            // Mark conversation as read
+            conversationsStore.markAsRead(affectedConversation.contact.id);
+          } else if (
+            affectedConversation.type === "GROUP" &&
+            affectedConversation.group
+          ) {
+            // Update last message in group conversation
+            conversationsStore.updateConversation(
+              affectedConversation.group.id,
+              {
+                lastMessage: result.message,
+                unreadCount: 0, // Mark as read
+              },
+            );
+          }
+        }
       }
       return result.success;
     } catch (error) {
@@ -493,17 +919,90 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const result = await markMessageAsUnread(messageId);
       if (result.success && result.message) {
+        // Update in chat store
         set((state) => ({
           messages: state.messages.map((msg) =>
             msg.id === messageId ? result.message : msg,
           ),
         }));
+
+        // Update in conversations store if this is the last message
+        const conversationsStore = useConversationsStore.getState();
+        const affectedConversation = conversationsStore.conversations.find(
+          (conv) => conv.lastMessage?.id === messageId,
+        );
+
+        if (affectedConversation) {
+          if (affectedConversation.type === "USER") {
+            // Update last message in user conversation
+            conversationsStore.updateLastMessage(
+              affectedConversation.contact.id,
+              result.message,
+            );
+            // Mark conversation as unread
+            conversationsStore.incrementUnread(affectedConversation.contact.id);
+          } else if (
+            affectedConversation.type === "GROUP" &&
+            affectedConversation.group
+          ) {
+            // Update last message in group conversation
+            conversationsStore.updateConversation(
+              affectedConversation.group.id,
+              {
+                lastMessage: result.message,
+                unreadCount: affectedConversation.unreadCount + 1, // Increment unread count
+              },
+            );
+          }
+        }
       }
       return result.success;
     } catch (error) {
       console.error("Error marking message as unread:", error);
       return false;
     }
+  },
+
+  // Send typing indicator to the server
+  sendTypingIndicator: (isTyping) => {
+    // Get the current state
+    const state = get();
+
+    // Lấy socket từ SocketProvider
+    const socket = typeof window !== "undefined" ? window.messageSocket : null;
+
+    if (!socket) {
+      console.log(
+        "[chatStore] Cannot send typing indicator: No socket connection",
+      );
+      return;
+    }
+
+    // Determine the event to emit
+    const event = isTyping ? "typing" : "stopTyping";
+
+    // Prepare the data to send
+    const data: { receiverId?: string; groupId?: string } = {};
+
+    if (state.currentChatType === "USER" && state.selectedContact) {
+      data.receiverId = state.selectedContact.id;
+      console.log(
+        `[chatStore] Sending ${event} event to user ${state.selectedContact.id}`,
+      );
+    } else if (state.currentChatType === "GROUP" && state.selectedGroup) {
+      data.groupId = state.selectedGroup.id;
+      console.log(
+        `[chatStore] Sending ${event} event to group ${state.selectedGroup.id}`,
+      );
+    } else {
+      console.log(
+        "[chatStore] Cannot send typing indicator: No valid recipient",
+      );
+      return; // No valid recipient
+    }
+
+    // Emit the event
+    socket.emit(event, data);
   },
 
   openChat: async (userId) => {

@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { User, UserInfo } from "@/types/base";
 import { Info, Search, X } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
+import { useConversationsStore } from "@/stores/conversationsStore";
 import { Input } from "@/components/ui/input";
+import { useSocket } from "@/providers/SocketProvider";
 
 interface ChatHeaderProps {
   contact: (User & { userInfo: UserInfo }) | null;
@@ -15,8 +17,14 @@ interface ChatHeaderProps {
 
 export default function ChatHeader({ contact, onToggleInfo }: ChatHeaderProps) {
   const [isSearching, setIsSearching] = useState(false);
-  const { searchText, setSearchText, searchMessages, clearSearch } =
-    useChatStore();
+  const { messageSocket } = useSocket();
+  const {
+    searchText,
+    setSearchText,
+    searchMessages,
+    clearSearch,
+    selectedContact,
+  } = useChatStore();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

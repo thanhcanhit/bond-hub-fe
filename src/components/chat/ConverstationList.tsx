@@ -79,7 +79,16 @@ export default function ContactList({ onSelectContact }: ContactListProps) {
                     </span>
                   )}
                 </div>
-                {conversation.lastMessage && (
+                {conversation.isTyping ? (
+                  <p className="text-sm text-blue-500 truncate flex items-center">
+                    Đang nhập
+                    <span className="ml-1 flex">
+                      <span className="animate-bounce mx-0.5 delay-0">.</span>
+                      <span className="animate-bounce mx-0.5 delay-100">.</span>
+                      <span className="animate-bounce mx-0.5 delay-200">.</span>
+                    </span>
+                  </p>
+                ) : conversation.lastMessage ? (
                   <p className="text-sm text-gray-500 truncate">
                     {conversation.lastMessage.recalled
                       ? "Tin nhắn đã được thu hồi"
@@ -88,13 +97,11 @@ export default function ContactList({ onSelectContact }: ContactListProps) {
                           ? "[Hình ảnh/Tệp đính kèm]"
                           : "")}
                   </p>
-                )}
-                {!conversation.lastMessage &&
-                  conversation.contact.userInfo?.statusMessage && (
-                    <p className="text-sm text-gray-500 truncate">
-                      {conversation.contact.userInfo.statusMessage}
-                    </p>
-                  )}
+                ) : conversation.contact.userInfo?.statusMessage ? (
+                  <p className="text-sm text-gray-500 truncate">
+                    {conversation.contact.userInfo.statusMessage}
+                  </p>
+                ) : null}
               </div>
             </div>
           ))

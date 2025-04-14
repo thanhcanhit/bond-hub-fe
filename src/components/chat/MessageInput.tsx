@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useState, useRef, useEffect, DragEvent } from "react";
+import { useState, useRef, useEffect, DragEvent, useCallback } from "react";
 import {
   Paperclip,
   Smile,
@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import { Message } from "@/types/base";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
+import { useChatStore } from "@/stores/chatStore";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
 
@@ -40,12 +41,17 @@ export default function MessageInput({
     { file: File; url: string; type: string }[]
   >([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sendTypingIndicator = useChatStore(
+    (state) => state.sendTypingIndicator,
+  );
 
   // Danh sách các định dạng file an toàn được chấp nhận
   const safeDocumentTypes = [
@@ -220,6 +226,17 @@ export default function MessageInput({
 
   const handleSendMessage = () => {
     if ((message.trim() || selectedFiles.length > 0) && !disabled) {
+      // Stop typing indicator when sending message
+      if (isTyping && sendTypingIndicator) {
+        setIsTyping(false);
+        sendTypingIndicator(false);
+
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = null;
+        }
+      }
+
       onSendMessage(
         message,
         selectedFiles.length > 0 ? selectedFiles : undefined,
@@ -235,6 +252,27 @@ export default function MessageInput({
       handleSendMessage();
     }
   };
+
+  // Handle typing indicator
+  const handleTyping = useCallback(() => {
+    if (!isTyping && sendTypingIndicator) {
+      setIsTyping(true);
+      sendTypingIndicator(true);
+    }
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set new timeout to stop typing indicator after 2 seconds of inactivity
+    typingTimeoutRef.current = setTimeout(() => {
+      if (isTyping && sendTypingIndicator) {
+        setIsTyping(false);
+        sendTypingIndicator(false);
+      }
+    }, 2000);
+  }, [isTyping, sendTypingIndicator]);
 
   const handleEmojiClick = (emojiData: EmojiClickData) => {
     setMessage((prev) => prev + emojiData.emoji);
@@ -263,6 +301,19 @@ export default function MessageInput({
   useEffect(() => {
     adjustTextareaHeight();
   }, [message]);
+
+  // Cleanup typing timeout when component unmounts
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        // Make sure to send typing stopped when unmounting
+        if (isTyping && sendTypingIndicator) {
+          sendTypingIndicator(false);
+        }
+      }
+    };
+  }, [isTyping, sendTypingIndicator]);
 
   // Helper function to get a preview of the message content
   const getMessagePreview = (message: Message): string => {
@@ -466,6 +517,8 @@ export default function MessageInput({
                 setMessage(e.target.value);
                 // Điều chỉnh chiều cao sau khi nội dung thay đổi
                 setTimeout(adjustTextareaHeight, 0);
+                // Send typing indicator
+                handleTyping();
               }}
               onKeyDown={handleKeyDown}
               disabled={disabled}

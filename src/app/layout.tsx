@@ -1,6 +1,7 @@
 import { Toaster } from "sonner";
 import "./globals.css";
 import AuthProvider from "@/providers/AuthProvider";
+import { SocketChatProvider } from "@/providers/SocketProvider";
 import { Inter } from "next/font/google"; // Import Inter font
 
 const inter = Inter({
@@ -28,7 +29,9 @@ export default function RootLayout({
       <body className={`${inter.className} force-pointer-events`}>
         <Toaster position="top-center" richColors />
         <AuthProvider>
-          <main className="min-h-screen">{children}</main>
+          <SocketChatProvider>
+            <main className="min-h-screen">{children}</main>
+          </SocketChatProvider>
         </AuthProvider>
       </body>
     </html>

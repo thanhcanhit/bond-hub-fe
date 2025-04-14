@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Message, User, UserInfo } from "@/types/base";
 import ChatHeader from "./ChatHeader";
 import MessageItem from "./MessageItem";
 import MessageInput from "./MessageInput";
 import MessageDetailDialog from "./MessageDetailDialog";
 import ChatMessagesDropZone from "./ChatMessagesDropZone";
+import TypingIndicator from "./TypingIndicator";
 import { formatMessageDate } from "@/utils/dateUtils";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
@@ -37,8 +38,10 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     sendMessage,
   } = useChatStore();
 
-  const { markAsRead, updateLastMessage } = useConversationsStore();
+  const { markAsRead, updateLastMessage, conversations } =
+    useConversationsStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isTyping, setIsTyping] = useState(false);
 
   // Fetch complete user data and mark messages as read when viewing a conversation
   useEffect(() => {
@@ -118,6 +121,33 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
   }, []);
+
+  // Theo dõi trạng thái đang nhập từ conversationsStore
+  useEffect(() => {
+    if (!selectedContact) return;
+
+    // Kiểm tra trạng thái đang nhập ban đầu
+    const conversation = conversations.find(
+      (conv) => conv.contact.id === selectedContact.id,
+    );
+    if (conversation) {
+      setIsTyping(!!conversation.isTyping);
+    }
+
+    // Đăng ký lắng nghe thay đổi
+    const unsubscribe = useConversationsStore.subscribe((state) => {
+      const updatedConversation = state.conversations.find(
+        (conv) => conv.contact.id === selectedContact.id,
+      );
+      if (updatedConversation) {
+        setIsTyping(!!updatedConversation.isTyping);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [selectedContact, conversations]);
 
   const handleReply = (message: Message) => {
     setReplyingTo(message);
@@ -291,6 +321,9 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
                 Chọn một liên hệ để bắt đầu trò chuyện
               </p>
             </div>
+          )}
+          {selectedContact && isTyping && (
+            <TypingIndicator contact={selectedContact} isTyping={isTyping} />
           )}
           <div ref={messagesEndRef} />
         </div>

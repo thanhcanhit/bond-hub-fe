@@ -275,11 +275,14 @@ export default function MessageItem({
 
   const handleRecallMessage = async () => {
     try {
+      console.log(`[MessageItem] Attempting to recall message: ${message.id}`);
       await chatStore.recallMessageById(message.id);
+      console.log(`[MessageItem] Message recalled successfully`);
+
       // Force a re-render
       setIsHovered(false);
     } catch (error) {
-      console.error("Error recalling message:", error);
+      console.error("[MessageItem] Error recalling message:", error);
     }
   };
 
