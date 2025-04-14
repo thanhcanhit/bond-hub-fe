@@ -1,5 +1,5 @@
 "use server";
-import { createAxiosInstance } from "@/lib/axios";
+import axiosInstance, { createAxiosInstance } from "@/lib/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { DeviceType } from "@/types/base";
 import { isEmail } from "@/utils/helpers";

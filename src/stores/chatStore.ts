@@ -131,8 +131,6 @@ interface ChatState {
   clearChatCache: (type: "USER" | "GROUP", id: string) => void;
   clearAllCache: () => void;
   openChat: (contactId: string) => Promise<boolean>;
-
-  openChat: (userId: string) => Promise<boolean>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
