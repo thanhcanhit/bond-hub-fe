@@ -204,10 +204,7 @@ export default function MessageItem({
   const [isForwardDialogOpen, setIsForwardDialogOpen] = useState(false);
   const formattedTime = formatMessageTime(message.createdAt);
   const currentUser = useAuthStore((state) => state.user);
-  // Sử dụng state toàn cục cho reaction picker thay vì state cục bộ
-  const setActiveReactionPickerMessageId = useChatStore(
-    (state) => state.setActiveReactionPickerMessageId,
-  );
+  // Get chat store for message operations
   const chatStore = useChatStore();
 
   // Biến để tái sử dụng về sau
@@ -278,13 +275,7 @@ export default function MessageItem({
 
   const handleReaction = async (reactionType: ReactionType) => {
     try {
-      const success = await chatStore.addReactionToMessageById(
-        message.id,
-        reactionType,
-      );
-      if (success) {
-        setActiveReactionPickerMessageId(null);
-      }
+      await chatStore.addReactionToMessageById(message.id, reactionType);
     } catch (error) {
       console.error("Error reacting to message:", error);
     }
@@ -690,7 +681,6 @@ export default function MessageItem({
               {/* Reaction buttons - only show if message is not recalled */}
               {!message.recalled && (
                 <ReactionPicker
-                  messageId={message.id}
                   isCurrentUser={isCurrentUser}
                   userReaction={getUserReaction()}
                   onReaction={handleReaction}

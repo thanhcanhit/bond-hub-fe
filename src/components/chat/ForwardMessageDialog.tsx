@@ -116,7 +116,7 @@ export default function ForwardMessageDialog({
         <div className="flex-1 overflow-hidden">
           {!forwardSuccess ? (
             <>
-              <div className="border rounded-md flex items-center px-3 py-2 mb-4">
+              <div className="border rounded-md flex items-center px-3  mb-2">
                 <Search className="h-4 w-4 text-gray-500 mr-2" />
                 <Input
                   placeholder="Tìm kiếm người nhận..."
@@ -153,9 +153,7 @@ export default function ForwardMessageDialog({
 
               <Tabs defaultValue="conversations" className="w-full">
                 <TabsList className="grid w-full grid-cols-2 mb-4">
-                  <TabsTrigger value="conversations">
-                    Cuộc trò chuyện
-                  </TabsTrigger>
+                  <TabsTrigger value="conversations">Gần đây</TabsTrigger>
                   <TabsTrigger value="friends">Danh sách bạn bè</TabsTrigger>
                 </TabsList>
 

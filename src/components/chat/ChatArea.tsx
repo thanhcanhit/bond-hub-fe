@@ -11,6 +11,7 @@ import TypingIndicator from "./TypingIndicator";
 import { formatMessageDate } from "@/utils/dateUtils";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
+import { useNotificationStore } from "@/stores/notificationStore";
 import { getUserDataById } from "@/actions/user.action";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
@@ -43,6 +44,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
 
   const { markAsRead, updateLastMessage, conversations } =
     useConversationsStore();
+  const { resetUnread } = useNotificationStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [isTyping, setIsTyping] = useState(false);
@@ -51,6 +53,8 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
   useEffect(() => {
     if (selectedContact?.id) {
       markAsRead(selectedContact.id);
+      // Đặt lại số lượng tin nhắn chưa đọc toàn cục khi mở cuộc trò chuyện
+      resetUnread();
 
       // Fetch complete user data to ensure we have userInfo
       const fetchCompleteUserData = async () => {
@@ -82,7 +86,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
 
       fetchCompleteUserData();
     }
-  }, [selectedContact?.id, markAsRead]);
+  }, [selectedContact?.id, markAsRead, resetUnread]);
 
   // Keep track of previous messages to detect what changed
   const prevMessagesRef = useRef<Message[]>([]);

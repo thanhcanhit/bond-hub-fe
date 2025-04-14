@@ -126,8 +126,8 @@ export default function MessageInput({
     return false;
   };
 
-  // Hàm chung để xử lý thêm files
-  const addFiles = (newFiles: File[]) => {
+  // Hàm chung để xử lý thêm files - sử dụng useCallback để tránh re-render không cần thiết
+  const addFiles = useCallback((newFiles: File[]) => {
     setSelectedFiles((prev) => [...prev, ...newFiles]);
 
     // Tạo preview URLs cho các file
@@ -148,7 +148,7 @@ export default function MessageInput({
         setPreviewUrls((prev) => [...prev, { file, url: "", type: "file" }]);
       }
     });
-  };
+  }, []);
 
   // Xử lý khi kéo file vào
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
@@ -315,6 +315,47 @@ export default function MessageInput({
     adjustTextareaHeight();
   }, [message]);
 
+  // Xử lý sự kiện paste để hỗ trợ dán ảnh trực tiếp
+  const handlePaste = useCallback(
+    (e: ClipboardEvent) => {
+      if (disabled) return;
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      let hasImageItems = false;
+      const imageFiles: File[] = [];
+
+      // Kiểm tra xem có ảnh trong clipboard không
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+
+        // Chỉ xử lý các item loại image
+        if (item.type.startsWith("image/")) {
+          hasImageItems = true;
+          const file = item.getAsFile();
+          if (file) {
+            // Đổi tên file để dễ nhận biết
+            const timestamp = Date.now();
+            const newFile = new File([file], `screenshot_${timestamp}.png`, {
+              type: file.type,
+              lastModified: timestamp,
+            });
+            imageFiles.push(newFile);
+          }
+        }
+      }
+
+      // Nếu có ảnh, thêm vào danh sách file đính kèm
+      if (hasImageItems && imageFiles.length > 0) {
+        e.preventDefault(); // Ngăn chặn hành vi paste mặc định
+        addFiles(imageFiles);
+        toast.success(`Đã thêm ${imageFiles.length} ảnh từ clipboard`);
+      }
+    },
+    [disabled, addFiles],
+  );
+
   // Cleanup typing timeout when component unmounts
   useEffect(() => {
     return () => {
@@ -327,6 +368,22 @@ export default function MessageInput({
       }
     };
   }, [isTyping, sendTypingIndicator]);
+
+  // Thêm event listener cho sự kiện paste
+  useEffect(() => {
+    // Thêm event listener cho textarea
+    const textareaElement = textareaRef.current;
+    if (textareaElement) {
+      textareaElement.addEventListener("paste", handlePaste);
+    }
+
+    // Cleanup khi component unmount
+    return () => {
+      if (textareaElement) {
+        textareaElement.removeEventListener("paste", handlePaste);
+      }
+    };
+  }, [handlePaste]);
 
   // Helper function to get a preview of the message content
   const getMessagePreview = (message: Message): string => {
@@ -654,15 +711,19 @@ export default function MessageInput({
 
             {/* Send button */}
             <Button
-              variant={message.trim() ? "default" : "ghost"}
+              variant={
+                message.trim() || selectedFiles.length > 0 ? "default" : "ghost"
+              }
               size="icon"
               className={
-                message.trim()
+                message.trim() || selectedFiles.length > 0
                   ? "bg-blue-500 hover:bg-blue-600 text-white rounded-full h-9 w-9 ml-2"
                   : "text-gray-400 rounded-full h-9 w-9 ml-2"
               }
               onClick={handleSendMessage}
-              disabled={disabled || !message.trim()}
+              disabled={
+                disabled || (!message.trim() && selectedFiles.length === 0)
+              }
             >
               <Send className="h-4 w-4" />
             </Button>

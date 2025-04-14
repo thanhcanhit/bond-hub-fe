@@ -75,9 +75,6 @@ interface ChatState {
   // Flag to control whether to fetch messages from API
   shouldFetchMessages: boolean;
 
-  // ID of message with open reaction picker
-  activeReactionPickerMessageId: string | null;
-
   // Actions
   setSelectedContact: (contact: (User & { userInfo: UserInfo }) | null) => void;
   setSelectedGroup: (group: Group | null) => void;
@@ -134,8 +131,6 @@ interface ChatState {
   clearChatCache: (type: "USER" | "GROUP", id: string) => void;
   clearAllCache: () => void;
 
-  // Reaction picker control
-  setActiveReactionPickerMessageId: (messageId: string | null) => void;
   openChat: (userId: string) => Promise<boolean>;
 }
 
@@ -307,9 +302,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // By default, fetch messages from API
   shouldFetchMessages: true,
-
-  // No active reaction picker initially
-  activeReactionPickerMessageId: null,
 
   // Actions
   setSelectedContact: (contact) => {
@@ -1598,10 +1590,5 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Xóa toàn bộ cache
   clearAllCache: () => {
     set({ messageCache: {} });
-  },
-
-  // Cập nhật ID của tin nhắn đang mở reaction picker
-  setActiveReactionPickerMessageId: (messageId: string | null) => {
-    set({ activeReactionPickerMessageId: messageId });
   },
 }));
