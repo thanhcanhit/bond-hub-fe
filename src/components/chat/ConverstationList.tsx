@@ -79,7 +79,7 @@ export default function ContactList({ onSelectContact }: ContactListProps) {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <SearchHeader className="w-full" />
+      <SearchHeader className="w-full border-r-0 border-b h-[69px]" />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {isLoading ? (

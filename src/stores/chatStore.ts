@@ -13,7 +13,6 @@ import { Socket } from "socket.io-client";
 declare global {
   interface Window {
     messageSocket: Socket | null;
-    sentMessageIds?: Set<string>;
   }
 }
 import {
@@ -137,46 +136,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Utility functions
   isDuplicateMessage: (message: Message): boolean => {
     const { messages } = get();
-    const currentUser = useAuthStore.getState().user;
 
-    // Kiểm tra ID chính xác
+    // Kiểm tra ID chính xác - đây là cách chắc chắn nhất để xác định trùng lặp
     const exactMessageExists = messages.some((msg) => msg.id === message.id);
     if (exactMessageExists) {
       console.log(`[chatStore] Message with ID ${message.id} already exists`);
       return true;
     }
 
-    // Kiểm tra nội dung, người gửi và thời gian gửi gần nhau
-    const similarMessageExists = messages.some(
-      (msg) =>
-        !msg.id.startsWith("temp-") && // Không phải tin nhắn tạm thời
-        msg.senderId === message.senderId &&
-        msg.content.text === message.content.text &&
-        Math.abs(
-          new Date(msg.createdAt).getTime() -
-            new Date(message.createdAt).getTime(),
-        ) < 2000, // 2 giây
-    );
+    // Kiểm tra nội dung, người gửi và thời gian gửi gần nhau cho tin nhắn không phải tạm thời
+    // Chỉ áp dụng cho tin nhắn không phải tạm thời và không phải từ người dùng hiện tại
+    if (!message.id.startsWith("temp-")) {
+      const similarMessageExists = messages.some(
+        (msg) =>
+          !msg.id.startsWith("temp-") && // Không phải tin nhắn tạm thời
+          msg.senderId === message.senderId &&
+          msg.content.text === message.content.text &&
+          Math.abs(
+            new Date(msg.createdAt).getTime() -
+              new Date(message.createdAt).getTime(),
+          ) < 2000, // 2 giây
+      );
 
-    if (similarMessageExists) {
-      console.log(`[chatStore] Similar message content detected`);
-      return true;
-    }
-
-    // Kiểm tra xem tin nhắn có phải là tin nhắn vừa gửi từ người dùng hiện tại không
-    if (message.senderId === currentUser?.id) {
-      // Tạo khóa tin nhắn để kiểm tra
-      const messageKey = `${message.id}|${message.content.text}|${message.senderId}`;
-
-      // Kiểm tra xem tin nhắn này có trong danh sách đã gửi không
-      if (typeof window !== "undefined" && window.sentMessageIds) {
-        if (
-          window.sentMessageIds.has(messageKey) ||
-          window.sentMessageIds.has(message.id)
-        ) {
-          console.log(`[chatStore] Message was just sent by current user`);
-          return true;
-        }
+      if (similarMessageExists) {
+        console.log(`[chatStore] Similar message content detected`);
+        return true;
       }
     }
 
@@ -787,27 +771,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           `[chatStore] Message sent successfully, received real message with ID: ${result.message.id}`,
         );
 
-        // Đánh dấu tin nhắn thật để tránh xử lý trùng lặp từ socket
-        if (typeof window !== "undefined") {
-          if (!window.sentMessageIds) {
-            window.sentMessageIds = new Set();
-          }
-
-          // Lưu cả ID và nội dung để kiểm tra chặt chẽ hơn
-          const messageKey = `${result.message.id}|${result.message.content.text}|${result.message.senderId}`;
-          window.sentMessageIds.add(messageKey);
-          console.log(`[chatStore] Added message to tracking: ${messageKey}`);
-
-          // Xóa ID sau 10 giây để tránh trường hợp người dùng gửi cùng nội dung nhiều lần
-          setTimeout(() => {
-            if (window.sentMessageIds) {
-              window.sentMessageIds.delete(messageKey);
-              console.log(
-                `[chatStore] Removed message from tracking: ${messageKey}`,
-              );
-            }
-          }, 10000);
-        }
+        // Ghi log tin nhắn đã gửi thành công
+        console.log(
+          `[chatStore] Message sent successfully with ID: ${result.message.id}`,
+        );
 
         // Replace temporary message with real one from server
         // Chúng ta sẽ chỉ thay thế tin nhắn tạm thời, không thêm tin nhắn mới

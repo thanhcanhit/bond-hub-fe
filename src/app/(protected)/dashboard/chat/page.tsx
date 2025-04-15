@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import ContactList from "@/components/chat/ConverstationList";
 import ChatArea from "@/components/chat/ChatArea";
 import ContactInfo from "@/components/chat/ConverstationInfo";
-import ChatSocketHandler from "@/components/chat/ChatSocketHandler";
 import { User, UserInfo } from "@/types/base";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
@@ -86,9 +85,6 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full w-full bg-gray-100 overflow-hidden">
-      {/* Socket handler for real-time updates */}
-      <ChatSocketHandler />
-
       {/* Left Sidebar - Contact List */}
       <div
         className={`w-[340px] bg-white border-r flex flex-col overflow-hidden ${isTabContentVisible ? "flex" : "hidden"}`}
