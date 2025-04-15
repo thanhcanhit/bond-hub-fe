@@ -2,6 +2,7 @@
 import axiosInstance from "@/lib/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { User } from "@/types/base";
+import { AxiosError } from "axios";
 
 // Lấy danh sách tất cả users
 export async function getAllUsers() {
@@ -344,6 +345,18 @@ export async function searchUser(searchValue: string) {
     const response = await axiosInstance.post("/users/search", payload);
     return { success: true, user: response.data };
   } catch (error) {
+    // Kiểm tra nếu là lỗi 404 (không tìm thấy)
+    const axiosError = error as AxiosError;
+    if (axiosError.response && axiosError.response.status === 404) {
+      // Kiểm tra lại isEmail vì nó đã ra khỏi phạm vi của try
+      const isEmailSearch = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(searchValue);
+      console.log(
+        `Không tìm thấy người dùng với ${isEmailSearch ? "email" : "số điện thoại"}: ${searchValue}`,
+      );
+      // Trả về success: false nhưng không có thông báo lỗi để UI hiển thị "Không tìm thấy"
+      return { success: false };
+    }
+
     console.error("Search user failed:", error);
     return {
       success: false,

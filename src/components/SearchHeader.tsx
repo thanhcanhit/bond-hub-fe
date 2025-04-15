@@ -375,8 +375,11 @@ export default function SearchHeader() {
             setPhoneSearchResult(null);
           }
         } catch (error) {
-          console.error("Error searching user:", error);
+          // Xử lý lỗi 404 (không tìm thấy) và các lỗi khác
+          console.log("Error searching user:", error);
+          // Không hiển thị lỗi, chỉ đặt kết quả tìm kiếm là null
           setPhoneSearchResult(null);
+          // Không hiển thị toast lỗi, để UI hiển thị "Không tìm thấy người dùng"
         }
       };
 
