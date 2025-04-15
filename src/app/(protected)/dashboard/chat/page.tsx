@@ -40,6 +40,8 @@ export default function ChatPage() {
 
   // Handle selecting a contact
   const handleSelectContact = async (contactId: string | null) => {
+    console.log(`[ChatPage] Selecting contact: ${contactId}`);
+
     if (contactId) {
       // First, check if we already have this contact in our conversations store
       const existingConversation = useConversationsStore
@@ -47,31 +49,58 @@ export default function ChatPage() {
         .conversations.find((conv) => conv.contact.id === contactId);
 
       if (existingConversation) {
-        // Use the contact from the conversations store
+        // Use the contact from the conversations store immediately
+        // This will clear the current messages and set loading state
         setSelectedContact(existingConversation.contact);
+
+        // Force reload messages from API when selecting a conversation
+        // This ensures we get the latest messages, including any new ones
+        const chatStore = useChatStore.getState();
+
+        // Determine if this is a user or group conversation
+        const conversationType = existingConversation.type || "USER";
+
+        // Reload messages for this conversation
+        setTimeout(() => {
+          chatStore.reloadConversationMessages(contactId, conversationType);
+        }, 0);
       }
 
-      // Always fetch the latest user data to ensure we have the most up-to-date info
-      const result = await getUserDataById(contactId);
-      if (result.success && result.user) {
-        // Ensure userInfo exists
-        const user = result.user;
-        if (!user.userInfo) {
-          user.userInfo = {
-            id: user.id,
-            fullName: user.email || user.phoneNumber || "Unknown",
-            profilePictureUrl: null,
-            statusMessage: "No status",
-            blockStrangers: false,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            userAuth: user,
-          };
+      try {
+        // Always fetch the latest user data to ensure we have the most up-to-date info
+        const result = await getUserDataById(contactId);
+        if (result.success && result.user) {
+          // Ensure userInfo exists
+          const user = result.user;
+          if (!user.userInfo) {
+            user.userInfo = {
+              id: user.id,
+              fullName: user.email || user.phoneNumber || "Unknown",
+              profilePictureUrl: null,
+              statusMessage: "No status",
+              blockStrangers: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              userAuth: user,
+            };
+          }
+
+          // Only update the contact if it's still the selected one
+          const currentSelectedContact =
+            useChatStore.getState().selectedContact;
+          if (currentSelectedContact?.id === contactId) {
+            setSelectedContact(user as User & { userInfo: UserInfo });
+          }
+        } else if (!existingConversation) {
+          // Only set to null if we don't have an existing conversation
+          setSelectedContact(null);
         }
-        setSelectedContact(user as User & { userInfo: UserInfo });
-      } else if (!existingConversation) {
-        // Only set to null if we don't have an existing conversation
-        setSelectedContact(null);
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+        // If we already set a contact from the conversation store, don't reset to null
+        if (!existingConversation) {
+          setSelectedContact(null);
+        }
       }
     } else {
       setSelectedContact(null);
