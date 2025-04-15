@@ -11,12 +11,14 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useDebounce } from "@/hooks/useDebounce";
 import { searchUser, getUserDataById } from "@/actions/user.action";
 import { searchMessagesGlobal } from "@/actions/message.action";
 import { getFriendsList } from "@/actions/friend.action";
 import { isEmail, isPhoneNumber } from "@/utils/helpers";
 import { useAuthStore } from "@/stores/authStore";
+import { useChatStore } from "@/stores/chatStore";
 import { User, Message } from "@/types/base";
 import { toast } from "sonner";
 
@@ -93,6 +95,8 @@ export default function SearchHeader({ className }: { className?: string }) {
   const searchRef = useRef<HTMLDivElement>(null);
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const { accessToken, user: currentUser } = useAuthStore();
+  const { openChat } = useChatStore();
+  const router = useRouter();
 
   // Lấy danh sách bạn bè khi component mount và người dùng đã đăng nhập
   useEffect(() => {
@@ -372,8 +376,11 @@ export default function SearchHeader({ className }: { className?: string }) {
             setPhoneSearchResult(null);
           }
         } catch (error) {
-          console.error("Error searching user:", error);
+          // Xử lý lỗi 404 (không tìm thấy) và các lỗi khác
+          console.log("Error searching user:", error);
+          // Không hiển thị lỗi, chỉ đặt kết quả tìm kiếm là null
           setPhoneSearchResult(null);
+          // Không hiển thị toast lỗi, để UI hiển thị "Không tìm thấy người dùng"
         }
       };
 
@@ -423,6 +430,7 @@ export default function SearchHeader({ className }: { className?: string }) {
 
   // Handle search deactivation
   const deactivateSearch = () => {
+    console.log("Deactivating search");
     setIsSearchActive(false);
     setShowResults(false);
     setShowSuggestions(false);
@@ -819,6 +827,62 @@ export default function SearchHeader({ className }: { className?: string }) {
                   <div
                     key={message.id}
                     className="flex py-3 hover:bg-gray-50 cursor-pointer px-3 border-b border-gray-100"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+
+                      // Lưu ID người dùng trước khi đóng giao diện tìm kiếm
+                      let userIdToOpen = null;
+
+                      // Get the correct user ID to open the chat
+                      // If the search context has a userId, use that (this is the conversation partner ID)
+                      const contextUserId = message._searchContext?.userId;
+
+                      if (contextUserId) {
+                        userIdToOpen = contextUserId;
+                      } else {
+                        // Fallback: If no context userId, check if sender is not the current user
+                        const senderId = message.sender.id;
+                        if (senderId && senderId !== currentUser?.id) {
+                          userIdToOpen = senderId;
+                        }
+                      }
+
+                      if (userIdToOpen) {
+                        try {
+                          // Lưu ID vào biến tạm thời
+                          const idToOpen = userIdToOpen;
+
+                          console.log(
+                            "Message clicked, opening chat with user ID:",
+                            idToOpen,
+                          );
+
+                          // Gọi openChat trước khi đóng giao diện tìm kiếm
+                          // Điều này đảm bảo rằng chúng ta đã bắt đầu quá trình mở chat
+                          // trước khi component có thể bị unmount
+                          const success = await openChat(idToOpen);
+
+                          // Sau đó mới đóng giao diện tìm kiếm
+                          deactivateSearch();
+
+                          if (success) {
+                            // Chuyển hướng đến trang chat
+                            toast.success("Mở cuộc trò chuyện thành công");
+                            router.push("/dashboard/chat");
+                          } else {
+                            toast.error("Không thể mở cuộc trò chuyện này");
+                          }
+                        } catch (error) {
+                          console.error("Error opening chat:", error);
+                          toast.error("Có lỗi xảy ra khi mở cuộc trò chuyện");
+                          // Vẫn đóng giao diện tìm kiếm nếu có lỗi
+                          deactivateSearch();
+                        }
+                      } else {
+                        toast.error("Không thể mở cuộc trò chuyện này");
+                      }
+                    }}
                   >
                     <div className="h-10 w-10 rounded-full overflow-hidden mr-3 flex-shrink-0">
                       {senderDetails[message.sender.id]?.userInfo
