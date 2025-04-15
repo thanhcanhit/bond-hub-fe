@@ -1414,6 +1414,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   openChat: async (userId: string) => {
     try {
+      console.log(`[chatStore] Opening chat with user ID: ${userId}`);
+
       // Fetch user data
       const result = await getUserDataById(userId);
 
@@ -1433,6 +1435,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
           };
         }
 
+        console.log(`[chatStore] User data fetched successfully for ${userId}`);
+
+        // Reset any existing state to ensure clean start
+        set({
+          searchText: "",
+          searchResults: [],
+          isSearching: false,
+          replyingTo: null,
+          selectedMessage: null,
+          isDialogOpen: false,
+          isForwarding: false,
+        });
+
         // Set the selected contact
         get().setSelectedContact(user as User & { userInfo: UserInfo });
 
@@ -1446,6 +1461,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         // If conversation doesn't exist, create it
         if (!existingConversation) {
+          console.log(
+            `[chatStore] Creating new conversation for user ${userId}`,
+          );
           conversationsStore.addConversation({
             contact: user as User & { userInfo: UserInfo },
             lastMessage: undefined,
@@ -1453,10 +1471,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
             lastActivity: new Date(),
             type: "USER",
           });
+        } else {
+          console.log(
+            `[chatStore] Using existing conversation for user ${userId}`,
+          );
         }
 
         return true;
       }
+      console.log(`[chatStore] Failed to fetch user data for ${userId}`);
       return false;
     } catch (error) {
       console.error("Error opening chat:", error);
