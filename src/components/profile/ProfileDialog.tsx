@@ -614,7 +614,6 @@ export default function ProfileDialog({
                           Gọi điện
                         </Button>
                       )}
-                      {/* Always show the chat button for friends */}
                       <Button
                         onClick={async () => {
                           if (user?.id) {
@@ -642,35 +641,89 @@ export default function ProfileDialog({
                       </Button>
                     </div>
                   ) : relationship === "PENDING_SENT" ? (
-                    <Button
-                      disabled
-                      className="w-full bg-gray-300 text-gray-700 font-semibold cursor-not-allowed"
-                    >
-                      Đã gửi lời mời kết bạn
-                    </Button>
-                  ) : relationship === "PENDING_RECEIVED" ? (
-                    <div className="flex gap-2 my-3 w-full">
+                    <div className="flex gap-6 w-full p-2 pb-4">
                       <Button
-                        className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] h-8 !border-none !rounded-none"
-                        onClick={handleAcceptRequest}
-                        disabled={isAcceptingRequest}
+                        disabled
+                        className="flex-1 bg-gray-300 text-gray-700 font-semibold cursor-not-allowed h-8 !border-none !rounded-none"
                       >
-                        {isAcceptingRequest ? (
-                          <>
-                            <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
-                            Đang chấp nhận...
-                          </>
-                        ) : (
-                          "Chấp nhận"
-                        )}
+                        Đã gửi lời mời kết bạn
                       </Button>
                       <Button
-                        variant="outline"
-                        className="flex-1 bg-[#ebecf0] font-semibold hover:bg-[#B3B6B9] py-2 px-4 h-8 !border-none !rounded-none"
-                        onClick={handleRejectRequest}
-                        disabled={isRejectingRequest}
+                        onClick={async () => {
+                          if (user?.id) {
+                            // Close the dialog
+                            onOpenChange(false);
+
+                            // Show toast message
+                            toast.success(
+                              `Đang mở cuộc trò chuyện với ${user.userInfo?.fullName || "người dùng"}`,
+                            );
+
+                            // Open the chat with this user
+                            await openChat(user.id);
+
+                            // Navigate to chat page if not already there
+                            router.push("/dashboard/chat");
+
+                            // Call the onChat callback if provided
+                            if (onChat) onChat();
+                          }
+                        }}
+                        className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 h-8 !border-none !rounded-none"
                       >
-                        {isRejectingRequest ? "Đang từ chối..." : "Từ chối"}
+                        Nhắn tin
+                      </Button>
+                    </div>
+                  ) : relationship === "PENDING_RECEIVED" ? (
+                    <div className="flex gap-6 w-full p-2 pb-4">
+                      <div className="flex gap-2 flex-1">
+                        <Button
+                          className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] h-8 !border-none !rounded-none"
+                          onClick={handleAcceptRequest}
+                          disabled={isAcceptingRequest}
+                        >
+                          {isAcceptingRequest ? (
+                            <>
+                              <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                              Đang chấp nhận...
+                            </>
+                          ) : (
+                            "Chấp nhận"
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="flex-1 bg-[#ebecf0] font-semibold hover:bg-[#B3B6B9] py-2 px-4 h-8 !border-none !rounded-none"
+                          onClick={handleRejectRequest}
+                          disabled={isRejectingRequest}
+                        >
+                          {isRejectingRequest ? "Đang từ chối..." : "Từ chối"}
+                        </Button>
+                      </div>
+                      <Button
+                        onClick={async () => {
+                          if (user?.id) {
+                            // Close the dialog
+                            onOpenChange(false);
+
+                            // Show toast message
+                            toast.success(
+                              `Đang mở cuộc trò chuyện với ${user.userInfo?.fullName || "người dùng"}`,
+                            );
+
+                            // Open the chat with this user
+                            await openChat(user.id);
+
+                            // Navigate to chat page if not already there
+                            router.push("/dashboard/chat");
+
+                            // Call the onChat callback if provided
+                            if (onChat) onChat();
+                          }
+                        }}
+                        className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 h-8 !border-none !rounded-none"
+                      >
+                        Nhắn tin
                       </Button>
                     </div>
                   ) : showFriendRequestForm ? (
@@ -720,13 +773,40 @@ export default function ProfileDialog({
                       </div>
                     </div>
                   ) : (
-                    <Button
-                      onClick={toggleFriendRequestForm}
-                      className="w-full bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 my-3 h-8 !border-none !rounded-none"
-                    >
-                      <UserPlus className="mr-2 h-4 w-4" />
-                      Kết bạn
-                    </Button>
+                    <div className="flex gap-6 w-full p-2 pb-4">
+                      <Button
+                        onClick={toggleFriendRequestForm}
+                        className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 h-8 !border-none !rounded-none"
+                      >
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Kết bạn
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          if (user?.id) {
+                            // Close the dialog
+                            onOpenChange(false);
+
+                            // Show toast message
+                            toast.success(
+                              `Đang mở cuộc trò chuyện với ${user.userInfo?.fullName || "người dùng"}`,
+                            );
+
+                            // Open the chat with this user
+                            await openChat(user.id);
+
+                            // Navigate to chat page if not already there
+                            router.push("/dashboard/chat");
+
+                            // Call the onChat callback if provided
+                            if (onChat) onChat();
+                          }
+                        }}
+                        className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 h-8 !border-none !rounded-none"
+                      >
+                        Nhắn tin
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}
