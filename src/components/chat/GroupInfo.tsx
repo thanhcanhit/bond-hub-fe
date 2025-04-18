@@ -13,13 +13,10 @@ import {
   Bell,
   Pin,
   FileImage,
-  Link2,
   ChevronRight,
   Trash,
   ExternalLink,
-  Image as ImageIcon,
   Video,
-  File,
   ChevronDown,
   ArrowLeft,
   MoreHorizontal,
@@ -28,7 +25,6 @@ import {
   Ban,
 } from "lucide-react";
 import MediaGalleryView from "./MediaGalleryView";
-import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ProfileDialog from "@/components/profile/ProfileDialog";
 import { getUserDataById } from "@/actions/user.action";
@@ -417,27 +413,27 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-6">
+        <div className="space-y-2 bg-[#ebecf0]">
           {/* Thông tin nhóm */}
-          <div className="flex flex-col items-center text-center">
-            <Avatar className="h-24 w-24 mb-3">
+          <div className="flex flex-col items-center text-center bg-white p-2">
+            <Avatar className="h-20 w-20 mb-3">
               <AvatarImage
                 src={group.avatarUrl || undefined}
                 className="object-cover"
               />
-              <AvatarFallback className="text-2xl">
+              <AvatarFallback className="text-xl">
                 {group.name?.slice(0, 2).toUpperCase() || "GR"}
               </AvatarFallback>
             </Avatar>
             <h2 className="text-lg font-semibold">{group.name}</h2>
 
             {/* Các chức năng chính */}
-            <div className="grid grid-cols-4 gap-4 w-full mt-6">
+            <div className="grid grid-cols-4 gap-4 w-full m-2">
               <div className="flex flex-col items-center">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-12 w-12 rounded-full bg-blue-50 text-blue-500 mb-1"
+                  className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1"
                 >
                   <Bell className="h-6 w-6" />
                 </Button>
@@ -448,7 +444,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-12 w-12 rounded-full bg-blue-50 text-blue-500 mb-1"
+                  className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1"
                 >
                   <Pin className="h-6 w-6" />
                 </Button>
@@ -459,7 +455,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-12 w-12 rounded-full bg-blue-50 text-blue-500 mb-1"
+                  className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1"
                 >
                   <UserPlus className="h-6 w-6" />
                 </Button>
@@ -470,7 +466,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-12 w-12 rounded-full bg-blue-50 text-blue-500 mb-1"
+                  className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1"
                 >
                   <Settings className="h-6 w-6" />
                 </Button>
@@ -480,43 +476,35 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
           </div>
 
           {/* Thành viên nhóm */}
-          <Collapsible
-            defaultOpen
-            className="border rounded-md overflow-hidden"
-          >
+          <Collapsible defaultOpen className="overflow-hidden bg-white">
             <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50">
               <div className="flex items-center">
-                <Users className="h-5 w-5 mr-2 text-gray-500" />
-                <span className="font-medium">Thành viên nhóm</span>
+                <span className="font-semibold">Thành viên nhóm</span>
               </div>
               <ChevronDown className="h-5 w-5 text-gray-500" />
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <Separator />
               <div
                 className="p-3 flex items-center hover:bg-gray-50 cursor-pointer"
                 onClick={() => setShowMembersList(true)}
               >
                 <Users className="h-5 w-5 mr-2 text-gray-500" />
-                <span>{group.members?.length || 0} thành viên</span>
+                <span className="text-sm">
+                  {group.members?.length || 0} thành viên
+                </span>
               </div>
             </CollapsibleContent>
           </Collapsible>
 
           {/* Ảnh/Video */}
-          <Collapsible
-            defaultOpen
-            className="border rounded-md overflow-hidden"
-          >
+          <Collapsible defaultOpen className="overflow-hidden bg-white">
             <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50">
               <div className="flex items-center">
-                <ImageIcon className="h-5 w-5 mr-2 text-gray-500" />
-                <span className="font-medium">Ảnh/Video</span>
+                <span className="font-semibold">Ảnh/Video</span>
               </div>
               <ChevronDown className="h-5 w-5 text-gray-500" />
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <Separator />
               {isLoadingMedia ? (
                 <div className="p-4 text-center">
                   <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
@@ -528,7 +516,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                     {mediaFiles.slice(0, 8).map((media, index) => (
                       <div
                         key={index}
-                        className="aspect-square relative overflow-hidden rounded-md cursor-pointer"
+                        className="aspect-square relative overflow-hidden border border-gray-200 rounded-md cursor-pointer"
                       >
                         <div
                           className="w-full h-full bg-cover bg-center"
@@ -547,7 +535,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-blue-500"
+                        className="text-sm font-semibold w-full bg-[#e5e7eb] hover:bg-gray-300"
                         onClick={() => setShowMediaGallery(true)}
                       >
                         Xem tất cả
@@ -566,19 +554,14 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
           </Collapsible>
 
           {/* File */}
-          <Collapsible
-            defaultOpen
-            className="border rounded-md overflow-hidden"
-          >
+          <Collapsible defaultOpen className="overflow-hidden bg-white">
             <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50">
               <div className="flex items-center">
-                <File className="h-5 w-5 mr-2 text-gray-500" />
-                <span className="font-medium">File</span>
+                <span className="font-semibold">File</span>
               </div>
               <ChevronDown className="h-5 w-5 text-gray-500" />
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <Separator />
               {isLoadingMedia ? (
                 <div className="p-4 text-center">
                   <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
@@ -629,19 +612,14 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
           </Collapsible>
 
           {/* Link */}
-          <Collapsible
-            defaultOpen
-            className="border rounded-md overflow-hidden"
-          >
+          <Collapsible defaultOpen className="overflow-hidden bg-white">
             <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50">
               <div className="flex items-center">
-                <Link2 className="h-5 w-5 mr-2 text-gray-500" />
-                <span className="font-medium">Link</span>
+                <span className="font-semibold">Link</span>
               </div>
               <ChevronDown className="h-5 w-5 text-gray-500" />
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <Separator />
               {isLoadingMedia ? (
                 <div className="p-4 text-center">
                   <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
@@ -691,7 +669,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
           </Collapsible>
 
           {/* Cài đặt nhóm */}
-          <div className="space-y-4 mt-6">
+          <div className="space-y-1 bg-white p-2">
             <Button
               variant="ghost"
               className="w-full justify-start text-red-500 pl-2"
