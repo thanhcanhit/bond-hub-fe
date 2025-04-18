@@ -1,7 +1,5 @@
 "use client";
 
-// import { Search } from "lucide-react";
-// import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime } from "@/utils/dateUtils";
 import { getUserInitials, getUserDisplayName } from "@/utils/userUtils";
@@ -94,7 +92,7 @@ export default function ContactList({
                   {conversation.type === "GROUP" ? (
                     <>
                       <AvatarImage
-                        src={conversation.group?.avatarUrl || ""}
+                        src={conversation.group?.avatarUrl || undefined}
                         className="object-cover"
                       />
                       <AvatarFallback>
@@ -106,7 +104,8 @@ export default function ContactList({
                     <>
                       <AvatarImage
                         src={
-                          conversation.contact.userInfo?.profilePictureUrl || ""
+                          conversation.contact.userInfo?.profilePictureUrl ||
+                          undefined
                         }
                         className="object-cover"
                       />

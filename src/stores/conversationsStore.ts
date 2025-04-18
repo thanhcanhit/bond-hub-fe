@@ -229,6 +229,14 @@ export const useConversationsStore = create<ConversationsState>()(
                         userAuth: { id: conv.group.id },
                       },
                     } as User & { userInfo: UserInfo },
+                    group: {
+                      id: conv.group.id,
+                      name: conv.group.name,
+                      avatarUrl: conv.group.avatarUrl,
+                      createdAt: conv.group.createdAt
+                        ? new Date(conv.group.createdAt)
+                        : new Date(),
+                    },
                     lastMessage: conv.lastMessage
                       ? ({
                           id: conv.lastMessage.id,

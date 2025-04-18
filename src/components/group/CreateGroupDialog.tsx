@@ -236,7 +236,7 @@ export default function CreateGroupDialog({
                         <div className="flex items-center">
                           <Avatar className="h-8 w-8 mr-2">
                             <AvatarImage
-                              src={friend.profilePictureUrl || ""}
+                              src={friend.profilePictureUrl || undefined}
                               alt={friend.fullName || ""}
                             />
                             <AvatarFallback>

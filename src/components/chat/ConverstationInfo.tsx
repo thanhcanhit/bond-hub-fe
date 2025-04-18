@@ -32,7 +32,7 @@ export default function ContactInfo({ contact, onClose }: ContactInfoProps) {
           <div className="relative">
             <Avatar className="h-20 w-20 mb-2">
               <AvatarImage
-                src={contact.userInfo.profilePictureUrl || ""}
+                src={contact.userInfo.profilePictureUrl || undefined}
                 className="object-cover"
               />
               <AvatarFallback>
