@@ -254,17 +254,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     console.log(`[chatStore] Processing new message ${message.id}`);
 
+    // Ensure readBy array doesn't contain duplicates
+    const processedMessage = { ...message };
+    if (processedMessage.readBy) {
+      // Convert to array if it's not already
+      const readByArray = Array.isArray(processedMessage.readBy)
+        ? processedMessage.readBy
+        : [];
+
+      // Use Set to remove duplicates
+      processedMessage.readBy = [...new Set(readByArray)];
+    }
+
     // Thêm tin nhắn vào danh sách
-    set((state) => ({ messages: [...state.messages, message] }));
+    set((state) => ({ messages: [...state.messages, processedMessage] }));
 
     // Cập nhật cache nếu cần
     if (updateCache) {
-      get().updateMessageCache(message, "add");
+      get().updateMessageCache(processedMessage, "add");
     }
 
     // Đồng bộ với conversationsStore nếu cần
     if (notifyConversationStore) {
-      get().syncWithConversationStore(message);
+      get().syncWithConversationStore(processedMessage);
     }
   },
   // Initial state
@@ -1257,9 +1269,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       // Đảm bảo readBy không chứa trùng lặp
       if (updatedMessageObject.readBy) {
+        // Convert to array if it's not already
+        const readByArray = Array.isArray(updatedMessageObject.readBy)
+          ? updatedMessageObject.readBy
+          : [];
+
+        // Use Set to remove duplicates
         updatedMessageObject = {
           ...updatedMessageObject,
-          readBy: [...new Set(updatedMessageObject.readBy)],
+          readBy: [...new Set(readByArray)],
         };
       }
 
@@ -1475,6 +1493,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return true;
       }
 
+      // Optimistically update the message in the local state before API call
+      // This ensures we don't have duplicate readBy entries even if the API doesn't handle it
+      const optimisticReadBy = Array.isArray(message.readBy)
+        ? [...message.readBy]
+        : [];
+      if (!optimisticReadBy.includes(currentUser.id)) {
+        optimisticReadBy.push(currentUser.id);
+      }
+
+      // Update the message in the local state with the optimistic readBy array
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg.id === messageId ? { ...msg, readBy: optimisticReadBy } : msg,
+        ),
+      }));
+
+      // Call the API to mark the message as read
       const result = await markMessageAsRead(messageId);
       if (result.success && result.message) {
         // Ensure readBy array doesn't contain duplicates
@@ -1487,7 +1522,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           readBy: uniqueReadBy,
         };
 
-        // Update in chat store
+        // Update in chat store with the response from the API
         set((state) => ({
           messages: state.messages.map((msg) =>
             msg.id === messageId ? updatedMessage : msg,
@@ -1535,10 +1570,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const result = await markMessageAsUnread(messageId);
       if (result.success && result.message) {
+        // Ensure readBy array doesn't contain duplicates
+        const uniqueReadBy = Array.isArray(result.message.readBy)
+          ? [...new Set(result.message.readBy)]
+          : result.message.readBy || [];
+
+        const updatedMessage = {
+          ...result.message,
+          readBy: uniqueReadBy,
+        };
+
         // Update in chat store
         set((state) => ({
           messages: state.messages.map((msg) =>
-            msg.id === messageId ? result.message : msg,
+            msg.id === messageId ? updatedMessage : msg,
           ),
         }));
 
@@ -1553,7 +1598,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             // Update last message in user conversation
             conversationsStore.updateLastMessage(
               affectedConversation.contact.id,
-              result.message,
+              updatedMessage,
             );
             // Mark conversation as unread
             conversationsStore.incrementUnread(affectedConversation.contact.id);
@@ -1565,7 +1610,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             conversationsStore.updateConversation(
               affectedConversation.group.id,
               {
-                lastMessage: result.message,
+                lastMessage: updatedMessage,
                 unreadCount: affectedConversation.unreadCount + 1, // Increment unread count
               },
             );

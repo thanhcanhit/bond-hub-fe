@@ -83,6 +83,19 @@ export default function ForwardMessageDialog({
     id: string,
     name: string,
   ) => {
+    // Prevent selecting the original sender or group
+    if (message) {
+      // Don't allow selecting the original sender
+      if (message.senderId === id) {
+        return;
+      }
+
+      // Don't allow selecting the original group
+      if (message.groupId && message.groupId === id) {
+        return;
+      }
+    }
+
     setSelectedRecipients((prev) => {
       const exists = prev.some((r) => r.id === id && r.type === type);
 
@@ -94,17 +107,37 @@ export default function ForwardMessageDialog({
     });
   };
 
-  // Filter conversations based on search query
+  // Filter conversations based on search query and exclude original sender/group
   const filteredConversations = conversations.filter((conv) => {
     const fullName = conv.contact.userInfo?.fullName?.toLowerCase() || "";
     const query = searchQuery.toLowerCase();
+
+    // Exclude the original sender or group of the message
+    if (message) {
+      // For user messages, exclude the original sender
+      if (message.senderId === conv.contact.id) {
+        return false;
+      }
+
+      // For group messages, exclude the original group
+      if (message.groupId && message.groupId === conv.contact.id) {
+        return false;
+      }
+    }
+
     return fullName.includes(query);
   });
 
-  // Filter friends based on search query
+  // Filter friends based on search query and exclude original sender
   const filteredFriends = friends.filter((friend) => {
     const fullName = friend.fullName?.toLowerCase() || "";
     const query = searchQuery.toLowerCase();
+
+    // Exclude the original sender of the message
+    if (message && message.senderId === friend.id) {
+      return false;
+    }
+
     return fullName.includes(query);
   });
 
@@ -189,9 +222,10 @@ export default function ForwardMessageDialog({
                             <div className="flex items-center gap-3">
                               <Avatar className="h-10 w-10">
                                 <AvatarImage
+                                  className="object-cover"
                                   src={
                                     conversation.contact.userInfo
-                                      ?.profilePictureUrl || ""
+                                      ?.profilePictureUrl || undefined
                                   }
                                   alt={
                                     conversation.contact.userInfo?.fullName ||

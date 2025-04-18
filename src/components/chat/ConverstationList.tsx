@@ -7,6 +7,7 @@ import { formatMessageTime } from "@/utils/dateUtils";
 import { getUserInitials, getUserDisplayName } from "@/utils/userUtils";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { useChatStore } from "@/stores/chatStore";
+import { useAuthStore } from "@/stores/authStore";
 import SearchHeader from "../SearchHeader";
 import { Media } from "@/types/base";
 
@@ -68,6 +69,7 @@ const formatLastMessageMedia = (media: Media[]) => {
 
 export default function ContactList({ onSelectContact }: ContactListProps) {
   const selectedContact = useChatStore((state) => state.selectedContact);
+  const currentUser = useAuthStore((state) => state.user);
   const {
     isLoading,
     // searchQuery, setSearchQuery,
@@ -141,12 +143,16 @@ export default function ContactList({ onSelectContact }: ContactListProps) {
                   <p className="text-sm text-gray-500 truncate">
                     {conversation.lastMessage.recalled
                       ? "Tin nhắn đã được thu hồi"
-                      : conversation.lastMessage.content.text ||
-                        (conversation.lastMessage.content.media?.length
-                          ? formatLastMessageMedia(
-                              conversation.lastMessage.content.media,
-                            )
-                          : "")}
+                      : // Add "Bạn: " prefix if the message is from the current user
+                        (conversation.lastMessage.senderId === currentUser?.id
+                          ? "Bạn: "
+                          : "") +
+                        (conversation.lastMessage.content.text ||
+                          (conversation.lastMessage.content.media?.length
+                            ? formatLastMessageMedia(
+                                conversation.lastMessage.content.media,
+                              )
+                            : ""))}
                   </p>
                 ) : conversation.contact.userInfo?.statusMessage ? (
                   <p className="text-sm text-gray-500 truncate">
