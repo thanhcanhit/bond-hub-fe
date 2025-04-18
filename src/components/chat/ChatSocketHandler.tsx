@@ -550,20 +550,40 @@ export default function ChatSocketHandler() {
   // Send typing indicator
   const sendTypingIndicator = useCallback(
     (isTyping: boolean) => {
-      if (!messageSocket || !currentUser) return;
-
-      const event = isTyping ? "typing" : "stopTyping";
-      const data: { receiverId?: string; groupId?: string } = {};
-
-      if (currentChatType === "USER" && selectedContact) {
-        data.receiverId = selectedContact.id;
-      } else if (currentChatType === "GROUP" && selectedGroup) {
-        data.groupId = selectedGroup.id;
-      } else {
-        return; // No valid recipient
+      // Safety check - if socket or user is not available, we can't send typing indicator
+      if (!messageSocket || !currentUser) {
+        console.log(
+          "[ChatSocketHandler] Cannot send typing indicator: socket or user not available",
+        );
+        return;
       }
 
-      messageSocket.emit(event, data);
+      try {
+        const event = isTyping ? "typing" : "stopTyping";
+        const data: { receiverId?: string; groupId?: string } = {};
+
+        if (currentChatType === "USER" && selectedContact) {
+          data.receiverId = selectedContact.id;
+        } else if (currentChatType === "GROUP" && selectedGroup) {
+          data.groupId = selectedGroup.id;
+        } else {
+          return; // No valid recipient
+        }
+
+        // Check if socket is connected before emitting event
+        if (messageSocket.connected) {
+          messageSocket.emit(event, data);
+        } else {
+          console.log(
+            "[ChatSocketHandler] Cannot send typing indicator: socket not connected",
+          );
+        }
+      } catch (error) {
+        console.error(
+          "[ChatSocketHandler] Error sending typing indicator:",
+          error,
+        );
+      }
     },
     [
       messageSocket,
@@ -578,7 +598,11 @@ export default function ChatSocketHandler() {
 
   // Thiết lập các event listener cho socket
   useEffect(() => {
-    if (!messageSocket || !currentUser) return;
+    // Early return if no socket or user
+    if (!messageSocket || !currentUser) {
+      console.log("[ChatSocketHandler] No socket or user, skipping setup");
+      return;
+    }
 
     // Get initial user statuses for all contacts
     const userIds = conversations
@@ -606,44 +630,61 @@ export default function ChatSocketHandler() {
       messageSocket.listeners("newMessage").length,
     );
 
-    // Clean up on unmount
+    // Clean up on unmount or when dependencies change
     return () => {
       console.log("[ChatSocketHandler] Removing message socket event handlers");
 
-      // Log current listeners before cleanup
-      console.log("[ChatSocketHandler] Listeners before cleanup:", {
-        newMessage: messageSocket.listeners("newMessage").length,
-        messageRead: messageSocket.listeners("messageRead").length,
-        messageRecalled: messageSocket.listeners("messageRecalled").length,
-        messageReactionUpdated: messageSocket.listeners(
-          "messageReactionUpdated",
-        ).length,
-        userTyping: messageSocket.listeners("userTyping").length,
-        userTypingStopped: messageSocket.listeners("userTypingStopped").length,
-        userStatus: messageSocket.listeners("userStatus").length,
-      });
+      // Safety check - if socket is no longer available, we can't remove listeners
+      if (!messageSocket || !messageSocket.connected) {
+        console.log(
+          "[ChatSocketHandler] Socket no longer available, skipping cleanup",
+        );
+        return;
+      }
 
-      // Remove specific event handlers
-      messageSocket.off("newMessage", handleNewMessage);
-      messageSocket.off("messageRead", handleMessageRead);
-      messageSocket.off("messageRecalled", handleMessageRecalled);
-      messageSocket.off("messageReactionUpdated", handleMessageReactionUpdated);
-      messageSocket.off("userTyping", handleUserTyping);
-      messageSocket.off("userTypingStopped", handleUserTypingStopped);
-      messageSocket.off("userStatus", handleUserStatus);
+      try {
+        // Log current listeners before cleanup
+        console.log("[ChatSocketHandler] Listeners before cleanup:", {
+          newMessage: messageSocket.listeners("newMessage").length,
+          messageRead: messageSocket.listeners("messageRead").length,
+          messageRecalled: messageSocket.listeners("messageRecalled").length,
+          messageReactionUpdated: messageSocket.listeners(
+            "messageReactionUpdated",
+          ).length,
+          userTyping: messageSocket.listeners("userTyping").length,
+          userTypingStopped:
+            messageSocket.listeners("userTypingStopped").length,
+          userStatus: messageSocket.listeners("userStatus").length,
+        });
 
-      // Log listeners after cleanup
-      console.log("[ChatSocketHandler] Listeners after cleanup:", {
-        newMessage: messageSocket.listeners("newMessage").length,
-        messageRead: messageSocket.listeners("messageRead").length,
-        messageRecalled: messageSocket.listeners("messageRecalled").length,
-        messageReactionUpdated: messageSocket.listeners(
+        // Remove specific event handlers
+        messageSocket.off("newMessage", handleNewMessage);
+        messageSocket.off("messageRead", handleMessageRead);
+        messageSocket.off("messageRecalled", handleMessageRecalled);
+        messageSocket.off(
           "messageReactionUpdated",
-        ).length,
-        userTyping: messageSocket.listeners("userTyping").length,
-        userTypingStopped: messageSocket.listeners("userTypingStopped").length,
-        userStatus: messageSocket.listeners("userStatus").length,
-      });
+          handleMessageReactionUpdated,
+        );
+        messageSocket.off("userTyping", handleUserTyping);
+        messageSocket.off("userTypingStopped", handleUserTypingStopped);
+        messageSocket.off("userStatus", handleUserStatus);
+
+        // Log listeners after cleanup
+        console.log("[ChatSocketHandler] Listeners after cleanup:", {
+          newMessage: messageSocket.listeners("newMessage").length,
+          messageRead: messageSocket.listeners("messageRead").length,
+          messageRecalled: messageSocket.listeners("messageRecalled").length,
+          messageReactionUpdated: messageSocket.listeners(
+            "messageReactionUpdated",
+          ).length,
+          userTyping: messageSocket.listeners("userTyping").length,
+          userTypingStopped:
+            messageSocket.listeners("userTypingStopped").length,
+          userStatus: messageSocket.listeners("userStatus").length,
+        });
+      } catch (error) {
+        console.error("[ChatSocketHandler] Error during cleanup:", error);
+      }
     };
   }, [
     messageSocket,
@@ -660,10 +701,18 @@ export default function ChatSocketHandler() {
 
   // Export typing indicator function to chat store
   useEffect(() => {
-    if (useChatStore.getState().sendTypingIndicator !== sendTypingIndicator) {
-      useChatStore.setState({ sendTypingIndicator });
+    // Only update the store if the user is logged in
+    if (
+      currentUser &&
+      useChatStore.getState().sendTypingIndicator !== sendTypingIndicator
+    ) {
+      try {
+        useChatStore.setState({ sendTypingIndicator });
+      } catch (error) {
+        console.error("[ChatSocketHandler] Error updating chat store:", error);
+      }
     }
-  }, [sendTypingIndicator]);
+  }, [sendTypingIndicator, currentUser]);
 
   // This component doesn't render anything
   return null;

@@ -64,10 +64,20 @@ export default function ChatPage() {
         setTimeout(() => {
           chatStore.reloadConversationMessages(contactId, conversationType);
         }, 0);
+
+        // If this is a group conversation, we don't need to fetch user data
+        // because groups don't have user data and all necessary information is already in the conversation
+        if (existingConversation.type === "GROUP") {
+          console.log(
+            `[ChatPage] Group conversation selected, skipping user data fetch`,
+          );
+          return;
+        }
       }
 
       try {
-        // Always fetch the latest user data to ensure we have the most up-to-date info
+        // Only fetch user data for user conversations, not for groups
+        // This avoids unnecessary API calls when selecting a group
         const result = await getUserDataById(contactId);
         if (result.success && result.user) {
           // Ensure userInfo exists

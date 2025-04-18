@@ -39,13 +39,19 @@ export function SocketChatProvider({ children }: SocketProviderProps) {
       // Nếu không có token hoặc user, đóng kết nối socket nếu đang mở
       if (messageSocket) {
         console.log("Closing socket connection due to logout");
-        messageSocket.disconnect();
-        setMessageSocket(null);
-        setIsConnected(false);
+        try {
+          // Remove all listeners before disconnecting to prevent memory leaks
+          messageSocket.removeAllListeners();
+          messageSocket.disconnect();
+          setMessageSocket(null);
+          setIsConnected(false);
 
-        // Xóa tham chiếu socket khỏi window object
-        if (typeof window !== "undefined") {
-          window.messageSocket = null;
+          // Xóa tham chiếu socket khỏi window object
+          if (typeof window !== "undefined") {
+            window.messageSocket = null;
+          }
+        } catch (error) {
+          console.error("Error during socket cleanup:", error);
         }
       }
       return;
@@ -120,13 +126,19 @@ export function SocketChatProvider({ children }: SocketProviderProps) {
     return () => {
       console.log("[SocketProvider] Cleaning up socket connection");
 
-      // Xóa tất cả các event listener trước khi disconnect
-      socket.removeAllListeners();
-      socket.disconnect();
+      try {
+        // Xóa tất cả các event listener trước khi disconnect
+        if (socket && socket.connected) {
+          socket.removeAllListeners();
+          socket.disconnect();
+        }
 
-      // Xóa tham chiếu socket khỏi window object
-      if (typeof window !== "undefined") {
-        window.messageSocket = null;
+        // Xóa tham chiếu socket khỏi window object
+        if (typeof window !== "undefined") {
+          window.messageSocket = null;
+        }
+      } catch (error) {
+        console.error("[SocketProvider] Error during cleanup:", error);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -403,7 +403,7 @@ export default function MessageItem({
           <div className="mr-2 flex-shrink-0">
             <Avatar className="h-8 w-8">
               <AvatarImage
-                className="select-none relative object-coverb "
+                className="select-none relative object-cover"
                 src={
                   userInfo?.profilePictureUrl ||
                   message.sender?.userInfo?.profilePictureUrl ||

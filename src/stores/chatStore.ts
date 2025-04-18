@@ -356,7 +356,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setSelectedGroup: (group) => {
     console.log(`[chatStore] Setting selected group: ${group?.id}`);
 
-    // First, clear messages and set loading state
+    // No need to fetch additional data for groups - all necessary information
+    // is already available in the conversation store
+
+    // Clear messages and set loading state
     set({
       selectedGroup: group,
       selectedContact: null,

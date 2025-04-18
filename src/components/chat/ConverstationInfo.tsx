@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { User, UserInfo } from "@/types/base";
 import { Bell, ChevronRight, FileImage, Trash, UserX, X } from "lucide-react";
 import Image from "next/image";
+import { formatLastActivity } from "@/utils/dateUtils";
 
 interface ContactInfoProps {
   contact:
@@ -49,7 +50,7 @@ export default function ContactInfo({ contact, onClose }: ContactInfoProps) {
             {contact.online
               ? "Đang hoạt động"
               : contact.lastSeen
-                ? `Hoạt động ${new Date(contact.lastSeen).toLocaleString()}`
+                ? `Hoạt động ${formatLastActivity(contact.lastSeen)}`
                 : contact.userInfo.statusMessage || "Không có trạng thái"}
           </p>
 

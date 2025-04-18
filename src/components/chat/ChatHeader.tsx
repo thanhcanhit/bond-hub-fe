@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { User, UserInfo } from "@/types/base";
 import { Info, Search, X } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
+import { formatLastActivity } from "@/utils/dateUtils";
 
 import { Input } from "@/components/ui/input";
 
@@ -76,7 +77,7 @@ export default function ChatHeader({ contact, onToggleInfo }: ChatHeaderProps) {
               {contact.online
                 ? "Đang hoạt động"
                 : contact.lastSeen
-                  ? `Hoạt động ${new Date(contact.lastSeen).toLocaleString()}`
+                  ? `Hoạt động ${formatLastActivity(contact.lastSeen)}`
                   : contact.userInfo?.statusMessage || "Không có trạng thái"}
             </p>
           </div>
