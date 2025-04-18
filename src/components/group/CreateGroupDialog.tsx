@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,17 +10,16 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Users, Upload, UserPlus } from "lucide-react";
+import { Users, Upload, Search } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { createGroup, updateGroupAvatar } from "@/actions/group.action";
 import { toast } from "sonner";
 import { useFriendStore } from "@/stores/friendStore";
-// import { useChatStore } from "@/stores/chatStore"; // Không cần thiết nữa
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { isEmail, isPhoneNumber } from "@/utils/helpers";
 
 interface CreateGroupDialogProps {
   isOpen: boolean;
@@ -158,26 +157,58 @@ export default function CreateGroupDialog({
     }
   };
 
+  // State for search query
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredFriends, setFilteredFriends] = useState(friends);
+
+  // Filter friends based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredFriends(friends);
+      return;
+    }
+
+    // Check if search query is a phone number or email
+    const isPhone = isPhoneNumber(searchQuery);
+    const isEmailValue = isEmail(searchQuery);
+
+    // Filter friends based on search query
+    const filtered = friends.filter((friend) => {
+      // Search by phone number
+      if (isPhone && friend.phoneNumber) {
+        return friend.phoneNumber.includes(searchQuery);
+      }
+      // Search by email
+      if (isEmailValue && friend.email) {
+        return friend.email.toLowerCase().includes(searchQuery.toLowerCase());
+      }
+      // Search by name (default)
+      return friend.fullName.toLowerCase().includes(searchQuery.toLowerCase());
+    });
+
+    setFilteredFriends(filtered);
+  }, [searchQuery, friends]);
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle className="text-center text-xl font-semibold">
-            Tạo nhóm mới
+          <DialogTitle className="text-center text-lg font-semibold">
+            Tạo nhóm
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-2">
           {/* Group avatar upload */}
-          <div className="flex flex-col items-center justify-center">
+          <div className="flex flex-row w-full items-end justify-center">
             <div className="relative">
-              <Avatar className="h-24 w-24 cursor-pointer">
+              <Avatar className="h-12 w-12 cursor-pointer">
                 {avatarPreview ? (
                   <AvatarImage src={avatarPreview} alt="Group avatar" />
                 ) : (
                   <>
                     <AvatarFallback className="bg-gray-200">
-                      <Users className="h-12 w-12 text-gray-400" />
+                      <Users className="h-8 w-8 text-gray-400" />
                     </AvatarFallback>
                   </>
                 )}
@@ -196,45 +227,59 @@ export default function CreateGroupDialog({
                 />
               </label>
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              Tải lên ảnh đại diện nhóm (không bắt buộc)
-            </p>
+            {/* Group name input */}
+            <div className="ml-2 w-full border-b">
+              <Input
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                placeholder="Nhập tên nhóm..."
+                className="w-full !border-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+            </div>
           </div>
 
-          {/* Group name input */}
-          <div className="space-y-2">
-            <Label htmlFor="group-name">Tên nhóm</Label>
+          {/* Search input */}
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
+            </div>
             <Input
-              id="group-name"
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              placeholder="Nhập tên nhóm"
+              type="text"
+              placeholder="Nhập tên, số điện thoại, hoặc danh sách số điện thoại"
+              className="pl-10 w-full text-xs"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
 
           {/* Friend selection */}
-          <div className="space-y-2">
-            <Label>Thêm thành viên</Label>
+          <div>
             <div className="border rounded-md">
               <div className="p-2 border-b flex items-center justify-between">
-                <span className="text-sm font-medium">
-                  Bạn bè ({friends.length})
-                </span>
+                <span className="text-sm font-medium">Trò chuyện gần đây</span>
                 <span className="text-sm text-blue-500">
                   Đã chọn: {selectedFriends.length}
                 </span>
               </div>
 
               <ScrollArea className="h-[200px]">
-                {friends.length > 0 ? (
-                  <div className="p-2 space-y-2">
-                    {friends.map((friend) => (
+                {filteredFriends.length > 0 ? (
+                  <div>
+                    {filteredFriends.map((friend) => (
                       <div
                         key={friend.id}
-                        className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-md"
+                        className="flex items-center py-2 px-3 hover:bg-gray-50 border-b border-gray-100"
                       >
-                        <div className="flex items-center">
-                          <Avatar className="h-8 w-8 mr-2">
+                        <div className="flex items-center w-full">
+                          <Checkbox
+                            id={`friend-${friend.id}`}
+                            checked={selectedFriends.includes(friend.id)}
+                            onCheckedChange={() =>
+                              handleFriendSelection(friend.id)
+                            }
+                            className="mr-3"
+                          />
+                          <Avatar className="h-10 w-10 mr-3">
                             <AvatarImage
                               src={friend.profilePictureUrl || undefined}
                               alt={friend.fullName || ""}
@@ -243,22 +288,16 @@ export default function CreateGroupDialog({
                               {friend.fullName?.charAt(0) || "U"}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="text-sm">{friend.fullName}</span>
+                          <span className="text-sm font-medium">
+                            {friend.fullName}
+                          </span>
                         </div>
-                        <Checkbox
-                          checked={selectedFriends.includes(friend.id)}
-                          onCheckedChange={() =>
-                            handleFriendSelection(friend.id)
-                          }
-                        />
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="p-4 text-center text-gray-500">
-                    <UserPlus className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                    <p>Bạn chưa có bạn bè nào</p>
-                    <p className="text-xs mt-1">Hãy thêm bạn bè để tạo nhóm</p>
+                    <p>Không tìm thấy kết quả</p>
                   </div>
                 )}
               </ScrollArea>
@@ -271,6 +310,7 @@ export default function CreateGroupDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isLoading}
+            className="mr-2"
           >
             Hủy
           </Button>
@@ -279,6 +319,7 @@ export default function CreateGroupDialog({
             disabled={
               isLoading || !groupName.trim() || selectedFriends.length === 0
             }
+            className="bg-blue-500 hover:bg-blue-600"
           >
             {isLoading ? (
               <>
