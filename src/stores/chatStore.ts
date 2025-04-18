@@ -130,7 +130,7 @@ interface ChatState {
   setShouldFetchMessages: (shouldFetch: boolean) => void;
   clearChatCache: (type: "USER" | "GROUP", id: string) => void;
   clearAllCache: () => void;
-  openChat: (contactId: string) => Promise<boolean>;
+  openChat: (id: string, type: "USER" | "GROUP") => Promise<boolean>;
   reloadConversationMessages: (
     id: string,
     type: "USER" | "GROUP",
@@ -1647,9 +1647,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
           // If conversation doesn't exist, create it
           if (!existingConversation) {
-            console.log(
-              `[chatStore] Creating new conversation for user ${userId}`,
-            );
+            console.log(`[chatStore] Creating new conversation for user ${id}`);
             conversationsStore.addConversation({
               contact: user as User & { userInfo: UserInfo },
               lastMessage: undefined,
@@ -1659,12 +1657,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
             });
           } else {
             console.log(
-              `[chatStore] Using existing conversation for user ${userId}`,
+              `[chatStore] Using existing conversation for user ${id}`,
             );
           }
 
           // Load messages for this conversation
-          await get().loadMessages(userId, "USER");
+          await get().loadMessages(id, "USER");
 
           return true;
         }
@@ -1753,6 +1751,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
               `[chatStore] Using existing conversation for group ${id}`,
             );
           }
+
+          // Load messages for this group
+          console.log(`[chatStore] Loading messages for group ${id}`);
+          await get().loadMessages(id, "GROUP");
 
           return true;
         }

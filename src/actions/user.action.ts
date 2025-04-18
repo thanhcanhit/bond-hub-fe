@@ -22,11 +22,65 @@ export async function getAllUsers() {
 // Lấy thông tin user theo ID
 export async function getUserDataById(id: string) {
   try {
+    // Kiểm tra id hợp lệ
+    if (!id || typeof id !== "string" || id.trim() === "") {
+      console.error("Invalid user ID provided:", id);
+      return {
+        success: false,
+        error: "Invalid user ID",
+      };
+    }
+
+    console.log(`Fetching user data for ID: ${id}`);
     const response = await axiosInstance.get(`/users/${id}`);
     const user: User = response.data;
     return { success: true, user };
   } catch (error) {
-    console.error("Get user by ID failed:", error);
+    console.error(`Get user by ID failed for ID ${id}:`, error);
+
+    // Tạo user giả nếu không tìm thấy (chỉ cho mục đích hiển thị UI)
+    if (error.response && error.response.status === 404) {
+      console.log(`Creating placeholder user for ID ${id}`);
+      const placeholderUser: User = {
+        id: id,
+        email: null,
+        phoneNumber: null,
+        passwordHash: "",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        userInfo: {
+          id: id,
+          fullName: "Người dùng không tồn tại",
+          profilePictureUrl: null,
+          statusMessage: "",
+          blockStrangers: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          userAuth: null as any,
+        },
+        refreshTokens: [],
+        qrCodes: [],
+        posts: [],
+        stories: [],
+        groupMembers: [],
+        cloudFiles: [],
+        pinnedItems: [],
+        sentFriends: [],
+        receivedFriends: [],
+        contacts: [],
+        contactOf: [],
+        settings: [],
+        postReactions: [],
+        hiddenPosts: [],
+        addedBy: [],
+        notifications: [],
+        sentMessages: [],
+        receivedMessages: [],
+        comments: [],
+      };
+      return { success: true, user: placeholderUser };
+    }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

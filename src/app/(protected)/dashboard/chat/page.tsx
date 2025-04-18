@@ -5,12 +5,12 @@ import ContactList from "@/components/chat/ConverstationList";
 import ChatArea from "@/components/chat/ChatArea";
 import ContactInfo from "@/components/chat/ConverstationInfo";
 import GroupInfo from "@/components/chat/GroupInfo";
-import ChatSocketHandler from "@/components/chat/ChatSocketHandler";
+// import ChatSocketHandler from "@/components/chat/ChatSocketHandler";
 import { User, UserInfo } from "@/types/base";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
-//import { getUserDataById } from "@/actions/user.action";
+import { getUserDataById } from "@/actions/user.action";
 
 export default function ChatPage() {
   const [isTabContentVisible, setIsTabContentVisible] = useState(true);
@@ -23,7 +23,6 @@ export default function ChatPage() {
     selectedGroup,
     currentChatType,
     setSelectedContact,
-    setSelectedGroup,
   } = useChatStore();
   const { loadConversations } = useConversationsStore();
 
@@ -78,37 +77,42 @@ export default function ChatPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Handle selecting a contact
-  const handleSelectContact = async (contactId: string | null) => {
-    console.log(`[ChatPage] Selecting contact: ${contactId}`);
+  // Handle selecting a contact or group
+  const handleSelectContact = async (
+    id: string | null,
+    type: "USER" | "GROUP",
+  ) => {
+    console.log(`[ChatPage] Selecting ${type}: ${id}`);
 
-    if (contactId) {
+    if (!id) {
+      setSelectedContact(null);
+      return;
+    }
+
+    const chatStore = useChatStore.getState();
+    const conversationsStore = useConversationsStore.getState();
+
+    if (type === "USER") {
+      // Handle user conversation
       // First, check if we already have this contact in our conversations store
-      const existingConversation = useConversationsStore
-        .getState()
-        .conversations.find((conv) => conv.contact.id === contactId);
+      const existingConversation = conversationsStore.conversations.find(
+        (conv) => conv.type === "USER" && conv.contact.id === id,
+      );
 
       if (existingConversation) {
         // Use the contact from the conversations store immediately
         // This will clear the current messages and set loading state
         setSelectedContact(existingConversation.contact);
 
-        // Force reload messages from API when selecting a conversation
-        // This ensures we get the latest messages, including any new ones
-        const chatStore = useChatStore.getState();
-
-        // Determine if this is a user or group conversation
-        const conversationType = existingConversation.type || "USER";
-
         // Reload messages for this conversation
         setTimeout(() => {
-          chatStore.reloadConversationMessages(contactId, conversationType);
+          chatStore.reloadConversationMessages(id, "USER");
         }, 0);
       }
 
       try {
         // Always fetch the latest user data to ensure we have the most up-to-date info
-        const result = await getUserDataById(contactId);
+        const result = await getUserDataById(id);
         if (result.success && result.user) {
           // Ensure userInfo exists
           const user = result.user;
@@ -126,9 +130,8 @@ export default function ChatPage() {
           }
 
           // Only update the contact if it's still the selected one
-          const currentSelectedContact =
-            useChatStore.getState().selectedContact;
-          if (currentSelectedContact?.id === contactId) {
+          const currentSelectedContact = chatStore.selectedContact;
+          if (currentSelectedContact?.id === id) {
             setSelectedContact(user as User & { userInfo: UserInfo });
           }
         } else if (!existingConversation) {
@@ -142,8 +145,14 @@ export default function ChatPage() {
           setSelectedContact(null);
         }
       }
-    } else {
-      setSelectedContact(null);
+    } else if (type === "GROUP") {
+      // Handle group conversation
+      // Use openChat which will handle fetching group data and setting up the conversation
+      try {
+        await chatStore.openChat(id, "GROUP");
+      } catch (error) {
+        console.error("Error opening group chat:", error);
+      }
     }
   };
 
@@ -158,7 +167,7 @@ export default function ChatPage() {
       <div
         className={`w-[340px] bg-white border-r flex flex-col overflow-hidden ${isTabContentVisible ? "flex" : "hidden"}`}
       >
-        <ContactList onSelectConversation={handleSelectConversation} />
+        <ContactList onSelectConversation={handleSelectContact} />
       </div>
 
       {/* Main Chat Area */}

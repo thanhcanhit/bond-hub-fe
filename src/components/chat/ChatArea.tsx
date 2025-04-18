@@ -107,14 +107,14 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
   const prevMessagesRef = useRef<Message[]>([]);
 
   useEffect(() => {
-    // Skip if no messages or no selected contact
-    if (!messages.length || !selectedContact) {
+    // Skip if no messages or no selected contact/group
+    if (!messages.length || (!selectedContact && !selectedGroup)) {
       prevMessagesRef.current = [];
       return;
     }
 
     console.log(
-      `[ChatArea] Messages updated for contact: ${selectedContact.id}, count: ${messages.length}`,
+      `[ChatArea] Messages updated for ${currentChatType}: ${currentChatType === "USER" ? selectedContact?.id : selectedGroup?.id}, count: ${messages.length}`,
     );
 
     // Only scroll to bottom when a new message is added, not when reactions change
@@ -159,38 +159,49 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     prevMessagesRef.current = [...messages];
   }, [messages, selectedContact, updateLastMessage]);
 
-  // Scroll to bottom when component mounts or when selected contact changes
+  // Scroll to bottom when component mounts or when selected contact/group changes
   useEffect(() => {
-    if (selectedContact && !isLoading && messages.length > 0) {
+    if (
+      (selectedContact || selectedGroup) &&
+      !isLoading &&
+      messages.length > 0
+    ) {
       console.log(
-        `[ChatArea] Scrolling to bottom for contact: ${selectedContact.id}`,
+        `[ChatArea] Scrolling to bottom for ${currentChatType}: ${currentChatType === "USER" ? selectedContact?.id : selectedGroup?.id}`,
       );
       messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
     }
-  }, [selectedContact?.id, isLoading, messages.length]);
+  }, [
+    selectedContact?.id,
+    selectedGroup?.id,
+    currentChatType,
+    isLoading,
+    messages.length,
+  ]);
 
   // Handle scroll event to load older messages
   useEffect(() => {
     const chatContainer = chatContainerRef.current;
-    if (!chatContainer || !selectedContact) return;
+    if (!chatContainer || (!selectedContact && !selectedGroup)) return;
 
     console.log(
-      `[ChatArea] Setting up scroll handler for contact: ${selectedContact.id}`,
+      `[ChatArea] Setting up scroll handler for ${currentChatType}: ${currentChatType === "USER" ? selectedContact?.id : selectedGroup?.id}`,
     );
 
     const handleScroll = () => {
       // Check if user has scrolled near the top (within 50px from top)
       if (chatContainer.scrollTop < 50 && !isLoadingOlder && hasMoreMessages) {
         console.log(
-          `[ChatArea] Near top of scroll, loading older messages for: ${selectedContact.id}`,
+          `[ChatArea] Near top of scroll, loading older messages for ${currentChatType}: ${currentChatType === "USER" ? selectedContact?.id : selectedGroup?.id}`,
         );
 
         // Save current scroll position and height
         const scrollHeight = chatContainer.scrollHeight;
         const scrollPosition = chatContainer.scrollTop;
 
-        // Store the current contact ID to verify it doesn't change during loading
-        const currentContactId = selectedContact.id;
+        // Store the current contact/group ID to verify it doesn't change during loading
+        const currentId =
+          currentChatType === "USER" ? selectedContact?.id : selectedGroup?.id;
 
         // Load older messages
         loadOlderMessages().then((success) => {
@@ -204,12 +215,15 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
           // After loading, restore relative scroll position
           // Wait a bit for DOM to update
           setTimeout(() => {
-            // Verify the contact hasn't changed during loading
-            const currentSelectedContact =
-              useChatStore.getState().selectedContact;
-            if (currentSelectedContact?.id !== currentContactId) {
+            // Verify the contact/group hasn't changed during loading
+            const state = useChatStore.getState();
+            const currentSelectedId =
+              currentChatType === "USER"
+                ? state.selectedContact?.id
+                : state.selectedGroup?.id;
+            if (currentSelectedId !== currentId) {
               console.log(
-                `[ChatArea] Contact changed during loading, skipping scroll adjustment`,
+                `[ChatArea] Selected ${currentChatType} changed during loading, skipping scroll adjustment`,
               );
               return;
             }
@@ -233,7 +247,14 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     return () => {
       chatContainer.removeEventListener("scroll", handleScroll);
     };
-  }, [isLoadingOlder, hasMoreMessages, loadOlderMessages, selectedContact]);
+  }, [
+    isLoadingOlder,
+    hasMoreMessages,
+    loadOlderMessages,
+    selectedContact,
+    selectedGroup,
+    currentChatType,
+  ]);
 
   // Track typing status from conversationsStore
   useEffect(() => {
@@ -449,7 +470,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
           ref={chatContainerRef}
           className="overflow-y-auto overflow-x-hidden bg-gray-50 p-4 custom-scrollbar h-full"
         >
-          {selectedContact ? (
+          {selectedContact || selectedGroup ? (
             isLoading ? (
               <div className="h-full flex items-center justify-center">
                 <div className="flex flex-col items-center">
