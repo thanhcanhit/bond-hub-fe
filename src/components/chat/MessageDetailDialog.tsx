@@ -8,13 +8,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime } from "@/utils/dateUtils";
 import { getUserInitials } from "@/utils/userUtils";
 import Image from "next/image";
+import AudioVisualizer from "./AudioVisualizer";
 import {
   Download,
   X,
   ChevronLeft,
   ChevronRight,
-  Share2,
-  Forward,
   ZoomIn,
   ZoomOut,
   PanelRightClose,
@@ -670,25 +669,13 @@ export default function MessageDetailDialog({
                       </div>
                     </div>
 
-                    {/* Audio player */}
+                    {/* Audio player with visualizer */}
                     <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
-                      <div className="w-full max-w-md">
-                        <audio
-                          src={currentMedia.url}
-                          controls
-                          className="w-full"
-                          autoPlay={false}
-                          controlsList="nodownload"
-                          preload="metadata"
-                        />
-                        <div className="mt-4 text-center">
-                          <p className="text-sm text-gray-500">
-                            {currentMedia.metadata.mimeType
-                              ?.split("/")[1]
-                              ?.toUpperCase() || "Audio"}
-                          </p>
-                        </div>
-                      </div>
+                      <AudioVisualizer
+                        url={currentMedia.url}
+                        fileName={currentMedia.fileName}
+                        onDownload={() => handleDownload(currentMedia)}
+                      />
                     </div>
                   </div>
                 ) : (
@@ -914,34 +901,6 @@ export default function MessageDetailDialog({
                 </div>
               </div>
             )}
-
-            {/* Sidebar actions */}
-            <div className="p-3 border-t border-gray-800 flex items-center justify-between">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-white hover:bg-white/10 hover:text-white"
-                onClick={() =>
-                  navigator.share &&
-                  navigator.share({
-                    title: "Chia sẻ",
-                    url: window.location.href,
-                  })
-                }
-              >
-                <Share2 className="h-4 w-4 mr-2" />
-                Chia sẻ
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-white hover:bg-white/10 hover:text-white"
-                onClick={() => setIsForwardMenuOpen(true)}
-              >
-                <Forward className="h-4 w-4 mr-2" />
-                Chuyển tiếp
-              </Button>
-            </div>
           </div>
         )}
       </div>

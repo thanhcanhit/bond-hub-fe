@@ -78,35 +78,72 @@ export default function ChatPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Handle selecting a conversation (contact or group)
-  const handleSelectConversation = async (
-    conversationId: string | null,
-    type: "USER" | "GROUP",
-  ) => {
-    if (!conversationId) {
-      setSelectedContact(null);
-      setSelectedGroup(null);
-      return;
-    }
+  // Handle selecting a contact
+  const handleSelectContact = async (contactId: string | null) => {
+    console.log(`[ChatPage] Selecting contact: ${contactId}`);
 
-    // Use the new openChat method that handles both USER and GROUP types
-    const chatStore = useChatStore.getState();
-    const success = await chatStore.openChat(conversationId, type);
+    if (contactId) {
+      // First, check if we already have this contact in our conversations store
+      const existingConversation = useConversationsStore
+        .getState()
+        .conversations.find((conv) => conv.contact.id === contactId);
 
-    if (!success) {
-      console.error(`Failed to open ${type} chat with ID: ${conversationId}`);
+      if (existingConversation) {
+        // Use the contact from the conversations store immediately
+        // This will clear the current messages and set loading state
+        setSelectedContact(existingConversation.contact);
 
-      // Fallback to basic selection if openChat fails
-      if (type === "USER") {
-        setSelectedContact(null);
-      } else {
-        setSelectedGroup(null);
+        // Force reload messages from API when selecting a conversation
+        // This ensures we get the latest messages, including any new ones
+        const chatStore = useChatStore.getState();
+
+        // Determine if this is a user or group conversation
+        const conversationType = existingConversation.type || "USER";
+
+        // Reload messages for this conversation
+        setTimeout(() => {
+          chatStore.reloadConversationMessages(contactId, conversationType);
+        }, 0);
       }
-    }
 
-    // On mobile, hide the conversation list after selecting a chat
-    if (window.innerWidth < 768) {
-      setIsTabContentVisible(false);
+      try {
+        // Always fetch the latest user data to ensure we have the most up-to-date info
+        const result = await getUserDataById(contactId);
+        if (result.success && result.user) {
+          // Ensure userInfo exists
+          const user = result.user;
+          if (!user.userInfo) {
+            user.userInfo = {
+              id: user.id,
+              fullName: user.email || user.phoneNumber || "Unknown",
+              profilePictureUrl: null,
+              statusMessage: "No status",
+              blockStrangers: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              userAuth: user,
+            };
+          }
+
+          // Only update the contact if it's still the selected one
+          const currentSelectedContact =
+            useChatStore.getState().selectedContact;
+          if (currentSelectedContact?.id === contactId) {
+            setSelectedContact(user as User & { userInfo: UserInfo });
+          }
+        } else if (!existingConversation) {
+          // Only set to null if we don't have an existing conversation
+          setSelectedContact(null);
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+        // If we already set a contact from the conversation store, don't reset to null
+        if (!existingConversation) {
+          setSelectedContact(null);
+        }
+      }
+    } else {
+      setSelectedContact(null);
     }
   };
 
@@ -117,9 +154,6 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full w-full bg-gray-100 overflow-hidden">
-      {/* Socket handler for real-time updates */}
-      <ChatSocketHandler />
-
       {/* Left Sidebar - Contact List */}
       <div
         className={`w-[340px] bg-white border-r flex flex-col overflow-hidden ${isTabContentVisible ? "flex" : "hidden"}`}

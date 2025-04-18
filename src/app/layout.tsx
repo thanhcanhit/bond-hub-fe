@@ -1,7 +1,7 @@
 import { Toaster } from "sonner";
 import "./globals.css";
 import AuthProvider from "@/providers/AuthProvider";
-import { SocketChatProvider } from "@/providers/SocketProvider";
+import { SocketChatProvider } from "@/providers/SocketChatProvider";
 import DocumentTitle from "@/components/common/DocumentTitle";
 import { Inter } from "next/font/google"; // Import Inter font
 

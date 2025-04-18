@@ -13,7 +13,6 @@ import { Socket } from "socket.io-client";
 declare global {
   interface Window {
     messageSocket: Socket | null;
-    sentMessageIds?: Set<string>;
   }
 }
 import {
@@ -55,10 +54,13 @@ interface ChatState {
   selectedMessage: Message | null;
   isDialogOpen: boolean;
   isLoading: boolean;
+  isLoadingOlder: boolean;
   isForwarding: boolean;
   searchText: string;
   searchResults: Message[];
   isSearching: boolean;
+  currentPage: number;
+  hasMoreMessages: boolean;
   sendTypingIndicator?: (isTyping: boolean) => void;
 
   // Cache for messages
@@ -73,13 +75,11 @@ interface ChatState {
   // Flag to control whether to fetch messages from API
   shouldFetchMessages: boolean;
 
-  // ID of message with open reaction picker
-  activeReactionPickerMessageId: string | null;
-
   // Actions
   setSelectedContact: (contact: (User & { userInfo: UserInfo }) | null) => void;
   setSelectedGroup: (group: Group | null) => void;
   loadMessages: (id: string, type: "USER" | "GROUP") => Promise<void>;
+  loadOlderMessages: () => Promise<boolean>;
   sendMessage: (
     text: string,
     files?: File[],
@@ -130,56 +130,42 @@ interface ChatState {
   setShouldFetchMessages: (shouldFetch: boolean) => void;
   clearChatCache: (type: "USER" | "GROUP", id: string) => void;
   clearAllCache: () => void;
-  openChat: (id: string, type: "USER" | "GROUP") => Promise<boolean>;
-
-  // Reaction picker control
-  setActiveReactionPickerMessageId: (messageId: string | null) => void;
+  openChat: (contactId: string) => Promise<boolean>;
+  reloadConversationMessages: (
+    id: string,
+    type: "USER" | "GROUP",
+  ) => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
   // Utility functions
   isDuplicateMessage: (message: Message): boolean => {
     const { messages } = get();
-    const currentUser = useAuthStore.getState().user;
 
-    // Kiểm tra ID chính xác
+    // Kiểm tra ID chính xác - đây là cách chắc chắn nhất để xác định trùng lặp
     const exactMessageExists = messages.some((msg) => msg.id === message.id);
     if (exactMessageExists) {
       console.log(`[chatStore] Message with ID ${message.id} already exists`);
       return true;
     }
 
-    // Kiểm tra nội dung, người gửi và thời gian gửi gần nhau
-    const similarMessageExists = messages.some(
-      (msg) =>
-        !msg.id.startsWith("temp-") && // Không phải tin nhắn tạm thời
-        msg.senderId === message.senderId &&
-        msg.content.text === message.content.text &&
-        Math.abs(
-          new Date(msg.createdAt).getTime() -
-            new Date(message.createdAt).getTime(),
-        ) < 2000, // 2 giây
-    );
+    // Kiểm tra nội dung, người gửi và thời gian gửi gần nhau cho tin nhắn không phải tạm thời
+    // Chỉ áp dụng cho tin nhắn không phải tạm thời và không phải từ người dùng hiện tại
+    if (!message.id.startsWith("temp-")) {
+      const similarMessageExists = messages.some(
+        (msg) =>
+          !msg.id.startsWith("temp-") && // Không phải tin nhắn tạm thời
+          msg.senderId === message.senderId &&
+          msg.content.text === message.content.text &&
+          Math.abs(
+            new Date(msg.createdAt).getTime() -
+              new Date(message.createdAt).getTime(),
+          ) < 2000, // 2 giây
+      );
 
-    if (similarMessageExists) {
-      console.log(`[chatStore] Similar message content detected`);
-      return true;
-    }
-
-    // Kiểm tra xem tin nhắn có phải là tin nhắn vừa gửi từ người dùng hiện tại không
-    if (message.senderId === currentUser?.id) {
-      // Tạo khóa tin nhắn để kiểm tra
-      const messageKey = `${message.id}|${message.content.text}|${message.senderId}`;
-
-      // Kiểm tra xem tin nhắn này có trong danh sách đã gửi không
-      if (typeof window !== "undefined" && window.sentMessageIds) {
-        if (
-          window.sentMessageIds.has(messageKey) ||
-          window.sentMessageIds.has(message.id)
-        ) {
-          console.log(`[chatStore] Message was just sent by current user`);
-          return true;
-        }
+      if (similarMessageExists) {
+        console.log(`[chatStore] Similar message content detected`);
+        return true;
       }
     }
 
@@ -291,10 +277,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   selectedMessage: null,
   isDialogOpen: false,
   isLoading: false,
+  isLoadingOlder: false,
   isForwarding: false,
   searchText: "",
   searchResults: [],
   isSearching: false,
+  currentPage: 1,
+  hasMoreMessages: true,
 
   // Initialize cache
   messageCache: {},
@@ -302,27 +291,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // By default, fetch messages from API
   shouldFetchMessages: true,
 
-  // No active reaction picker initially
-  activeReactionPickerMessageId: null,
-
   // Actions
   setSelectedContact: (contact) => {
-    // Clear messages immediately to prevent showing previous conversation's messages
+    console.log(`[chatStore] Setting selected contact: ${contact?.id}`);
+
+    // First, clear messages and set loading state
     set({
       selectedContact: contact,
       selectedGroup: null,
       currentChatType: contact ? "USER" : null,
       messages: [], // Clear messages immediately
       isLoading: contact ? true : false, // Set loading state if we're selecting a contact
+      currentPage: 1, // Reset page number
+      hasMoreMessages: true, // Reset hasMoreMessages flag
+      replyingTo: null, // Clear any reply state
+      searchText: "", // Clear search text
+      searchResults: [], // Clear search results
+      isSearching: false, // Reset search state
     });
 
     if (contact) {
-      // Tạo cache key cho cuộc trò chuyện này
+      // Create cache key for this conversation
       const cacheKey = `USER_${contact.id}`;
       const cachedData = get().messageCache[cacheKey];
       const currentTime = new Date();
 
-      // Kiểm tra xem có dữ liệu trong cache không và cache có cũ không (< 5 phút)
+      // Check if we have valid cache data (less than 5 minutes old)
       const isCacheValid =
         cachedData &&
         currentTime.getTime() - cachedData.lastFetched.getTime() <
@@ -330,38 +324,49 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (isCacheValid && cachedData.messages.length > 0) {
         console.log(`[chatStore] Using cached messages for user ${contact.id}`);
-        // Sử dụng dữ liệu từ cache
+        // Use cached data
         set({
           messages: cachedData.messages,
           isLoading: false,
         });
       } else {
-        // Nếu không có cache hoặc cache cũ, tải tin nhắn từ API
+        // If no cache or old cache, load messages from API
         console.log(
           `[chatStore] No valid cache for user ${contact.id}, fetching from API`,
         );
-        get().loadMessages(contact.id, "USER");
+        // Use setTimeout to ensure state updates are processed before loading messages
+        setTimeout(() => {
+          get().loadMessages(contact.id, "USER");
+        }, 0);
       }
     }
   },
 
   setSelectedGroup: (group) => {
-    // Clear messages immediately to prevent showing previous conversation's messages
+    console.log(`[chatStore] Setting selected group: ${group?.id}`);
+
+    // First, clear messages and set loading state
     set({
       selectedGroup: group,
       selectedContact: null,
       currentChatType: group ? "GROUP" : null,
       messages: [], // Clear messages immediately
       isLoading: group ? true : false, // Set loading state if we're selecting a group
+      currentPage: 1, // Reset page number
+      hasMoreMessages: true, // Reset hasMoreMessages flag
+      replyingTo: null, // Clear any reply state
+      searchText: "", // Clear search text
+      searchResults: [], // Clear search results
+      isSearching: false, // Reset search state
     });
 
     if (group) {
-      // Tạo cache key cho nhóm này
+      // Create cache key for this group
       const cacheKey = `GROUP_${group.id}`;
       const cachedData = get().messageCache[cacheKey];
       const currentTime = new Date();
 
-      // Kiểm tra xem có dữ liệu trong cache không và cache có cũ không (< 5 phút)
+      // Check if we have valid cache data (less than 5 minutes old)
       const isCacheValid =
         cachedData &&
         currentTime.getTime() - cachedData.lastFetched.getTime() <
@@ -369,23 +374,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (isCacheValid && cachedData.messages.length > 0) {
         console.log(`[chatStore] Using cached messages for group ${group.id}`);
-        // Sử dụng dữ liệu từ cache
+        // Use cached data
         set({
           messages: cachedData.messages,
           isLoading: false,
         });
       } else {
-        // Nếu không có cache hoặc cache cũ, tải tin nhắn từ API
+        // If no cache or old cache, load messages from API
         console.log(
           `[chatStore] No valid cache for group ${group.id}, fetching from API`,
         );
-        get().loadMessages(group.id, "GROUP");
+        // Use setTimeout to ensure state updates are processed before loading messages
+        setTimeout(() => {
+          get().loadMessages(group.id, "GROUP");
+        }, 0);
       }
     }
   },
 
   loadMessages: async (id, type) => {
-    // Kiểm tra xem có nên tải tin nhắn từ API không
+    console.log(`[chatStore] Loading messages for ${type} ${id}`);
+
+    // Check if we should fetch messages from API
     if (!get().shouldFetchMessages) {
       console.log(
         `[chatStore] Skipping API fetch as shouldFetchMessages is false`,
@@ -393,13 +403,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    set({ isLoading: true });
+    // Verify that the selected contact/group hasn't changed since the request was made
+    const currentState = get();
+    const isStillSelected =
+      (type === "USER" && currentState.selectedContact?.id === id) ||
+      (type === "GROUP" && currentState.selectedGroup?.id === id);
+
+    if (!isStillSelected) {
+      console.log(
+        `[chatStore] Selected ${type} changed before API call completed, aborting`,
+      );
+      return;
+    }
+
+    set({ isLoading: true, currentPage: 1, hasMoreMessages: true });
     try {
       let result;
       if (type === "USER") {
-        result = await getMessagesBetweenUsers(id);
+        result = await getMessagesBetweenUsers(id, 1);
       } else {
-        result = await getGroupMessages(id);
+        result = await getGroupMessages(id, 1);
+      }
+
+      // Check again if the selected contact/group is still the same after API call
+      const stateAfterCall = get();
+      const isStillSelectedAfterCall =
+        (type === "USER" && stateAfterCall.selectedContact?.id === id) ||
+        (type === "GROUP" && stateAfterCall.selectedGroup?.id === id);
+
+      if (!isStillSelectedAfterCall) {
+        console.log(
+          `[chatStore] Selected ${type} changed while API call was in progress, discarding results`,
+        );
+        return;
       }
 
       if (result.success && result.messages) {
@@ -410,10 +446,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
           );
         });
 
-        // Cập nhật cache
+        // Check if we have more messages to load
+        const hasMore = result.messages.length === 30; // PAGE_SIZE from backend
+
+        // Update cache
         const cacheKey = `${type}_${id}`;
         set((state) => ({
           messages: sortedMessages,
+          hasMoreMessages: hasMore,
           messageCache: {
             ...state.messageCache,
             [cacheKey]: {
@@ -423,13 +463,174 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
         }));
       } else {
-        set({ messages: [] });
+        set({ messages: [], hasMoreMessages: false });
       }
     } catch (error) {
       console.error("Error fetching messages:", error);
-      set({ messages: [] });
+      set({ messages: [], hasMoreMessages: false });
     } finally {
-      set({ isLoading: false });
+      // Only update loading state if this is still the selected conversation
+      const finalState = get();
+      const isStillSelectedFinal =
+        (type === "USER" && finalState.selectedContact?.id === id) ||
+        (type === "GROUP" && finalState.selectedGroup?.id === id);
+
+      if (isStillSelectedFinal) {
+        set({ isLoading: false });
+      }
+    }
+  },
+
+  loadOlderMessages: async (): Promise<boolean> => {
+    console.log(`[chatStore] Loading older messages`);
+
+    const {
+      currentChatType,
+      selectedContact,
+      selectedGroup,
+      currentPage,
+      messages,
+    } = get();
+
+    if (
+      !currentChatType ||
+      (!selectedContact && !selectedGroup) ||
+      !get().hasMoreMessages
+    ) {
+      console.log(
+        `[chatStore] Cannot load older messages: No conversation selected or no more messages`,
+      );
+      return false; // Return false if we can't load more
+    }
+
+    const nextPage = currentPage + 1;
+    const id =
+      currentChatType === "USER" ? selectedContact!.id : selectedGroup!.id;
+
+    // Store the current contact/group ID to verify it doesn't change during loading
+    const currentId = id;
+    const currentType = currentChatType;
+
+    set({ isLoadingOlder: true });
+
+    try {
+      // Verify that the selected contact/group hasn't changed since the request was made
+      const stateBeforeCall = get();
+      const isStillSelected =
+        (currentType === "USER" &&
+          stateBeforeCall.selectedContact?.id === currentId) ||
+        (currentType === "GROUP" &&
+          stateBeforeCall.selectedGroup?.id === currentId);
+
+      if (!isStillSelected) {
+        console.log(
+          `[chatStore] Selected ${currentType} changed before API call completed, aborting`,
+        );
+        return false;
+      }
+
+      let result;
+      if (currentType === "USER") {
+        result = await getMessagesBetweenUsers(id, nextPage);
+      } else {
+        result = await getGroupMessages(id, nextPage);
+      }
+
+      // Check again if the selected contact/group is still the same after API call
+      const stateAfterCall = get();
+      const isStillSelectedAfterCall =
+        (currentType === "USER" &&
+          stateAfterCall.selectedContact?.id === currentId) ||
+        (currentType === "GROUP" &&
+          stateAfterCall.selectedGroup?.id === currentId);
+
+      if (!isStillSelectedAfterCall) {
+        console.log(
+          `[chatStore] Selected ${currentType} changed while API call was in progress, discarding results`,
+        );
+        return false;
+      }
+
+      if (result.success && result.messages && result.messages.length > 0) {
+        // Sort messages chronologically
+        const sortedNewMessages = [...result.messages].sort((a, b) => {
+          return (
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        });
+
+        // Check for duplicates and merge with existing messages
+        const existingMessageIds = new Set(messages.map((msg) => msg.id));
+        const uniqueNewMessages = sortedNewMessages.filter(
+          (msg) => !existingMessageIds.has(msg.id),
+        );
+
+        // If we got no new unique messages, we've reached the end
+        if (uniqueNewMessages.length === 0) {
+          console.log(
+            `[chatStore] No new unique messages found, reached the end`,
+          );
+          set({
+            hasMoreMessages: false,
+            currentPage: nextPage,
+            isLoadingOlder: false,
+          });
+          return true; // Still return true as we completed the request
+        }
+
+        console.log(
+          `[chatStore] Loaded ${uniqueNewMessages.length} older messages`,
+        );
+
+        // Merge messages and update state - add older messages to the beginning
+        const allMessages = [...uniqueNewMessages, ...messages];
+
+        // Sort all messages by date to ensure correct order
+        const sortedAllMessages = allMessages.sort((a, b) => {
+          return (
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        });
+
+        // Check if we have more messages to load (if we got less than PAGE_SIZE, we're at the end)
+        const hasMore = result.messages.length === 30; // PAGE_SIZE from backend
+
+        // Update cache
+        const cacheKey = `${currentType}_${id}`;
+        set((state) => ({
+          messages: sortedAllMessages,
+          currentPage: nextPage,
+          hasMoreMessages: hasMore,
+          messageCache: {
+            ...state.messageCache,
+            [cacheKey]: {
+              messages: sortedAllMessages,
+              lastFetched: new Date(),
+            },
+          },
+        }));
+
+        return true;
+      } else {
+        // No more messages to load
+        console.log(`[chatStore] No more messages to load`);
+        set({ hasMoreMessages: false });
+        return true; // Still return true as we completed the request
+      }
+    } catch (error) {
+      console.error("Error fetching older messages:", error);
+      return false; // Return false if there was an error
+    } finally {
+      // Only update loading state if this is still the selected conversation
+      const finalState = get();
+      const isStillSelectedFinal =
+        (currentType === "USER" &&
+          finalState.selectedContact?.id === currentId) ||
+        (currentType === "GROUP" && finalState.selectedGroup?.id === currentId);
+
+      if (isStillSelectedFinal) {
+        set({ isLoadingOlder: false });
+      }
     }
   },
 
@@ -685,27 +886,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           `[chatStore] Message sent successfully, received real message with ID: ${result.message.id}`,
         );
 
-        // Đánh dấu tin nhắn thật để tránh xử lý trùng lặp từ socket
-        if (typeof window !== "undefined") {
-          if (!window.sentMessageIds) {
-            window.sentMessageIds = new Set();
-          }
-
-          // Lưu cả ID và nội dung để kiểm tra chặt chẽ hơn
-          const messageKey = `${result.message.id}|${result.message.content.text}|${result.message.senderId}`;
-          window.sentMessageIds.add(messageKey);
-          console.log(`[chatStore] Added message to tracking: ${messageKey}`);
-
-          // Xóa ID sau 10 giây để tránh trường hợp người dùng gửi cùng nội dung nhiều lần
-          setTimeout(() => {
-            if (window.sentMessageIds) {
-              window.sentMessageIds.delete(messageKey);
-              console.log(
-                `[chatStore] Removed message from tracking: ${messageKey}`,
-              );
-            }
-          }, 10000);
-        }
+        // Ghi log tin nhắn đã gửi thành công
+        console.log(
+          `[chatStore] Message sent successfully with ID: ${result.message.id}`,
+        );
 
         // Replace temporary message with real one from server
         // Chúng ta sẽ chỉ thay thế tin nhắn tạm thời, không thêm tin nhắn mới
@@ -1463,7 +1647,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
           // If conversation doesn't exist, create it
           if (!existingConversation) {
-            console.log(`[chatStore] Creating new conversation for user ${id}`);
+            console.log(
+              `[chatStore] Creating new conversation for user ${userId}`,
+            );
             conversationsStore.addConversation({
               contact: user as User & { userInfo: UserInfo },
               lastMessage: undefined,
@@ -1473,9 +1659,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
             });
           } else {
             console.log(
-              `[chatStore] Using existing conversation for user ${id}`,
+              `[chatStore] Using existing conversation for user ${userId}`,
             );
           }
+
+          // Load messages for this conversation
+          await get().loadMessages(userId, "USER");
 
           return true;
         }
@@ -1594,13 +1783,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  // Force reload messages for a conversation
+  reloadConversationMessages: async (id: string, type: "USER" | "GROUP") => {
+    console.log(`[chatStore] Force reloading messages for ${type} ${id}`);
+
+    // Clear cache for this conversation
+    get().clearChatCache(type, id);
+
+    // Load messages
+    return get().loadMessages(id, type);
+  },
+
   // Xóa toàn bộ cache
   clearAllCache: () => {
     set({ messageCache: {} });
-  },
-
-  // Cập nhật ID của tin nhắn đang mở reaction picker
-  setActiveReactionPickerMessageId: (messageId: string | null) => {
-    set({ activeReactionPickerMessageId: messageId });
   },
 }));

@@ -9,6 +9,7 @@ import MediaGrid from "./MediaGrid";
 import ForwardMessageDialog from "./ForwardMessageDialog";
 import ReactionPicker from "./ReactionPicker";
 import ReactionSummary from "./ReactionSummary";
+import AudioVisualizer from "./AudioVisualizer";
 import { getUserDisplayName } from "@/utils/userUtils";
 
 import { Button } from "@/components/ui/button";
@@ -49,9 +50,11 @@ interface MediaItemProps {
 
 // Component to render different types of media
 function MediaItem({ media, onClick }: MediaItemProps) {
-  const handleDownload = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDownload = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     // Tạo một thẻ a ẩn để tải file
     const link = document.createElement("a");
     link.href = media.url;
@@ -59,6 +62,9 @@ function MediaItem({ media, onClick }: MediaItemProps) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+
+    // Ngăn sự kiện click lan ra ngoài
+    return false;
   };
 
   const getFileIcon = () => {
@@ -129,27 +135,23 @@ function MediaItem({ media, onClick }: MediaItemProps) {
     case "AUDIO":
       return (
         <div
-          className="flex items-center p-2 bg-gray-100 rounded-lg overflow-hidden hover:bg-gray-200 transition-colors isolate cursor-pointer"
+          className="flex flex-col p-2 bg-gray-100 rounded-lg overflow-hidden hover:bg-gray-200 transition-colors isolate cursor-pointer"
           onClick={onClick}
         >
-          <div className="mr-3 p-2 bg-white rounded-md flex-shrink-0 shadow-sm">
-            <Music className="h-5 w-5 text-blue-500" />
-          </div>
-          <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="flex items-center mb-1">
+            <div className="mr-2 p-1.5 bg-white rounded-md flex-shrink-0 shadow-sm">
+              <Music className="h-4 w-4 text-blue-500" />
+            </div>
             <p className="text-sm font-medium truncate">{media.fileName}</p>
-            <audio
-              src={media.url}
-              controls
-              className="w-full mt-1 h-8"
-              preload="metadata"
+          </div>
+          <div className="w-full">
+            <AudioVisualizer
+              url={media.url}
+              fileName={media.fileName}
+              compact={true}
+              onDownload={() => handleDownload()}
             />
           </div>
-          <button
-            className="ml-2 p-1.5 bg-white rounded-full flex-shrink-0 shadow-sm hover:bg-gray-50 transition-opacity opacity-0 hover:opacity-100"
-            onClick={handleDownload}
-          >
-            <Download className="h-4 w-4" />
-          </button>
         </div>
       );
 
@@ -203,10 +205,7 @@ export default function MessageItem({
   const [isForwardDialogOpen, setIsForwardDialogOpen] = useState(false);
   const formattedTime = formatMessageTime(message.createdAt);
   const currentUser = useAuthStore((state) => state.user);
-  // Sử dụng state toàn cục cho reaction picker thay vì state cục bộ
-  const setActiveReactionPickerMessageId = useChatStore(
-    (state) => state.setActiveReactionPickerMessageId,
-  );
+  // Get chat store for message operations
   const chatStore = useChatStore();
 
   // Biến để tái sử dụng về sau
@@ -277,13 +276,7 @@ export default function MessageItem({
 
   const handleReaction = async (reactionType: ReactionType) => {
     try {
-      const success = await chatStore.addReactionToMessageById(
-        message.id,
-        reactionType,
-      );
-      if (success) {
-        setActiveReactionPickerMessageId(null);
-      }
+      await chatStore.addReactionToMessageById(message.id, reactionType);
     } catch (error) {
       console.error("Error reacting to message:", error);
     }
@@ -698,7 +691,6 @@ export default function MessageItem({
               {/* Reaction buttons - only show if message is not recalled */}
               {!message.recalled && (
                 <ReactionPicker
-                  messageId={message.id}
                   isCurrentUser={isCurrentUser}
                   userReaction={getUserReaction()}
                   onReaction={handleReaction}

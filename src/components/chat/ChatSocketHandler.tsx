@@ -7,14 +7,13 @@ import { useConversationsStore } from "@/stores/conversationsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { Message, Reaction } from "@/types/base";
-import { useSocket } from "@/providers/SocketProvider";
+import { useSocket } from "@/providers/SocketChatProvider";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 
-// Extend Window interface to include our socket and message tracking
+// Extend Window interface to include our socket
 declare global {
   interface Window {
     messageSocket: Socket | null;
-    sentMessageIds?: Set<string>; // Lưu trữ cả ID và khóa tin nhắn (ID|content|senderId)
   }
 }
 
@@ -69,7 +68,8 @@ export default function ChatSocketHandler() {
   const playNotificationSound = useNotificationSound();
 
   // Sử dụng store để quản lý số lượng tin nhắn chưa đọc
-  const { incrementUnread: incrementGlobalUnread } = useNotificationStore();
+  const { incrementUnread: incrementGlobalUnread, resetUnread } =
+    useNotificationStore();
 
   // Function to ensure message sender has userInfo
   const ensureMessageHasUserInfo = useCallback(
@@ -177,21 +177,10 @@ export default function ChatSocketHandler() {
           return;
         }
 
-        // Kiểm tra xem tin nhắn này có trong danh sách đã gửi không
-        if (typeof window !== "undefined" && window.sentMessageIds) {
-          // Tạo khóa tin nhắn để kiểm tra
-          const messageKey = `${message.id}|${message.content.text}|${message.senderId}`;
-
-          if (
-            window.sentMessageIds.has(messageKey) ||
-            window.sentMessageIds.has(message.id)
-          ) {
-            console.log(
-              `[ChatSocketHandler] Message was tracked as sent by current user, skipping socket event`,
-            );
-            return;
-          }
-        }
+        // Ghi log cho tin nhắn mới từ người dùng hiện tại
+        console.log(
+          `[ChatSocketHandler] Checking for similar messages from current user`,
+        );
 
         // Kiểm tra xem tin nhắn đã có trong danh sách tin nhắn chưa (kiểm tra nội dung)
         const similarMessageExists = messages.some(
@@ -263,6 +252,8 @@ export default function ChatSocketHandler() {
           // Đánh dấu đã đọc nếu tin nhắn từ người khác
           if (message.senderId !== currentUser?.id) {
             chatStore.markMessageAsReadById(message.id);
+            // Đặt lại số lượng tin nhắn chưa đọc toàn cục khi đọc tin nhắn
+            resetUnread();
           }
         }
       }
@@ -293,6 +284,7 @@ export default function ChatSocketHandler() {
       ensureMessageHasUserInfo,
       playNotificationSound,
       incrementGlobalUnread,
+      resetUnread,
     ],
   );
 
@@ -331,10 +323,15 @@ export default function ChatSocketHandler() {
             markAsRead: shouldMarkAsRead,
             updateLastActivity: false, // Don't update lastActivity for read events
           });
+
+          // Đặt lại số lượng tin nhắn chưa đọc toàn cục khi đọc tin nhắn
+          if (shouldMarkAsRead) {
+            resetUnread();
+          }
         }
       }
     },
-    [messages, currentUser],
+    [messages, currentUser, resetUnread],
   );
 
   // Handle message recalled event
@@ -407,6 +404,12 @@ export default function ChatSocketHandler() {
     (data: MessageReactionEventData) => {
       console.log("Message reaction updated event:", data);
 
+      // Kiểm tra xem người thả cảm xúc có phải là người dùng hiện tại không
+      const isCurrentUser = data.userId === currentUser?.id;
+      console.log(
+        `[ChatSocketHandler] Reaction from ${isCurrentUser ? "current user" : "other user"}`,
+      );
+
       // Update the message in the current chat
       const messageToUpdate = messages.find((msg) => msg.id === data.messageId);
       if (messageToUpdate) {
@@ -427,9 +430,39 @@ export default function ChatSocketHandler() {
           markAsRead: false,
           updateLastActivity: false, // Don't update lastActivity for reaction events
         });
+
+        // Phát âm thanh thông báo nếu cảm xúc đến từ người khác và không phải cuộc trò chuyện hiện tại
+        if (!isCurrentUser) {
+          // Kiểm tra xem tin nhắn có thuộc cuộc trò chuyện hiện tại không
+          const isFromCurrentChat =
+            (currentChatType === "USER" &&
+              selectedContact &&
+              (messageToUpdate.senderId === selectedContact.id ||
+                messageToUpdate.receiverId === selectedContact.id)) ||
+            (currentChatType === "GROUP" &&
+              selectedGroup &&
+              messageToUpdate.groupId === selectedGroup.id);
+
+          // Chỉ phát âm thanh nếu không phải cuộc trò chuyện hiện tại
+          if (!isFromCurrentChat) {
+            console.log(
+              `[ChatSocketHandler] Playing notification sound for reaction from ${data.userId}`,
+            );
+            playNotificationSound();
+            incrementGlobalUnread();
+          }
+        }
       }
     },
-    [messages],
+    [
+      messages,
+      currentUser,
+      currentChatType,
+      selectedContact,
+      selectedGroup,
+      playNotificationSound,
+      incrementGlobalUnread,
+    ],
   );
 
   // Handle user typing event

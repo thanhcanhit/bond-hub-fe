@@ -6,6 +6,7 @@ import { getUserInitials, getUserDisplayName } from "@/utils/userUtils";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { useChatStore } from "@/stores/chatStore";
 import SearchHeader from "../SearchHeader";
+import { Media } from "@/types/base";
 
 interface ContactListProps {
   onSelectConversation: (
@@ -13,6 +14,58 @@ interface ContactListProps {
     type: "USER" | "GROUP",
   ) => void;
 }
+
+// Helper function to format the last message media for display
+const formatLastMessageMedia = (media: Media[]) => {
+  if (!media || media.length === 0) return "";
+
+  // Count media types
+  const imageCount = media.filter((m) => m.type === "IMAGE").length;
+  const videoCount = media.filter((m) => m.type === "VIDEO").length;
+  const audioCount = media.filter((m) => m.type === "AUDIO").length;
+  const documentCount = media.filter(
+    (m) => m.type !== "IMAGE" && m.type !== "VIDEO" && m.type !== "AUDIO",
+  ).length;
+
+  // Format based on media types present
+  if (audioCount > 0) {
+    if (audioCount === media.length) {
+      return audioCount === 1 ? "[Âm thanh]" : `[${audioCount} âm thanh]`;
+    }
+  }
+
+  if (
+    imageCount > 0 &&
+    videoCount === 0 &&
+    audioCount === 0 &&
+    documentCount === 0
+  ) {
+    return imageCount === 1 ? "[Hình ảnh]" : `[${imageCount} hình ảnh]`;
+  }
+
+  if (
+    videoCount > 0 &&
+    imageCount === 0 &&
+    audioCount === 0 &&
+    documentCount === 0
+  ) {
+    return videoCount === 1 ? "[Video]" : `[${videoCount} video]`;
+  }
+
+  if (
+    documentCount > 0 &&
+    imageCount === 0 &&
+    videoCount === 0 &&
+    audioCount === 0
+  ) {
+    return documentCount === 1
+      ? "[Tệp đính kèm]"
+      : `[${documentCount} tệp đính kèm]`;
+  }
+
+  // Mixed media types
+  return "[Đa phương tiện]";
+};
 
 export default function ContactList({
   onSelectConversation,
@@ -44,18 +97,7 @@ export default function ContactList({
 
   return (
     <div className="flex flex-col h-full w-full">
-      {/* <div className="p-4 bg-white border-b flex items-center justify-between shrink-0">
-        <div className="flex items-center space-x-2 border rounded-md pl-2 h-9 flex-1 bg-gray-50">
-          <Search className="h-4 w-4 text-gray-500" />
-          <Input
-            placeholder="Tìm kiếm"
-            className="border-0 shadow-none h-8 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-      </div> */}
-      <SearchHeader />
+      <SearchHeader className="w-full border-r-0 border-b h-[69px]" />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {isLoading ? (
@@ -154,7 +196,9 @@ export default function ContactList({
                       ? "Tin nhắn đã được thu hồi"
                       : conversation.lastMessage.content.text ||
                         (conversation.lastMessage.content.media?.length
-                          ? "[Hình ảnh/Tệp đính kèm]"
+                          ? formatLastMessageMedia(
+                              conversation.lastMessage.content.media,
+                            )
                           : "")}
                   </p>
                 ) : conversation.type === "USER" &&

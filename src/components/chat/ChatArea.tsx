@@ -12,6 +12,7 @@ import TypingIndicator from "./TypingIndicator";
 import { formatMessageDate } from "@/utils/dateUtils";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
+import { useNotificationStore } from "@/stores/notificationStore";
 import { getUserDataById } from "@/actions/user.action";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
@@ -34,16 +35,21 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     searchResults,
     isSearching,
     isLoading,
+    isLoadingOlder,
+    hasMoreMessages,
     clearSearch,
     setReplyingTo,
     setSelectedMessage,
     setIsDialogOpen,
     sendMessage,
+    loadOlderMessages,
   } = useChatStore();
 
   const { markAsRead, updateLastMessage, conversations } =
     useConversationsStore();
+  const { resetUnread } = useNotificationStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const [isTyping, setIsTyping] = useState(false);
 
   // Fetch complete user data and mark messages as read when viewing a conversation
@@ -51,28 +57,42 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     if (currentChatType === "USER" && selectedContact?.id) {
       markAsRead(selectedContact.id);
 
+      // Reset global unread count
+      resetUnread();
+
       // Fetch complete user data to ensure we have userInfo
       const fetchCompleteUserData = async () => {
         try {
           const result = await getUserDataById(selectedContact.id);
           if (result.success && result.user) {
-            // Update the selected contact with complete user data
-            const { setSelectedContact } = useChatStore.getState();
-            // Ensure userInfo exists
-            const user = result.user;
-            if (!user.userInfo) {
-              user.userInfo = {
-                id: user.id,
-                fullName: user.email || user.phoneNumber || "Unknown",
-                profilePictureUrl: null,
-                statusMessage: "No status",
-                blockStrangers: false,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                userAuth: user,
-              };
+            // Get the current selected contact to make sure it hasn't changed
+            const currentSelectedContact =
+              useChatStore.getState().selectedContact;
+
+            // Only update if the selected contact is still the same
+            if (currentSelectedContact?.id === selectedContact.id) {
+              // Update the selected contact with complete user data
+              const { setSelectedContact } = useChatStore.getState();
+              // Ensure userInfo exists
+              const user = result.user;
+              if (!user.userInfo) {
+                user.userInfo = {
+                  id: user.id,
+                  fullName: user.email || user.phoneNumber || "Unknown",
+                  profilePictureUrl: null,
+                  statusMessage: "No status",
+                  blockStrangers: false,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                  userAuth: user,
+                };
+              }
+              setSelectedContact(user as User & { userInfo: UserInfo });
+            } else {
+              console.log(
+                `[ChatArea] Selected contact changed while fetching data, skipping update`,
+              );
             }
-            setSelectedContact(user as User & { userInfo: UserInfo });
           }
         } catch (error) {
           console.error("Error fetching complete user data:", error);
@@ -81,12 +101,22 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
 
       fetchCompleteUserData();
     }
-  }, [selectedContact?.id, markAsRead, currentChatType]);
+  }, [selectedContact?.id, markAsRead, resetUnread, currentChatType]);
 
   // Keep track of previous messages to detect what changed
   const prevMessagesRef = useRef<Message[]>([]);
 
   useEffect(() => {
+    // Skip if no messages or no selected contact
+    if (!messages.length || !selectedContact) {
+      prevMessagesRef.current = [];
+      return;
+    }
+
+    console.log(
+      `[ChatArea] Messages updated for contact: ${selectedContact.id}, count: ${messages.length}`,
+    );
+
     // Only scroll to bottom when a new message is added, not when reactions change
     const shouldScrollToBottom = () => {
       // If message count changed, it's a new message
@@ -107,6 +137,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
 
     // Only scroll if it's a new message, not a reaction update
     if (shouldScrollToBottom()) {
+      console.log(`[ChatArea] Scrolling to bottom for new message`);
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
 
@@ -114,7 +145,10 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     if (messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
       if (currentChatType === "USER" && selectedContact) {
-        updateLastMessage(selectedContact.id, lastMessage);
+        const currentSelectedContact = useChatStore.getState().selectedContact;
+        if (currentSelectedContact?.id === selectedContact.id) {
+          updateLastMessage(selectedContact.id, lastMessage);
+        }
       } else if (currentChatType === "GROUP" && selectedGroup) {
         // Update last message for group conversation
         // This would need to be implemented in the conversationsStore
@@ -125,37 +159,131 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     prevMessagesRef.current = [...messages];
   }, [messages, selectedContact, updateLastMessage]);
 
-  // Scroll to bottom when component mounts
+  // Scroll to bottom when component mounts or when selected contact changes
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-  }, []);
+    if (selectedContact && !isLoading && messages.length > 0) {
+      console.log(
+        `[ChatArea] Scrolling to bottom for contact: ${selectedContact.id}`,
+      );
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+    }
+  }, [selectedContact?.id, isLoading, messages.length]);
 
-  // Theo dõi trạng thái đang nhập từ conversationsStore
+  // Handle scroll event to load older messages
   useEffect(() => {
-    if (currentChatType !== "USER" || !selectedContact) return;
+    const chatContainer = chatContainerRef.current;
+    if (!chatContainer || !selectedContact) return;
 
-    // Kiểm tra trạng thái đang nhập ban đầu
+    console.log(
+      `[ChatArea] Setting up scroll handler for contact: ${selectedContact.id}`,
+    );
+
+    const handleScroll = () => {
+      // Check if user has scrolled near the top (within 50px from top)
+      if (chatContainer.scrollTop < 50 && !isLoadingOlder && hasMoreMessages) {
+        console.log(
+          `[ChatArea] Near top of scroll, loading older messages for: ${selectedContact.id}`,
+        );
+
+        // Save current scroll position and height
+        const scrollHeight = chatContainer.scrollHeight;
+        const scrollPosition = chatContainer.scrollTop;
+
+        // Store the current contact ID to verify it doesn't change during loading
+        const currentContactId = selectedContact.id;
+
+        // Load older messages
+        loadOlderMessages().then((success) => {
+          if (!success) {
+            console.log(
+              `[ChatArea] Failed to load older messages or no more messages`,
+            );
+            return;
+          }
+
+          // After loading, restore relative scroll position
+          // Wait a bit for DOM to update
+          setTimeout(() => {
+            // Verify the contact hasn't changed during loading
+            const currentSelectedContact =
+              useChatStore.getState().selectedContact;
+            if (currentSelectedContact?.id !== currentContactId) {
+              console.log(
+                `[ChatArea] Contact changed during loading, skipping scroll adjustment`,
+              );
+              return;
+            }
+
+            if (chatContainerRef.current) {
+              // Calculate new scroll position based on height difference
+              const newScrollHeight = chatContainerRef.current.scrollHeight;
+              const heightDifference = newScrollHeight - scrollHeight;
+              chatContainerRef.current.scrollTop =
+                scrollPosition + heightDifference;
+              console.log(
+                `[ChatArea] Adjusted scroll position after loading older messages`,
+              );
+            }
+          }, 100);
+        });
+      }
+    };
+
+    chatContainer.addEventListener("scroll", handleScroll);
+    return () => {
+      chatContainer.removeEventListener("scroll", handleScroll);
+    };
+  }, [isLoadingOlder, hasMoreMessages, loadOlderMessages, selectedContact]);
+
+  // Track typing status from conversationsStore
+  useEffect(() => {
+    if (currentChatType !== "USER" || !selectedContact) {
+      setIsTyping(false);
+      return;
+    }
+
+    console.log(
+      `[ChatArea] Setting up typing indicator for contact: ${selectedContact.id}`,
+    );
+
+    // Check initial typing status
     const conversation = conversations.find(
       (conv) => conv.contact.id === selectedContact.id,
     );
     if (conversation) {
       setIsTyping(!!conversation.isTyping);
+    } else {
+      setIsTyping(false);
     }
 
-    // Đăng ký lắng nghe thay đổi
+    // Subscribe to changes
     const unsubscribe = useConversationsStore.subscribe((state) => {
+      // Get the current selected contact to make sure it hasn't changed
+      const currentSelectedContact = useChatStore.getState().selectedContact;
+      if (
+        !currentSelectedContact ||
+        currentSelectedContact.id !== selectedContact.id
+      ) {
+        // If contact has changed, don't update typing status
+        return;
+      }
+
       const updatedConversation = state.conversations.find(
         (conv) => conv.contact.id === selectedContact.id,
       );
       if (updatedConversation) {
         setIsTyping(!!updatedConversation.isTyping);
+      } else {
+        setIsTyping(false);
       }
     });
 
     return () => {
       unsubscribe();
+      // Reset typing status when unmounting or changing contact
+      setIsTyping(false);
     };
-  }, [selectedContact, conversations, currentChatType]);
+  }, [selectedContact?.id, conversations, currentChatType]);
 
   const handleReply = (message: Message) => {
     setReplyingTo(message);
@@ -317,8 +445,11 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
       <ChatMessagesDropZone
         onFileDrop={(files) => handleSendMessage("", files)}
       >
-        <div className="overflow-y-auto overflow-x-hidden bg-gray-50 p-4 custom-scrollbar h-full">
-          {selectedContact || selectedGroup ? (
+        <div
+          ref={chatContainerRef}
+          className="overflow-y-auto overflow-x-hidden bg-gray-50 p-4 custom-scrollbar h-full"
+        >
+          {selectedContact ? (
             isLoading ? (
               <div className="h-full flex items-center justify-center">
                 <div className="flex flex-col items-center">
@@ -327,7 +458,17 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
                 </div>
               </div>
             ) : (
-              renderMessageContent()
+              <>
+                {isLoadingOlder && (
+                  <div className="flex justify-center mb-4">
+                    <div className="flex items-center text-xs text-gray-500">
+                      <div className="w-4 h-4 border-2 border-t-blue-500 border-b-blue-300 border-l-blue-300 border-r-blue-300 rounded-full animate-spin mr-2"></div>
+                      Đang tải tin nhắn cũ hơn...
+                    </div>
+                  </div>
+                )}
+                {renderMessageContent()}
+              </>
             )
           ) : (
             <div className="h-full flex items-center justify-center">

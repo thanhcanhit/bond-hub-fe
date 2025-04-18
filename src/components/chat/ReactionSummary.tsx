@@ -11,8 +11,16 @@ interface ReactionSummaryProps {
   }>;
 }
 
+// Define a type for reaction objects with varying structures
+interface ReactionObject {
+  userId: string;
+  reactionType?: ReactionType;
+  reaction?: string;
+  count?: number;
+}
+
 // Helper functions for reaction handling
-const getReactionEmojis = () => ({
+const getReactionEmojis = (): Record<ReactionType, string> => ({
   [ReactionType.LIKE]: "👍",
   [ReactionType.LOVE]: "❤️",
   [ReactionType.HAHA]: "😂",
@@ -22,7 +30,7 @@ const getReactionEmojis = () => ({
 });
 
 // Helper function to get reaction type from object
-const getReactionTypeFromObject = (reaction: any): ReactionType => {
+const getReactionTypeFromObject = (reaction: ReactionObject): ReactionType => {
   // Check if the reaction object has a reactionType property
   if ("reactionType" in reaction && reaction.reactionType) {
     return reaction.reactionType;
@@ -36,7 +44,7 @@ const getReactionTypeFromObject = (reaction: any): ReactionType => {
 };
 
 // Helper function to get reaction count
-const getReactionCount = (reaction: any): number => {
+const getReactionCount = (reaction: ReactionObject): number => {
   // Check if the reaction has a count property
   if ("count" in reaction && typeof reaction.count === "number") {
     return reaction.count;
@@ -45,8 +53,11 @@ const getReactionCount = (reaction: any): number => {
 };
 
 // Process reactions to count by type
-const processReactions = (reactions: any[]) => {
-  const reactionCounts: Record<string, number> = {};
+const processReactions = (reactions: ReactionObject[]) => {
+  const reactionCounts: Record<ReactionType, number> = {} as Record<
+    ReactionType,
+    number
+  >;
   let totalReactions = 0;
 
   // Process each reaction to handle different API response formats
@@ -75,15 +86,19 @@ export default function ReactionSummary({ reactions }: ReactionSummaryProps) {
   return (
     <div className="flex items-center bg-white rounded-full shadow-sm px-1 py-0.5 text-xs">
       {/* Display unique reaction types */}
-      {Object.entries(reactionCounts).map(([type, count]) => (
-        <span
-          key={type}
-          className="mr-0.5"
-          title={`${count} ${type.toLowerCase()}`}
-        >
-          {reactionEmojis[type as ReactionType]}
-        </span>
-      ))}
+      {Object.entries(reactionCounts).map(([typeStr, count]) => {
+        // Ensure that the type string is a valid ReactionType
+        const type = typeStr as ReactionType;
+        return (
+          <span
+            key={typeStr}
+            className="mr-0.5"
+            title={`${count} ${typeStr.toLowerCase()}`}
+          >
+            {reactionEmojis[type]}
+          </span>
+        );
+      })}
       <span className="text-gray-600 font-medium ml-0.5">{totalReactions}</span>
     </div>
   );
