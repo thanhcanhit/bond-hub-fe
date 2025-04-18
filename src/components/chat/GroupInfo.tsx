@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Group, User, UserInfo, Media } from "@/types/base";
+import { Group, User, UserInfo, Media, GroupRole } from "@/types/base";
 import {
   X,
   Users,
@@ -23,6 +23,9 @@ import {
   ChevronDown,
   ArrowLeft,
   MoreHorizontal,
+  UserMinus,
+  Shield,
+  Ban,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -35,6 +38,29 @@ import {
 } from "@/components/ui/collapsible";
 import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  deleteGroup,
+  leaveGroup,
+  removeGroupMember,
+  updateMemberRole,
+} from "@/actions/group.action";
 
 interface GroupInfoProps {
   group: Group | null;
@@ -56,11 +82,17 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   const [memberDetails, setMemberDetails] = useState<{
     [key: string]: User & { userInfo: UserInfo };
   }>({});
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState<GroupRole | null>(
+    null,
+  );
 
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
 
-  // Lấy thông tin chi tiết của các thành viên
+  // Lấy thông tin chi tiết của các thành viên và vai trò của người dùng hiện tại
   useEffect(() => {
     if (group?.id && group.members) {
       const fetchMemberDetails = async () => {
@@ -92,6 +124,11 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
               error,
             );
           }
+
+          // Kiểm tra vai trò của người dùng hiện tại
+          if (currentUser && member.userId === currentUser.id) {
+            setCurrentUserRole(member.role);
+          }
         }
 
         setMemberDetails(newMemberDetails);
@@ -99,7 +136,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
 
       fetchMemberDetails();
     }
-  }, [group?.id, group?.members]);
+  }, [group?.id, group?.members, currentUser]);
 
   // Lấy media từ tin nhắn
   useEffect(() => {
@@ -248,10 +285,12 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
             return (
               <div
                 key={member.userId}
-                className="flex items-center p-4 hover:bg-gray-100 cursor-pointer justify-between"
-                onClick={() => handleMemberClick(member.userId)}
+                className="flex items-center p-4 hover:bg-gray-100 justify-between"
               >
-                <div className="flex items-center">
+                <div
+                  className="flex items-center cursor-pointer"
+                  onClick={() => handleMemberClick(member.userId)}
+                >
                   <Avatar className="h-10 w-10 mr-3">
                     <AvatarImage
                       src={memberData?.userInfo?.profilePictureUrl || undefined}
@@ -274,10 +313,45 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                     </p>
                   </div>
                 </div>
-                {member.role !== "LEADER" && (
-                  <Button variant="ghost" size="icon">
-                    <MoreHorizontal className="h-5 w-5" />
-                  </Button>
+                {/* Hiển thị menu tùy chọn cho thành viên nếu người dùng hiện tại là trưởng nhóm hoặc phó nhóm */}
+                {(currentUserRole === "LEADER" ||
+                  (currentUserRole === "CO_LEADER" &&
+                    member.role === "MEMBER")) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon">
+                        <MoreHorizontal className="h-5 w-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {currentUserRole === "LEADER" &&
+                        member.role === "MEMBER" && (
+                          <DropdownMenuItem
+                            onClick={() => handlePromoteMember(member.userId)}
+                          >
+                            <Shield className="h-4 w-4 mr-2" />
+                            Thăng phó nhóm
+                          </DropdownMenuItem>
+                        )}
+                      {currentUserRole === "LEADER" &&
+                        member.role === "CO_LEADER" && (
+                          <DropdownMenuItem
+                            onClick={() => handleDemoteMember(member.userId)}
+                          >
+                            <UserMinus className="h-4 w-4 mr-2" />
+                            Hạ xuống thành viên
+                          </DropdownMenuItem>
+                        )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => handleKickMember(member.userId)}
+                        className="text-red-500 focus:text-red-500"
+                      >
+                        <Ban className="h-4 w-4 mr-2" />
+                        Xóa khỏi nhóm
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
               </div>
             );
@@ -593,9 +667,22 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
               <span>Xóa lịch sử trò chuyện</span>
             </Button>
 
+            {/* Nút xóa nhóm chỉ hiển thị cho trưởng nhóm */}
+            {currentUserRole === "LEADER" && (
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-red-500 pl-2"
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <Trash className="h-5 w-5 mr-3" />
+                <span>Xóa nhóm</span>
+              </Button>
+            )}
+
             <Button
               variant="ghost"
               className="w-full justify-start text-red-500 pl-2"
+              onClick={() => setShowLeaveDialog(true)}
             >
               <LogOut className="h-5 w-5 mr-3" />
               <span>Rời nhóm</span>
@@ -612,6 +699,197 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
           isOwnProfile={selectedMember.id === currentUser?.id}
         />
       )}
+
+      {/* Alert Dialog xác nhận xóa nhóm */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Bạn có chắc chắn muốn xóa nhóm này?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Hành động này không thể hoàn tác. Tất cả tin nhắn và dữ liệu của
+              nhóm sẽ bị xóa vĩnh viễn.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteGroup}
+              disabled={isProcessing}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {isProcessing ? "Đang xử lý..." : "Xóa nhóm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Alert Dialog xác nhận rời nhóm */}
+      <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Bạn có chắc chắn muốn rời nhóm này?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {currentUserRole === "LEADER"
+                ? "Bạn là trưởng nhóm. Nếu rời nhóm, quyền trưởng nhóm sẽ được chuyển cho một thành viên khác."
+                : "Bạn sẽ không thể xem tin nhắn của nhóm này nữa trừ khi được mời lại."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLeaveGroup}
+              disabled={isProcessing}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {isProcessing ? "Đang xử lý..." : "Rời nhóm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
+
+  // Hàm xử lý thăng cấp thành viên lên phó nhóm
+  async function handlePromoteMember(memberId: string) {
+    if (!group?.id) return;
+    setIsProcessing(true);
+    try {
+      const result = await updateMemberRole(
+        group.id,
+        memberId,
+        GroupRole.CO_LEADER,
+      );
+      if (result.success) {
+        // Cập nhật UI hoặc reload dữ liệu nhóm
+        alert("Đã thăng cấp thành viên thành phó nhóm");
+      } else {
+        alert(`Lỗi: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error promoting member:", error);
+      alert("Đã xảy ra lỗi khi thăng cấp thành viên");
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  // Hàm xử lý hạ cấp phó nhóm xuống thành viên thường
+  async function handleDemoteMember(memberId: string) {
+    if (!group?.id) return;
+    setIsProcessing(true);
+    try {
+      const result = await updateMemberRole(
+        group.id,
+        memberId,
+        GroupRole.MEMBER,
+      );
+      if (result.success) {
+        // Cập nhật UI hoặc reload dữ liệu nhóm
+        alert("Đã hạ cấp phó nhóm xuống thành viên thường");
+      } else {
+        alert(`Lỗi: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error demoting member:", error);
+      alert("Đã xảy ra lỗi khi hạ cấp thành viên");
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  // Hàm xử lý xóa thành viên khỏi nhóm
+  async function handleKickMember(memberId: string) {
+    if (!group?.id) return;
+    if (!confirm("Bạn có chắc chắn muốn xóa thành viên này khỏi nhóm?")) return;
+
+    setIsProcessing(true);
+    try {
+      const result = await removeGroupMember(group.id, memberId);
+      if (result.success) {
+        // Cập nhật UI hoặc reload dữ liệu nhóm
+        alert("Đã xóa thành viên khỏi nhóm");
+      } else {
+        alert(`Lỗi: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error removing member:", error);
+      alert("Đã xảy ra lỗi khi xóa thành viên");
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  // Hàm xử lý xóa nhóm
+  async function handleDeleteGroup() {
+    if (!group?.id) return;
+    setIsProcessing(true);
+    try {
+      const result = await deleteGroup(group.id);
+      if (result.success) {
+        // Đóng dialog và chuyển hướng về trang chat
+        setShowDeleteDialog(false);
+
+        // Đóng chat của nhóm này
+        const chatStore = useChatStore.getState();
+
+        // Xóa cache của nhóm này
+        chatStore.clearChatCache("GROUP", group.id);
+
+        // Đặt selectedGroup về null để đóng chat
+        chatStore.setSelectedGroup(null);
+
+        // Đóng dialog thông tin nhóm
+        onClose();
+
+        // Thông báo cho người dùng
+        alert("Đã xóa nhóm thành công");
+      } else {
+        alert(`Lỗi: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error deleting group:", error);
+      alert("Đã xảy ra lỗi khi xóa nhóm");
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  // Hàm xử lý rời nhóm
+  async function handleLeaveGroup() {
+    if (!group?.id) return;
+    setIsProcessing(true);
+    try {
+      const result = await leaveGroup(group.id);
+      if (result.success) {
+        // Đóng dialog xác nhận
+        setShowLeaveDialog(false);
+
+        // Đóng chat của nhóm này
+        const chatStore = useChatStore.getState();
+
+        // Xóa cache của nhóm này
+        chatStore.clearChatCache("GROUP", group.id);
+
+        // Đặt selectedGroup về null để đóng chat
+        chatStore.setSelectedGroup(null);
+
+        // Đóng dialog thông tin nhóm
+        onClose();
+
+        // Thông báo cho người dùng
+        alert("Đã rời nhóm thành công");
+      } else {
+        alert(`Lỗi: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error leaving group:", error);
+      alert("Đã xảy ra lỗi khi rời nhóm");
+    } finally {
+      setIsProcessing(false);
+    }
+  }
 }
