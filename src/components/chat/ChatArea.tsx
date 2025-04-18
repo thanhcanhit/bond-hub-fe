@@ -157,7 +157,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     prevMessagesRef.current = [...messages];
   }, [messages, selectedContact, updateLastMessage]);
 
-  // Scroll to bottom when component mounts or when selected contact changes
+  // Scroll to bottom when component mounts or when selected contact changes or typing status changes
   useEffect(() => {
     if (selectedContact && !isLoading && messages.length > 0) {
       console.log(
@@ -165,7 +165,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
       );
       messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
     }
-  }, [selectedContact?.id, isLoading, messages.length]);
+  }, [selectedContact, isLoading, messages.length, isTyping]);
 
   // Handle scroll event to load older messages
   useEffect(() => {
@@ -270,7 +270,14 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
         (conv) => conv.contact.id === selectedContact.id,
       );
       if (updatedConversation) {
-        setIsTyping(!!updatedConversation.isTyping);
+        const newTypingStatus = !!updatedConversation.isTyping;
+        if (newTypingStatus !== isTyping) {
+          setIsTyping(newTypingStatus);
+          // Scroll to bottom when typing status changes
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+          }, 100);
+        }
       } else {
         setIsTyping(false);
       }
@@ -281,16 +288,13 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
       // Reset typing status when unmounting or changing contact
       setIsTyping(false);
     };
-  }, [selectedContact?.id, conversations]);
+  }, [selectedContact, conversations, isTyping, messagesEndRef]);
 
   const handleReply = (message: Message) => {
     setReplyingTo(message);
   };
 
   const handleMessageClick = (message: Message) => {
-    // Hiển thị chi tiết tin nhắn trong dialog khi click vào tin nhắn
-    console.log("Message clicked:", message);
-
     // Chỉ mở dialog khi tin nhắn có media
     if (
       message.content.media?.length ||
@@ -362,71 +366,91 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     // If we're searching, display search results
     if (searchText && searchResults.length > 0) {
       return (
-        <div className="mb-4">
-          <div className="sticky top-0 bg-blue-50 p-2 rounded-md flex justify-between items-center mb-4 z-10">
-            <div className="text-sm text-blue-700">
-              Kết quả tìm kiếm: {searchResults.length} tin nhắn
+        <>
+          <div className="mb-4">
+            <div className="sticky top-0 bg-blue-50 p-2 rounded-md flex justify-between items-center mb-4 z-10">
+              <div className="text-sm text-blue-700">
+                Kết quả tìm kiếm: {searchResults.length} tin nhắn
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-blue-700 hover:bg-blue-100"
+                onClick={clearSearch}
+              >
+                <X className="h-4 w-4 mr-1" />
+                Đóng
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-blue-700 hover:bg-blue-100"
-              onClick={clearSearch}
-            >
-              <X className="h-4 w-4 mr-1" />
-              Đóng
-            </Button>
+
+            {processMessagesForDisplay(searchResults).map(
+              ({ message, isCurrentUser, showAvatar, userInfo }) => (
+                <MessageItem
+                  key={message.id}
+                  message={message}
+                  isCurrentUser={isCurrentUser}
+                  showAvatar={showAvatar}
+                  onReply={handleReply}
+                  onMessageClick={handleMessageClick}
+                  highlight={searchText}
+                  userInfo={userInfo}
+                />
+              ),
+            )}
           </div>
 
-          {processMessagesForDisplay(searchResults).map(
-            ({ message, isCurrentUser, showAvatar, userInfo }) => (
-              <MessageItem
-                key={message.id}
-                message={message}
-                isCurrentUser={isCurrentUser}
-                showAvatar={showAvatar}
-                onReply={handleReply}
-                onMessageClick={handleMessageClick}
-                highlight={searchText}
-                userInfo={userInfo}
-              />
-            ),
+          {/* Typing indicator at the bottom */}
+          {selectedContact && isTyping && (
+            <div className="mb-2">
+              <TypingIndicator contact={selectedContact} isTyping={isTyping} />
+            </div>
           )}
-        </div>
+        </>
       );
     }
 
     // Otherwise show normal messages grouped by date
-    return messageGroups.length > 0 ? (
-      messageGroups.map((group, groupIndex) => (
-        <div key={groupIndex} className="mb-4">
-          <div className="flex justify-center mb-4">
-            <div className="bg-white px-3 py-1 rounded-full text-xs text-gray-500 shadow-sm">
-              {group.date}
-            </div>
-          </div>
+    return (
+      <>
+        {messageGroups.length > 0 ? (
+          messageGroups.map((group, groupIndex) => (
+            <div key={groupIndex} className="mb-4">
+              <div className="flex justify-center mb-4">
+                <div className="bg-white px-3 py-1 rounded-full text-xs text-gray-500 shadow-sm">
+                  {group.date}
+                </div>
+              </div>
 
-          {processMessagesForDisplay(group.messages).map(
-            ({ message, isCurrentUser, showAvatar, userInfo }) => (
-              <MessageItem
-                key={message.id}
-                message={message}
-                isCurrentUser={isCurrentUser}
-                showAvatar={showAvatar}
-                onReply={handleReply}
-                onMessageClick={handleMessageClick}
-                userInfo={userInfo}
-              />
-            ),
-          )}
-        </div>
-      ))
-    ) : (
-      <div className="h-full flex items-center justify-center">
-        <p className="text-gray-500">
-          Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!
-        </p>
-      </div>
+              {processMessagesForDisplay(group.messages).map(
+                ({ message, isCurrentUser, showAvatar, userInfo }) => (
+                  <MessageItem
+                    key={message.id}
+                    message={message}
+                    isCurrentUser={isCurrentUser}
+                    showAvatar={showAvatar}
+                    onReply={handleReply}
+                    onMessageClick={handleMessageClick}
+                    userInfo={userInfo}
+                  />
+                ),
+              )}
+            </div>
+          ))
+        ) : (
+          <div className="h-full flex items-center justify-center">
+            <p className="text-gray-500">
+              Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!
+            </p>
+          </div>
+        )}
+
+        {/* Typing indicator at the bottom */}
+        {selectedContact && isTyping && (
+          <div className="mb-2">
+            <TypingIndicator contact={selectedContact} isTyping={isTyping} />
+          </div>
+        )}
+      </>
     );
   };
 
@@ -468,9 +492,6 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
                 Chọn một liên hệ để bắt đầu trò chuyện
               </p>
             </div>
-          )}
-          {selectedContact && isTyping && (
-            <TypingIndicator contact={selectedContact} isTyping={isTyping} />
           )}
           <div ref={messagesEndRef} />
         </div>

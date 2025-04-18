@@ -853,11 +853,6 @@ export default function SearchHeader({ className }: { className?: string }) {
                           // Lưu ID vào biến tạm thời
                           const idToOpen = userIdToOpen;
 
-                          console.log(
-                            "Message clicked, opening chat with user ID:",
-                            idToOpen,
-                          );
-
                           // Gọi openChat trước khi đóng giao diện tìm kiếm
                           // Điều này đảm bảo rằng chúng ta đã bắt đầu quá trình mở chat
                           // trước khi component có thể bị unmount

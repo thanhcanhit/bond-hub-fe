@@ -296,10 +296,15 @@ export default function ChatSocketHandler() {
       // Update the message in the current chat
       const messageToUpdate = messages.find((msg) => msg.id === data.messageId);
       if (messageToUpdate) {
-        // Create updated message with new readBy array
+        // Create a Set from the readBy array to remove duplicates
+        const uniqueReadBy = Array.isArray(data.readBy)
+          ? [...new Set(data.readBy)]
+          : [];
+
+        // Create updated message with deduplicated readBy array
         const updatedMessage = {
           ...messageToUpdate,
-          readBy: data.readBy,
+          readBy: uniqueReadBy,
         };
 
         // Update in chat store using the utility function
@@ -425,14 +430,21 @@ export default function ChatSocketHandler() {
 
         // Update in conversations store using the utility function
         const conversationsStore = useConversationsStore.getState();
+
+        // Determine if this is a reaction from the current user to someone else's message
+        const isCurrentUserReactingToOthersMessage =
+          data.userId === currentUser?.id &&
+          messageToUpdate.senderId !== currentUser?.id;
+
         conversationsStore.processNewMessage(updatedMessage, {
-          incrementUnreadCount: false,
-          markAsRead: false,
+          incrementUnreadCount: false, // Never increment unread count for reactions
+          markAsRead: isCurrentUserReactingToOthersMessage, // Mark as read if current user is reacting to someone else's message
           updateLastActivity: false, // Don't update lastActivity for reaction events
         });
 
         // Phát âm thanh thông báo nếu cảm xúc đến từ người khác và không phải cuộc trò chuyện hiện tại
-        if (!isCurrentUser) {
+        // Chỉ phát âm thanh khi người khác thả cảm xúc cho tin nhắn của mình
+        if (!isCurrentUser && messageToUpdate.senderId === currentUser?.id) {
           // Kiểm tra xem tin nhắn có thuộc cuộc trò chuyện hiện tại không
           const isFromCurrentChat =
             (currentChatType === "USER" &&
@@ -449,7 +461,8 @@ export default function ChatSocketHandler() {
               `[ChatSocketHandler] Playing notification sound for reaction from ${data.userId}`,
             );
             playNotificationSound();
-            incrementGlobalUnread();
+            // Không tăng số lượng tin nhắn chưa đọc khi có người thả cảm xúc
+            // incrementGlobalUnread();
           }
         }
       }
@@ -461,7 +474,6 @@ export default function ChatSocketHandler() {
       selectedContact,
       selectedGroup,
       playNotificationSound,
-      incrementGlobalUnread,
     ],
   );
 

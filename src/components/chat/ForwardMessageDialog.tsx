@@ -37,6 +37,7 @@ export default function ForwardMessageDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [forwardSuccess, setForwardSuccess] = useState(false);
   const [isForwarding, setIsForwarding] = useState(false);
+  const [activeTab, setActiveTab] = useState("conversations");
 
   const { forwardMessageToRecipients } = useChatStore();
   const { conversations } = useConversationsStore();
@@ -49,6 +50,7 @@ export default function ForwardMessageDialog({
       setSearchQuery("");
       setForwardSuccess(false);
       setIsForwarding(false);
+      setActiveTab("conversations");
       fetchFriends();
     }
   }, [isOpen, fetchFriends]);
@@ -151,7 +153,11 @@ export default function ForwardMessageDialog({
                 </div>
               )}
 
-              <Tabs defaultValue="conversations" className="w-full">
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="w-full"
+              >
                 <TabsList className="grid w-full grid-cols-2 mb-4">
                   <TabsTrigger value="conversations">Gần đây</TabsTrigger>
                   <TabsTrigger value="friends">Danh sách bạn bè</TabsTrigger>

@@ -1253,7 +1253,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       // Cập nhật thông thường
-      const updatedMessageObject = { ...existingMessage, ...updatedMessage };
+      let updatedMessageObject = { ...existingMessage, ...updatedMessage };
+
+      // Đảm bảo readBy không chứa trùng lặp
+      if (updatedMessageObject.readBy) {
+        updatedMessageObject = {
+          ...updatedMessageObject,
+          readBy: [...new Set(updatedMessageObject.readBy)],
+        };
+      }
 
       // Cập nhật cache nếu cần
       if (updateCache) {
@@ -1448,24 +1456,41 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const state = get();
       const message = state.messages.find((msg) => msg.id === messageId);
 
-      // Nếu không tìm thấy tin nhắn hoặc tin nhắn đã được đọc rồi, không cần gọi API
+      // Nếu không tìm thấy tin nhắn, không cần gọi API
+      if (!message) {
+        console.log(
+          `[chatStore] Message ${messageId} not found, skipping API call`,
+        );
+        return true;
+      }
+
+      // Kiểm tra xem tin nhắn đã được đọc bởi người dùng hiện tại chưa
       if (
-        !message ||
-        (Array.isArray(message.readBy) &&
-          message.readBy.includes(currentUser.id))
+        Array.isArray(message.readBy) &&
+        message.readBy.includes(currentUser.id)
       ) {
         console.log(
-          `[chatStore] Message ${messageId} already read or not found, skipping API call`,
+          `[chatStore] Message ${messageId} already read by current user, skipping API call`,
         );
         return true;
       }
 
       const result = await markMessageAsRead(messageId);
       if (result.success && result.message) {
+        // Ensure readBy array doesn't contain duplicates
+        const uniqueReadBy = Array.isArray(result.message.readBy)
+          ? [...new Set(result.message.readBy)]
+          : result.message.readBy || [];
+
+        const updatedMessage = {
+          ...result.message,
+          readBy: uniqueReadBy,
+        };
+
         // Update in chat store
         set((state) => ({
           messages: state.messages.map((msg) =>
-            msg.id === messageId ? result.message : msg,
+            msg.id === messageId ? updatedMessage : msg,
           ),
         }));
 
@@ -1480,7 +1505,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             // Update last message in user conversation
             conversationsStore.updateLastMessage(
               affectedConversation.contact.id,
-              result.message,
+              updatedMessage,
             );
             // Mark conversation as read
             conversationsStore.markAsRead(affectedConversation.contact.id);
@@ -1492,7 +1517,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             conversationsStore.updateConversation(
               affectedConversation.group.id,
               {
-                lastMessage: result.message,
+                lastMessage: updatedMessage,
                 unreadCount: 0, // Mark as read
               },
             );
