@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { changePassword } from "@/actions/auth.action";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
+import { useAuthStore } from "@/stores/authStore";
 
 export default function ChangePasswordForm() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -14,6 +15,9 @@ export default function ChangePasswordForm() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Lấy accessToken từ store
+  const accessToken = useAuthStore((state) => state.accessToken);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +36,16 @@ export default function ChangePasswordForm() {
     setIsLoading(true);
 
     try {
-      const result = await changePassword(currentPassword, newPassword);
+      if (!accessToken) {
+        toast.error("Bạn cần đăng nhập lại để thực hiện thao tác này");
+        return;
+      }
+
+      const result = await changePassword(
+        currentPassword,
+        newPassword,
+        accessToken,
+      );
 
       if (result.success) {
         toast.success(result.message || "Đổi mật khẩu thành công");

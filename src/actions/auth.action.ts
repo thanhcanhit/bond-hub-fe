@@ -1,5 +1,5 @@
 "use server";
-import { createAxiosInstance } from "@/lib/axios";
+import axiosInstance, { createAxiosInstance } from "@/lib/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { DeviceType } from "@/types/base";
 import { isEmail } from "@/utils/helpers";
@@ -234,18 +234,25 @@ export async function resetPassword(resetId: string, newPassword: string) {
 export async function changePassword(
   currentPassword: string,
   newPassword: string,
+  accessToken: string,
 ) {
   try {
-    const accessToken = useAuthStore.getState().accessToken || "";
+    if (!accessToken) {
+      return {
+        success: false,
+        error: "Bạn cần đăng nhập lại để thực hiện thao tác này",
+      };
+    }
+
     const serverAxios = createAxiosInstance(accessToken);
-    const response = await serverAxios.post("/auth/change-password", {
+    const response = await serverAxios.put("/auth/change-password", {
       currentPassword,
       newPassword,
     });
 
     return {
       success: true,
-      message: response.data.message || "Password changed successfully",
+      message: response.data.message || "Đổi mật khẩu thành công",
     };
   } catch (error) {
     console.error("Change password failed:", error);

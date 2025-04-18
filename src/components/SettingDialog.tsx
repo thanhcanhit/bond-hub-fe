@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
 import {
   ChevronDown,
   Settings,
@@ -33,6 +32,8 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import ChangePasswordForm from "./password/ChangePasswordForm";
+import UpdateEmailForm from "./profile/UpdateEmailForm";
+import UpdatePhoneForm from "./profile/UpdatePhoneForm";
 import { toast } from "sonner";
 
 interface SettingsDialogProps {
@@ -414,31 +415,7 @@ export default function SettingsDialog({
                             </h4>
                           </div>
 
-                          <div className="space-y-4">
-                            <div>
-                              <Label
-                                htmlFor="current-phone"
-                                className="text-sm text-gray-500 mb-1 block"
-                              >
-                                Số điện thoại hiện tại
-                              </Label>
-                              <div className="text-sm font-medium">
-                                {user?.phoneNumber || "Chưa cập nhật"}
-                              </div>
-                            </div>
-
-                            {/* Phone update functionality would go here */}
-                            <div className="pt-2">
-                              <Button
-                                className="w-full bg-[#0841a3] hover:bg-[#0033a0] text-white"
-                                onClick={() => {
-                                  toast.info("Tính năng đang được phát triển");
-                                }}
-                              >
-                                Cập nhật số điện thoại
-                              </Button>
-                            </div>
-                          </div>
+                          <UpdatePhoneForm currentPhone={user?.phoneNumber} />
                         </div>
                       )}
 
@@ -459,31 +436,7 @@ export default function SettingsDialog({
                             </h4>
                           </div>
 
-                          <div className="space-y-4">
-                            <div>
-                              <Label
-                                htmlFor="current-email"
-                                className="text-sm text-gray-500 mb-1 block"
-                              >
-                                Email hiện tại
-                              </Label>
-                              <div className="text-sm font-medium">
-                                {user?.email || "Chưa cập nhật"}
-                              </div>
-                            </div>
-
-                            {/* Email update functionality would go here */}
-                            <div className="pt-2">
-                              <Button
-                                className="w-full bg-[#0841a3] hover:bg-[#0033a0] text-white"
-                                onClick={() => {
-                                  toast.info("Tính năng đang được phát triển");
-                                }}
-                              >
-                                Cập nhật email
-                              </Button>
-                            </div>
-                          </div>
+                          <UpdateEmailForm currentEmail={user?.email} />
                         </div>
                       )}
 
