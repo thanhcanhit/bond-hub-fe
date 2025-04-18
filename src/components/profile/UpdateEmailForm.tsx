@@ -15,11 +15,15 @@ enum UpdateEmailStep {
   COMPLETE,
 }
 
+interface UpdateEmailFormProps {
+  currentEmail?: string | null;
+  onSuccess?: () => void;
+}
+
 export default function UpdateEmailForm({
   currentEmail,
-}: {
-  currentEmail?: string | null;
-}) {
+  onSuccess,
+}: UpdateEmailFormProps) {
   const [step, setStep] = useState<UpdateEmailStep>(
     UpdateEmailStep.ENTER_EMAIL,
   );
@@ -79,6 +83,13 @@ export default function UpdateEmailForm({
       if (result.success) {
         setStep(UpdateEmailStep.COMPLETE);
         toast.success(result.message);
+
+        // Sau 1.5 giây, gọi callback nếu có
+        if (onSuccess) {
+          setTimeout(() => {
+            onSuccess();
+          }, 1500);
+        }
       } else {
         toast.error(result.error || "Mã xác nhận không hợp lệ");
       }
@@ -185,9 +196,15 @@ export default function UpdateEmailForm({
           <Button
             type="button"
             className="w-full bg-[#0841a3] hover:bg-[#0033a0] text-white"
-            onClick={handleReset}
+            onClick={() => {
+              if (onSuccess) {
+                onSuccess();
+              } else {
+                handleReset();
+              }
+            }}
           >
-            Cập nhật email khác
+            {onSuccess ? "Hoàn tất" : "Cập nhật email khác"}
           </Button>
         </div>
       )}

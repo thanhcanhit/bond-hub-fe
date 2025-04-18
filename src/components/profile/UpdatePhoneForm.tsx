@@ -15,11 +15,15 @@ enum UpdatePhoneStep {
   COMPLETE,
 }
 
+interface UpdatePhoneFormProps {
+  currentPhone?: string | null;
+  onSuccess?: () => void;
+}
+
 export default function UpdatePhoneForm({
   currentPhone,
-}: {
-  currentPhone?: string | null;
-}) {
+  onSuccess,
+}: UpdatePhoneFormProps) {
   const [step, setStep] = useState<UpdatePhoneStep>(
     UpdatePhoneStep.ENTER_PHONE,
   );
@@ -79,6 +83,13 @@ export default function UpdatePhoneForm({
       if (result.success) {
         setStep(UpdatePhoneStep.COMPLETE);
         toast.success(result.message);
+
+        // Sau 1.5 giây, gọi callback nếu có
+        if (onSuccess) {
+          setTimeout(() => {
+            onSuccess();
+          }, 1500);
+        }
       } else {
         toast.error(result.error || "Mã xác nhận không hợp lệ");
       }
@@ -185,9 +196,15 @@ export default function UpdatePhoneForm({
           <Button
             type="button"
             className="w-full bg-[#0841a3] hover:bg-[#0033a0] text-white"
-            onClick={handleReset}
+            onClick={() => {
+              if (onSuccess) {
+                onSuccess();
+              } else {
+                handleReset();
+              }
+            }}
           >
-            Cập nhật số điện thoại khác
+            {onSuccess ? "Hoàn tất" : "Cập nhật số điện thoại khác"}
           </Button>
         </div>
       )}

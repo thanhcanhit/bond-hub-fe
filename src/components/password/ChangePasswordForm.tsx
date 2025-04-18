@@ -7,7 +7,13 @@ import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 
-export default function ChangePasswordForm() {
+interface ChangePasswordFormProps {
+  onSuccess?: () => void;
+}
+
+export default function ChangePasswordForm({
+  onSuccess,
+}: ChangePasswordFormProps) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -53,6 +59,11 @@ export default function ChangePasswordForm() {
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
+
+        // Gọi callback nếu có
+        if (onSuccess) {
+          onSuccess();
+        }
       } else {
         toast.error(result.error || "Đổi mật khẩu thất bại");
       }

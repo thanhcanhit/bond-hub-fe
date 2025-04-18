@@ -415,7 +415,13 @@ export default function SettingsDialog({
                             </h4>
                           </div>
 
-                          <UpdatePhoneForm currentPhone={user?.phoneNumber} />
+                          <UpdatePhoneForm
+                            currentPhone={user?.phoneNumber}
+                            onSuccess={() => {
+                              setUpdateUserInfoType(null);
+                              setPrivacyContentType("main");
+                            }}
+                          />
                         </div>
                       )}
 
@@ -436,7 +442,13 @@ export default function SettingsDialog({
                             </h4>
                           </div>
 
-                          <UpdateEmailForm currentEmail={user?.email} />
+                          <UpdateEmailForm
+                            currentEmail={user?.email}
+                            onSuccess={() => {
+                              setUpdateUserInfoType(null);
+                              setPrivacyContentType("main");
+                            }}
+                          />
                         </div>
                       )}
 
@@ -457,7 +469,12 @@ export default function SettingsDialog({
                             </h4>
                           </div>
 
-                          <ChangePasswordForm />
+                          <ChangePasswordForm
+                            onSuccess={() => {
+                              setUpdateUserInfoType(null);
+                              setPrivacyContentType("main");
+                            }}
+                          />
                         </div>
                       )}
                     </div>
