@@ -13,6 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import {
   ChevronDown,
   Settings,
@@ -22,9 +24,16 @@ import {
   MessageSquare,
   Wrench,
   ChevronLeft,
+  ChevronRight,
+  Mail,
+  Phone,
+  KeyRound,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/stores/authStore";
+import ChangePasswordForm from "./password/ChangePasswordForm";
+import { toast } from "sonner";
 
 interface SettingsDialogProps {
   isOpen: boolean;
@@ -39,6 +48,9 @@ type SettingTab =
   | "messages"
   | "utilities";
 
+type UserInfoUpdateType = "phone" | "email" | "password" | null;
+type PrivacyContentType = "main" | "userInfo";
+
 export default function SettingsDialog({
   isOpen,
   onOpenChange,
@@ -48,6 +60,13 @@ export default function SettingsDialog({
   const [language, setLanguage] = useState("Vietnamese");
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const [showContent, setShowContent] = useState(false);
+  const [showOnlineStatus, setShowOnlineStatus] = useState(true);
+  const [updateUserInfoType, setUpdateUserInfoType] =
+    useState<UserInfoUpdateType>(null);
+  const [privacyContentType, setPrivacyContentType] =
+    useState<PrivacyContentType>("main");
+
+  const user = useAuthStore((state) => state.user);
 
   const tabs = [
     { id: "general", label: "Cài đặt chung", icon: Settings },
@@ -251,16 +270,245 @@ export default function SettingsDialog({
                 )}
 
                 {/* Privacy Settings */}
-                {activeTab === "privacy" && (
+                {activeTab === "privacy" && privacyContentType === "main" && (
                   <div className="space-y-4">
-                    <h4 className="text-base font-semibold mb-2 text-gray-800">
-                      Quyền riêng tư
-                    </h4>
-                    <p className="text-sm text-gray-500">
-                      Cài đặt quyền riêng tư cho tài khoản của bạn
-                    </p>
+                    {/* Cá nhân section */}
+                    <div>
+                      <h4 className="text-base font-semibold mb-1.5 text-gray-800">
+                        Cá nhân
+                      </h4>
+                      <div className="space-y-3">
+                        <div className="bg-white rounded-md border border-gray-100 overflow-hidden">
+                          <div
+                            className="p-2.5 flex justify-between items-center cursor-pointer hover:bg-gray-50"
+                            onClick={() => {
+                              setUpdateUserInfoType("phone");
+                              setPrivacyContentType("userInfo");
+                            }}
+                          >
+                            <div className="flex items-center">
+                              <Phone className="h-4 w-4 mr-2.5 text-gray-500" />
+                              <span className="text-sm text-gray-700">
+                                Số điện thoại
+                              </span>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-gray-400" />
+                          </div>
+
+                          <div
+                            className="p-2.5 flex justify-between items-center border-t border-gray-100 cursor-pointer hover:bg-gray-50"
+                            onClick={() => {
+                              setUpdateUserInfoType("email");
+                              setPrivacyContentType("userInfo");
+                            }}
+                          >
+                            <div className="flex items-center">
+                              <Mail className="h-4 w-4 mr-2.5 text-gray-500" />
+                              <span className="text-sm text-gray-700">
+                                Email
+                              </span>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-gray-400" />
+                          </div>
+
+                          <div
+                            className="p-2.5 flex justify-between items-center border-t border-gray-100 cursor-pointer hover:bg-gray-50"
+                            onClick={() => {
+                              setUpdateUserInfoType("password");
+                              setPrivacyContentType("userInfo");
+                            }}
+                          >
+                            <div className="flex items-center">
+                              <KeyRound className="h-4 w-4 mr-2.5 text-gray-500" />
+                              <span className="text-sm text-gray-700">
+                                Mật khẩu
+                              </span>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-gray-400" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tin nhắn và cuộc gọi section */}
+                    <div>
+                      <h4 className="text-base font-semibold mb-1.5 text-gray-800">
+                        Tin nhắn và cuộc gọi
+                      </h4>
+                      <div className="bg-white rounded-md border border-gray-100 p-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <span className="text-sm text-gray-700">
+                              Hiện trạng thái &quot;Đã xem&quot;
+                            </span>
+                          </div>
+                          <Switch
+                            checked={showOnlineStatus}
+                            onCheckedChange={setShowOnlineStatus}
+                            className="data-[state=checked]:bg-[#0841a3]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Chặn tin nhắn section */}
+                    <div>
+                      <h4 className="text-base font-semibold mb-1.5 text-gray-800">
+                        Chặn tin nhắn
+                      </h4>
+                      <div className="bg-white rounded-md border border-gray-100 p-2.5">
+                        <div
+                          className="flex justify-between items-center cursor-pointer hover:bg-gray-50"
+                          onClick={() =>
+                            toast.info("Tính năng đang được phát triển")
+                          }
+                        >
+                          <span className="text-sm text-gray-700">
+                            Danh sách chặn
+                          </span>
+                          <ChevronRight className="h-4 w-4 text-gray-400" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Nguồn tìm kiếm section */}
+                    <div>
+                      <h4 className="text-base font-semibold mb-1.5 text-gray-800">
+                        Nguồn tìm kiếm
+                      </h4>
+                      <div className="bg-white rounded-md border border-gray-100 p-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <span className="text-sm text-gray-700">
+                              Cho phép tìm kiếm bằng số điện thoại
+                            </span>
+                          </div>
+                          <Switch
+                            checked={true}
+                            className="data-[state=checked]:bg-[#0841a3]"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
+
+                {/* User Info Update Forms */}
+                {activeTab === "privacy" &&
+                  privacyContentType === "userInfo" && (
+                    <div className="space-y-4">
+                      {updateUserInfoType === "phone" && (
+                        <div className="bg-white rounded-md border border-gray-100 p-4">
+                          <div className="flex items-center mb-4">
+                            <button
+                              onClick={() => {
+                                setUpdateUserInfoType(null);
+                                setPrivacyContentType("main");
+                              }}
+                              className="mr-2 hover:bg-gray-100 p-1 rounded-full"
+                            >
+                              <ChevronLeft className="h-4 w-4 text-[#0841a3]" />
+                            </button>
+                            <h4 className="text-base font-semibold text-gray-800">
+                              Số điện thoại
+                            </h4>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div>
+                              <Label
+                                htmlFor="current-phone"
+                                className="text-sm text-gray-500 mb-1 block"
+                              >
+                                Số điện thoại hiện tại
+                              </Label>
+                              <div className="text-sm font-medium">
+                                {user?.phoneNumber || "Chưa cập nhật"}
+                              </div>
+                            </div>
+
+                            {/* Phone update functionality would go here */}
+                            <div className="pt-2">
+                              <Button
+                                className="w-full bg-[#0841a3] hover:bg-[#0033a0] text-white"
+                                onClick={() => {
+                                  toast.info("Tính năng đang được phát triển");
+                                }}
+                              >
+                                Cập nhật số điện thoại
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {updateUserInfoType === "email" && (
+                        <div className="bg-white rounded-md border border-gray-100 p-4">
+                          <div className="flex items-center mb-4">
+                            <button
+                              onClick={() => {
+                                setUpdateUserInfoType(null);
+                                setPrivacyContentType("main");
+                              }}
+                              className="mr-2 hover:bg-gray-100 p-1 rounded-full"
+                            >
+                              <ChevronLeft className="h-4 w-4 text-[#0841a3]" />
+                            </button>
+                            <h4 className="text-base font-semibold text-gray-800">
+                              Email
+                            </h4>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div>
+                              <Label
+                                htmlFor="current-email"
+                                className="text-sm text-gray-500 mb-1 block"
+                              >
+                                Email hiện tại
+                              </Label>
+                              <div className="text-sm font-medium">
+                                {user?.email || "Chưa cập nhật"}
+                              </div>
+                            </div>
+
+                            {/* Email update functionality would go here */}
+                            <div className="pt-2">
+                              <Button
+                                className="w-full bg-[#0841a3] hover:bg-[#0033a0] text-white"
+                                onClick={() => {
+                                  toast.info("Tính năng đang được phát triển");
+                                }}
+                              >
+                                Cập nhật email
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {updateUserInfoType === "password" && (
+                        <div className="bg-white rounded-md border border-gray-100 p-4">
+                          <div className="flex items-center mb-4">
+                            <button
+                              onClick={() => {
+                                setUpdateUserInfoType(null);
+                                setPrivacyContentType("main");
+                              }}
+                              className="mr-2 hover:bg-gray-100 p-1 rounded-full"
+                            >
+                              <ChevronLeft className="h-4 w-4 text-[#0841a3]" />
+                            </button>
+                            <h4 className="text-base font-semibold text-gray-800">
+                              Mật khẩu
+                            </h4>
+                          </div>
+
+                          <ChangePasswordForm />
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                 {/* Interface Settings */}
                 {activeTab === "interface" && (

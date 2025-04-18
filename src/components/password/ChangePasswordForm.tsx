@@ -20,12 +20,12 @@ export default function ChangePasswordForm() {
 
     // Validate passwords
     if (newPassword !== confirmPassword) {
-      toast.error("New passwords do not match");
+      toast.error("Mật khẩu mới không khớp");
       return;
     }
 
     if (newPassword.length < 8) {
-      toast.error("Password must be at least 8 characters long");
+      toast.error("Mật khẩu phải có ít nhất 8 ký tự");
       return;
     }
 
@@ -35,18 +35,18 @@ export default function ChangePasswordForm() {
       const result = await changePassword(currentPassword, newPassword);
 
       if (result.success) {
-        toast.success(result.message || "Password changed successfully");
+        toast.success(result.message || "Đổi mật khẩu thành công");
         // Reset form
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
       } else {
-        toast.error(result.error || "Failed to change password");
+        toast.error(result.error || "Đổi mật khẩu thất bại");
       }
     } catch (error) {
       console.log(error);
 
-      toast.error("An error occurred while changing password");
+      toast.error("Đã xảy ra lỗi khi đổi mật khẩu");
     } finally {
       setIsLoading(false);
     }
@@ -55,7 +55,9 @@ export default function ChangePasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="currentPassword">Current Password</Label>
+        <Label htmlFor="currentPassword" className="text-sm text-gray-500">
+          Mật khẩu hiện tại
+        </Label>
         <div className="relative">
           <Input
             id="currentPassword"
@@ -76,7 +78,9 @@ export default function ChangePasswordForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="newPassword">New Password</Label>
+        <Label htmlFor="newPassword" className="text-sm text-gray-500">
+          Mật khẩu mới
+        </Label>
         <div className="relative">
           <Input
             id="newPassword"
@@ -97,7 +101,9 @@ export default function ChangePasswordForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="confirmPassword">Confirm New Password</Label>
+        <Label htmlFor="confirmPassword" className="text-sm text-gray-500">
+          Xác nhận mật khẩu mới
+        </Label>
         <div className="relative">
           <Input
             id="confirmPassword"
@@ -117,8 +123,12 @@ export default function ChangePasswordForm() {
         </div>
       </div>
 
-      <Button type="submit" className="w-full" disabled={isLoading}>
-        {isLoading ? "Changing Password..." : "Change Password"}
+      <Button
+        type="submit"
+        className="w-full bg-[#0841a3] hover:bg-[#0033a0] text-white"
+        disabled={isLoading}
+      >
+        {isLoading ? "Đang đổi mật khẩu..." : "Đổi mật khẩu"}
       </Button>
     </form>
   );
