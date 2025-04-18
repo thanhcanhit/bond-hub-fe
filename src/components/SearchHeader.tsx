@@ -24,6 +24,7 @@ import { toast } from "sonner";
 
 import ProfileDialog from "./profile/ProfileDialog";
 import QRCodeDialog from "./QRCodeDialog";
+import CreateGroupDialog from "./group/CreateGroupDialog";
 
 // Extended Message type with search context
 interface MessageWithContext extends Message {
@@ -91,6 +92,8 @@ export default function SearchHeader() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isAddFriendMode, setIsAddFriendMode] = useState<boolean>(false);
   const [showQRCodeDialog, setShowQRCodeDialog] = useState<boolean>(false);
+  const [showCreateGroupDialog, setShowCreateGroupDialog] =
+    useState<boolean>(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const { accessToken, user: currentUser } = useAuthStore();
@@ -551,6 +554,7 @@ export default function SearchHeader() {
               <button
                 className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center"
                 title="Tạo nhóm"
+                onClick={() => setShowCreateGroupDialog(true)}
               >
                 <Users className="h-5 w-5" />
               </button>
@@ -674,6 +678,12 @@ export default function SearchHeader() {
           userId={currentUser.id}
         />
       )}
+
+      {/* Create Group Dialog */}
+      <CreateGroupDialog
+        isOpen={showCreateGroupDialog}
+        onOpenChange={setShowCreateGroupDialog}
+      />
 
       {/* Search Results Dropdown */}
       {isSearchActive && showResults && searchQuery && (
@@ -857,7 +867,7 @@ export default function SearchHeader() {
                           // Gọi openChat trước khi đóng giao diện tìm kiếm
                           // Điều này đảm bảo rằng chúng ta đã bắt đầu quá trình mở chat
                           // trước khi component có thể bị unmount
-                          const success = await openChat(idToOpen);
+                          const success = await openChat(idToOpen, "USER");
 
                           // Sau đó mới đóng giao diện tìm kiếm
                           deactivateSearch();

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Message, User, UserInfo } from "@/types/base";
 import ChatHeader from "./ChatHeader";
+import GroupChatHeader from "./GroupChatHeader";
 import MessageItem from "./MessageItem";
 import MessageInput from "./MessageInput";
 import MessageDetailDialog from "./MessageDetailDialog";
@@ -24,6 +25,8 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
   const {
     messages,
     selectedContact,
+    selectedGroup,
+    currentChatType,
     replyingTo,
     selectedMessage,
     isDialogOpen,
@@ -45,7 +48,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
 
   // Fetch complete user data and mark messages as read when viewing a conversation
   useEffect(() => {
-    if (selectedContact?.id) {
+    if (currentChatType === "USER" && selectedContact?.id) {
       markAsRead(selectedContact.id);
 
       // Fetch complete user data to ensure we have userInfo
@@ -78,7 +81,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
 
       fetchCompleteUserData();
     }
-  }, [selectedContact?.id, markAsRead]);
+  }, [selectedContact?.id, markAsRead, currentChatType]);
 
   // Keep track of previous messages to detect what changed
   const prevMessagesRef = useRef<Message[]>([]);
@@ -108,9 +111,14 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     }
 
     // Update last message in conversations list when messages change
-    if (messages.length > 0 && selectedContact) {
+    if (messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
-      updateLastMessage(selectedContact.id, lastMessage);
+      if (currentChatType === "USER" && selectedContact) {
+        updateLastMessage(selectedContact.id, lastMessage);
+      } else if (currentChatType === "GROUP" && selectedGroup) {
+        // Update last message for group conversation
+        // This would need to be implemented in the conversationsStore
+      }
     }
 
     // Update the previous messages reference
@@ -124,7 +132,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
 
   // Theo dõi trạng thái đang nhập từ conversationsStore
   useEffect(() => {
-    if (!selectedContact) return;
+    if (currentChatType !== "USER" || !selectedContact) return;
 
     // Kiểm tra trạng thái đang nhập ban đầu
     const conversation = conversations.find(
@@ -147,7 +155,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
     return () => {
       unsubscribe();
     };
-  }, [selectedContact, conversations]);
+  }, [selectedContact, conversations, currentChatType]);
 
   const handleReply = (message: Message) => {
     setReplyingTo(message);
@@ -215,7 +223,9 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
         !prevMessage || prevMessage.senderId !== message.senderId;
 
       // Ensure we have userInfo for the sender
-      const userInfo = message.sender?.userInfo || selectedContact?.userInfo;
+      const userInfo =
+        message.sender?.userInfo ||
+        (currentChatType === "USER" ? selectedContact?.userInfo : null);
 
       return { message, isCurrentUser, showAvatar, userInfo };
     });
@@ -298,13 +308,17 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <ChatHeader contact={selectedContact} onToggleInfo={onToggleInfo} />
+      {currentChatType === "USER" ? (
+        <ChatHeader contact={selectedContact} onToggleInfo={onToggleInfo} />
+      ) : (
+        <GroupChatHeader group={selectedGroup} onToggleInfo={onToggleInfo} />
+      )}
 
       <ChatMessagesDropZone
         onFileDrop={(files) => handleSendMessage("", files)}
       >
         <div className="overflow-y-auto overflow-x-hidden bg-gray-50 p-4 custom-scrollbar h-full">
-          {selectedContact ? (
+          {selectedContact || selectedGroup ? (
             isLoading ? (
               <div className="h-full flex items-center justify-center">
                 <div className="flex flex-col items-center">
@@ -318,11 +332,11 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
           ) : (
             <div className="h-full flex items-center justify-center">
               <p className="text-gray-500">
-                Chọn một liên hệ để bắt đầu trò chuyện
+                Chọn một liên hệ hoặc nhóm để bắt đầu trò chuyện
               </p>
             </div>
           )}
-          {selectedContact && isTyping && (
+          {currentChatType === "USER" && selectedContact && isTyping && (
             <TypingIndicator contact={selectedContact} isTyping={isTyping} />
           )}
           <div ref={messagesEndRef} />
@@ -331,7 +345,7 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
 
       <MessageInput
         onSendMessage={handleSendMessage}
-        disabled={!selectedContact || isSearching}
+        disabled={(!selectedContact && !selectedGroup) || isSearching}
         replyingTo={replyingTo}
         onCancelReply={handleCancelReply}
       />
@@ -342,7 +356,8 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
         isOpen={isDialogOpen}
         onClose={() => setIsDialogOpen(false)}
         userInfo={
-          selectedMessage?.sender?.userInfo || selectedContact?.userInfo
+          selectedMessage?.sender?.userInfo ||
+          (currentChatType === "USER" ? selectedContact?.userInfo : null)
         }
       />
     </div>

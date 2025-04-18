@@ -9,6 +9,7 @@ import MediaGrid from "./MediaGrid";
 import ForwardMessageDialog from "./ForwardMessageDialog";
 import ReactionPicker from "./ReactionPicker";
 import ReactionSummary from "./ReactionSummary";
+import { getUserDisplayName } from "@/utils/userUtils";
 
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/authStore";
@@ -484,6 +485,15 @@ export default function MessageItem({
                 <span className="font-medium">Trả lời</span>
               </div>
               <p className="truncate">Tin nhắn gốc đã bị xóa hoặc thu hồi</p>
+            </div>
+          )}
+
+          {/* Sender name for group messages */}
+          {!isCurrentUser && message.groupId && !message.recalled && (
+            <div className="text-xs text-gray-600 mb-1 ml-1">
+              {message.sender?.userInfo?.fullName ||
+                getUserDisplayName(message.sender) ||
+                "Unknown"}
             </div>
           )}
 

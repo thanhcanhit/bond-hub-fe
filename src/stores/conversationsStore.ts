@@ -450,7 +450,13 @@ export const useConversationsStore = create<ConversationsState>()(
       addConversation: (conversation) => {
         // Check if conversation already exists
         const exists = get().conversations.some(
-          (conv) => conv.contact.id === conversation.contact.id,
+          (conv) =>
+            (conv.type === "USER" &&
+              conversation.type === "USER" &&
+              conv.contact.id === conversation.contact.id) ||
+            (conv.type === "GROUP" &&
+              conversation.type === "GROUP" &&
+              conv.group?.id === conversation.group?.id),
         );
 
         if (!exists) {
@@ -466,7 +472,9 @@ export const useConversationsStore = create<ConversationsState>()(
       removeConversation: (contactId) => {
         set((state) => ({
           conversations: state.conversations.filter(
-            (conv) => conv.contact.id !== contactId,
+            (conv) =>
+              conv.contact.id !== contactId &&
+              (conv.type !== "GROUP" || conv.group?.id !== contactId),
           ),
         }));
       },
@@ -567,16 +575,25 @@ export const useConversationsStore = create<ConversationsState>()(
         if (!searchQuery.trim()) return conversations;
 
         return conversations.filter((conv) => {
-          const fullName = conv.contact.userInfo?.fullName?.toLowerCase() || "";
-          const email = conv.contact.email?.toLowerCase() || "";
-          const phone = conv.contact.phoneNumber?.toLowerCase() || "";
           const query = searchQuery.toLowerCase();
 
-          return (
-            fullName.includes(query) ||
-            email.includes(query) ||
-            phone.includes(query)
-          );
+          if (conv.type === "GROUP" && conv.group) {
+            // Tìm kiếm trong tên nhóm
+            const groupName = conv.group.name?.toLowerCase() || "";
+            return groupName.includes(query);
+          } else {
+            // Tìm kiếm trong thông tin liên hệ
+            const fullName =
+              conv.contact.userInfo?.fullName?.toLowerCase() || "";
+            const email = conv.contact.email?.toLowerCase() || "";
+            const phone = conv.contact.phoneNumber?.toLowerCase() || "";
+
+            return (
+              fullName.includes(query) ||
+              email.includes(query) ||
+              phone.includes(query)
+            );
+          }
         });
       },
 

@@ -10,11 +10,18 @@ import { useChatStore } from "@/stores/chatStore";
 import SearchHeader from "../SearchHeader";
 
 interface ContactListProps {
-  onSelectContact: (contactId: string | null) => void;
+  onSelectConversation: (
+    conversationId: string | null,
+    type: "USER" | "GROUP",
+  ) => void;
 }
 
-export default function ContactList({ onSelectContact }: ContactListProps) {
+export default function ContactList({
+  onSelectConversation,
+}: ContactListProps) {
   const selectedContact = useChatStore((state) => state.selectedContact);
+  const selectedGroup = useChatStore((state) => state.selectedGroup);
+  const currentChatType = useChatStore((state) => state.currentChatType);
   const {
     isLoading,
     // searchQuery, setSearchQuery,
@@ -23,6 +30,19 @@ export default function ContactList({ onSelectContact }: ContactListProps) {
 
   // Get filtered conversations based on search query
   const filteredConversations = getFilteredConversations();
+
+  // Log conversations for debugging
+  console.log(
+    "Filtered conversations:",
+    filteredConversations.map((conv) => ({
+      id: conv.type === "GROUP" ? conv.group?.id : conv.contact.id,
+      name:
+        conv.type === "GROUP"
+          ? conv.group?.name
+          : conv.contact.userInfo?.fullName,
+      type: conv.type,
+    })),
+  );
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -47,33 +67,67 @@ export default function ContactList({ onSelectContact }: ContactListProps) {
         ) : filteredConversations.length > 0 ? (
           filteredConversations.map((conversation) => (
             <div
-              key={conversation.contact.id}
+              key={
+                conversation.type === "GROUP"
+                  ? `group-${conversation.group?.id}`
+                  : conversation.contact.id
+              }
               className={`flex items-center gap-3 p-3 hover:bg-gray-100 cursor-pointer ${
-                selectedContact?.id === conversation.contact.id
+                (currentChatType === "USER" &&
+                  selectedContact?.id === conversation.contact.id) ||
+                (currentChatType === "GROUP" &&
+                  selectedGroup?.id === conversation.group?.id)
                   ? "bg-blue-50"
                   : ""
               }`}
-              onClick={() => onSelectContact(conversation.contact.id)}
+              onClick={() =>
+                conversation.type === "GROUP"
+                  ? onSelectConversation(
+                      conversation.group?.id || null,
+                      "GROUP",
+                    )
+                  : onSelectConversation(conversation.contact.id, "USER")
+              }
             >
               <div className="relative">
                 <Avatar className="h-12 w-12 border">
-                  <AvatarImage
-                    src={conversation.contact.userInfo?.profilePictureUrl || ""}
-                    className="object-cover"
-                  />
-                  <AvatarFallback>
-                    {getUserInitials(conversation.contact)}
-                  </AvatarFallback>
+                  {conversation.type === "GROUP" ? (
+                    <>
+                      <AvatarImage
+                        src={conversation.group?.avatarUrl || ""}
+                        className="object-cover"
+                      />
+                      <AvatarFallback>
+                        {conversation.group?.name?.slice(0, 2).toUpperCase() ||
+                          "GR"}
+                      </AvatarFallback>
+                    </>
+                  ) : (
+                    <>
+                      <AvatarImage
+                        src={
+                          conversation.contact.userInfo?.profilePictureUrl || ""
+                        }
+                        className="object-cover"
+                      />
+                      <AvatarFallback>
+                        {getUserInitials(conversation.contact)}
+                      </AvatarFallback>
+                    </>
+                  )}
                 </Avatar>
-                {/* Online status indicator */}
-                {conversation.contact.online && (
-                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white"></span>
-                )}
+                {/* Online status indicator - only for user conversations */}
+                {conversation.type === "USER" &&
+                  conversation.contact.online && (
+                    <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white"></span>
+                  )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-center">
                   <p className="font-medium truncate">
-                    {getUserDisplayName(conversation.contact)}
+                    {conversation.type === "GROUP"
+                      ? conversation.group?.name || "Nhóm chat"
+                      : getUserDisplayName(conversation.contact)}
                   </p>
                   {conversation.lastMessage && (
                     <span className="text-xs text-gray-500 whitespace-nowrap ml-1">
@@ -104,10 +158,13 @@ export default function ContactList({ onSelectContact }: ContactListProps) {
                           ? "[Hình ảnh/Tệp đính kèm]"
                           : "")}
                   </p>
-                ) : conversation.contact.userInfo?.statusMessage ? (
+                ) : conversation.type === "USER" &&
+                  conversation.contact.userInfo?.statusMessage ? (
                   <p className="text-sm text-gray-500 truncate">
                     {conversation.contact.userInfo.statusMessage}
                   </p>
+                ) : conversation.type === "GROUP" ? (
+                  <p className="text-sm text-gray-500 truncate">Nhóm chat</p>
                 ) : null}
               </div>
             </div>

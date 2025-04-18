@@ -34,6 +34,7 @@ import {
   markMessageAsUnread,
 } from "@/actions/message.action";
 import { getUserDataById } from "@/actions/user.action";
+import { getGroupById } from "@/actions/group.action";
 import { useConversationsStore } from "./conversationsStore";
 import { useAuthStore } from "./authStore";
 
@@ -129,7 +130,7 @@ interface ChatState {
   setShouldFetchMessages: (shouldFetch: boolean) => void;
   clearChatCache: (type: "USER" | "GROUP", id: string) => void;
   clearAllCache: () => void;
-  openChat: (contactId: string) => Promise<boolean>;
+  openChat: (id: string, type: "USER" | "GROUP") => Promise<boolean>;
 
   // Reaction picker control
   setActiveReactionPickerMessageId: (messageId: string | null) => void;
@@ -1412,74 +1413,164 @@ export const useChatStore = create<ChatState>((set, get) => ({
     socket.emit(event, data);
   },
 
-  openChat: async (userId: string) => {
+  openChat: async (id: string, type: "USER" | "GROUP") => {
     try {
-      console.log(`[chatStore] Opening chat with user ID: ${userId}`);
+      console.log(`[chatStore] Opening chat with ${type} ID: ${id}`);
 
-      // Fetch user data
-      const result = await getUserDataById(userId);
+      // Reset any existing state to ensure clean start
+      set({
+        searchText: "",
+        searchResults: [],
+        isSearching: false,
+        replyingTo: null,
+        selectedMessage: null,
+        isDialogOpen: false,
+        isForwarding: false,
+      });
 
-      if (result.success && result.user) {
-        // Ensure userInfo exists
-        const user = result.user;
-        if (!user.userInfo) {
-          user.userInfo = {
-            id: user.id,
-            fullName: user.email || user.phoneNumber || "Unknown",
-            profilePictureUrl: null,
-            statusMessage: "No status",
-            blockStrangers: false,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            userAuth: user,
-          };
-        }
+      if (type === "USER") {
+        // Fetch user data
+        const result = await getUserDataById(id);
 
-        console.log(`[chatStore] User data fetched successfully for ${userId}`);
+        if (result.success && result.user) {
+          // Ensure userInfo exists
+          const user = result.user;
+          if (!user.userInfo) {
+            user.userInfo = {
+              id: user.id,
+              fullName: user.email || user.phoneNumber || "Unknown",
+              profilePictureUrl: null,
+              statusMessage: "No status",
+              blockStrangers: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              userAuth: user,
+            };
+          }
 
-        // Reset any existing state to ensure clean start
-        set({
-          searchText: "",
-          searchResults: [],
-          isSearching: false,
-          replyingTo: null,
-          selectedMessage: null,
-          isDialogOpen: false,
-          isForwarding: false,
-        });
+          console.log(`[chatStore] User data fetched successfully for ${id}`);
 
-        // Set the selected contact
-        get().setSelectedContact(user as User & { userInfo: UserInfo });
+          // Set the selected contact
+          get().setSelectedContact(user as User & { userInfo: UserInfo });
 
-        // Get the conversations store
-        const conversationsStore = useConversationsStore.getState();
+          // Get the conversations store
+          const conversationsStore = useConversationsStore.getState();
 
-        // Check if conversation exists
-        const existingConversation = conversationsStore.conversations.find(
-          (conv) => conv.contact.id === userId,
-        );
-
-        // If conversation doesn't exist, create it
-        if (!existingConversation) {
-          console.log(
-            `[chatStore] Creating new conversation for user ${userId}`,
+          // Check if conversation exists
+          const existingConversation = conversationsStore.conversations.find(
+            (conv) => conv.type === "USER" && conv.contact.id === id,
           );
-          conversationsStore.addConversation({
-            contact: user as User & { userInfo: UserInfo },
-            lastMessage: undefined,
-            unreadCount: 0,
-            lastActivity: new Date(),
-            type: "USER",
-          });
-        } else {
-          console.log(
-            `[chatStore] Using existing conversation for user ${userId}`,
-          );
-        }
 
-        return true;
+          // If conversation doesn't exist, create it
+          if (!existingConversation) {
+            console.log(`[chatStore] Creating new conversation for user ${id}`);
+            conversationsStore.addConversation({
+              contact: user as User & { userInfo: UserInfo },
+              lastMessage: undefined,
+              unreadCount: 0,
+              lastActivity: new Date(),
+              type: "USER",
+            });
+          } else {
+            console.log(
+              `[chatStore] Using existing conversation for user ${id}`,
+            );
+          }
+
+          return true;
+        }
+        console.log(`[chatStore] Failed to fetch user data for ${id}`);
+        return false;
+      } else if (type === "GROUP") {
+        // Fetch group data
+        const result = await getGroupById(id);
+
+        if (result.success && result.group) {
+          const group = result.group;
+          console.log(`[chatStore] Group data fetched successfully for ${id}`);
+
+          // Set the selected group
+          get().setSelectedGroup(group);
+
+          // Get the conversations store
+          const conversationsStore = useConversationsStore.getState();
+          const currentUser = useAuthStore.getState().user;
+
+          // Check if group conversation exists
+          const existingConversation = conversationsStore.conversations.find(
+            (conv) => conv.type === "GROUP" && conv.group?.id === id,
+          );
+
+          // If group conversation doesn't exist, create it
+          if (!existingConversation && currentUser) {
+            console.log(
+              `[chatStore] Creating new conversation for group ${id}`,
+            );
+
+            // Tạo placeholder contact vì Conversation type yêu cầu
+            const placeholderContact: User & { userInfo: UserInfo } = {
+              id: currentUser.id,
+              email: currentUser.email || "",
+              phoneNumber: currentUser.phoneNumber || "",
+              passwordHash: currentUser.passwordHash,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              userInfo: currentUser.userInfo || {
+                id: currentUser.id,
+                fullName: "Group Member",
+                profilePictureUrl: null,
+                statusMessage: "",
+                blockStrangers: false,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                userAuth: currentUser,
+              },
+              refreshTokens: [],
+              qrCodes: [],
+              posts: [],
+              stories: [],
+              groupMembers: [],
+              cloudFiles: [],
+              pinnedItems: [],
+              sentFriends: [],
+              receivedFriends: [],
+              contacts: [],
+              contactOf: [],
+              settings: [],
+              postReactions: [],
+              hiddenPosts: [],
+              addedBy: [],
+              notifications: [],
+              sentMessages: [],
+              receivedMessages: [],
+              comments: [],
+            };
+
+            conversationsStore.addConversation({
+              contact: placeholderContact,
+              group: {
+                id: group.id,
+                name: group.name,
+                avatarUrl: group.avatarUrl,
+                createdAt: group.createdAt,
+              },
+              lastMessage: undefined,
+              unreadCount: 0,
+              lastActivity: new Date(),
+              type: "GROUP",
+            });
+          } else {
+            console.log(
+              `[chatStore] Using existing conversation for group ${id}`,
+            );
+          }
+
+          return true;
+        }
+        console.log(`[chatStore] Failed to fetch group data for ${id}`);
+        return false;
       }
-      console.log(`[chatStore] Failed to fetch user data for ${userId}`);
+
       return false;
     } catch (error) {
       console.error("Error opening chat:", error);
