@@ -78,6 +78,51 @@ axiosInstance.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
+// Flag to prevent multiple refresh token requests
+let isRefreshing = false;
+// Queue of requests to retry after token refresh
+let refreshSubscribers: Array<(token: string) => void> = [];
+
+// Function to add callbacks to the queue
+const subscribeTokenRefresh = (callback: (token: string) => void) => {
+  refreshSubscribers.push(callback);
+};
+
+// Function to notify all subscribers with the new token
+const onTokenRefreshed = (token: string) => {
+  refreshSubscribers.forEach((callback) => callback(token));
+  refreshSubscribers = [];
+};
+
+// Function to handle token refresh
+const refreshAuthToken = async () => {
+  const refreshToken = useAuthStore.getState().refreshToken;
+  const deviceId = useAuthStore.getState().deviceId;
+
+  if (!refreshToken || !deviceId) {
+    throw new Error("No refresh token or device ID available");
+  }
+
+  // Create a new axios instance without interceptors to avoid infinite loops
+  const refreshAxios = axios.create({
+    baseURL: NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000",
+    headers: { "Content-Type": "application/json" },
+    timeout: 15000,
+  });
+
+  const response = await refreshAxios.post("/auth/refresh", {
+    refreshToken,
+    deviceId,
+  });
+
+  const { accessToken } = response.data;
+  // Keep the same refreshToken since backend doesn't return a new one
+  useAuthStore.getState().setTokens(accessToken, refreshToken);
+  console.log("Token refreshed successfully:", accessToken);
+
+  return accessToken;
+};
+
 axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -95,36 +140,57 @@ axiosInstance.interceptors.response.use(
     }
 
     const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      const refreshToken = useAuthStore.getState().refreshToken;
-      const deviceId = useAuthStore.getState().deviceId;
 
-      if (!refreshToken || !deviceId) {
-        useAuthStore.getState().logout();
-        return Promise.reject(error);
+    // Only handle 401 errors for requests that haven't been retried yet
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      // Mark this request as retried to prevent infinite loops
+      originalRequest._retry = true;
+
+      // If we're already refreshing, add this request to the queue
+      if (isRefreshing) {
+        console.log(
+          "Token refresh already in progress, adding request to queue",
+        );
+        return new Promise((resolve) => {
+          subscribeTokenRefresh((token) => {
+            originalRequest.headers["Authorization"] = `Bearer ${token}`;
+            resolve(axiosInstance(originalRequest));
+          });
+        });
       }
 
+      // Start refreshing token
+      isRefreshing = true;
+
       try {
-        const response = await axiosInstance.post("/auth/refresh", {
-          refreshToken,
-          deviceId,
-        });
+        const newToken = await refreshAuthToken();
 
-        const { accessToken } = response.data;
-        // Keep the same refreshToken since backend doesn't return a new one
-        useAuthStore.getState().setTokens(accessToken, refreshToken);
+        // Notify all subscribers that the token has been refreshed
+        onTokenRefreshed(newToken);
 
-        console.log("Refreshed token triggred complete:", accessToken);
-        // Update the Authorization header for the original request
-        originalRequest.headers["Authorization"] = `Bearer ${accessToken}`;
+        // Update the original request with the new token
+        originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
+
+        // Reset refreshing flag
+        isRefreshing = false;
+
+        // Retry the original request
         return axiosInstance(originalRequest);
       } catch (refreshError) {
-        // If refresh token fails, log the user out
+        // Reset refreshing flag
+        isRefreshing = false;
+
+        // Clear the queue
+        refreshSubscribers = [];
+
+        // Log the user out
+        console.error("Token refresh failed:", refreshError);
         useAuthStore.getState().logout();
+
         return Promise.reject(refreshError);
       }
     }
+
     return Promise.reject(error);
   },
 );
