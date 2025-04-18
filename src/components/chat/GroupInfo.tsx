@@ -27,6 +27,7 @@ import {
   Shield,
   Ban,
 } from "lucide-react";
+import MediaGalleryView from "./MediaGalleryView";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ProfileDialog from "@/components/profile/ProfileDialog";
@@ -72,8 +73,13 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
     (User & { userInfo: UserInfo }) | null
   >(null);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
-  const [mediaFiles, setMediaFiles] = useState<Media[]>([]);
-  const [documents, setDocuments] = useState<Media[]>([]);
+  const [mediaFiles, setMediaFiles] = useState<(Media & { createdAt: Date })[]>(
+    [],
+  );
+  const [documents, setDocuments] = useState<(Media & { createdAt: Date })[]>(
+    [],
+  );
+  const [showMediaGallery, setShowMediaGallery] = useState(false);
   const [links, setLinks] = useState<
     { url: string; title: string; timestamp: Date }[]
   >([]);
@@ -145,8 +151,8 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
 
       // Lọc media từ tin nhắn hiện có
       const extractMediaFromMessages = () => {
-        const imageAndVideoFiles: Media[] = [];
-        const documentFiles: Media[] = [];
+        const imageAndVideoFiles: (Media & { createdAt: Date })[] = [];
+        const documentFiles: (Media & { createdAt: Date })[] = [];
         const extractedLinks: {
           url: string;
           title: string;
@@ -171,9 +177,15 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                   "mov",
                 ].includes(extension)
               ) {
-                imageAndVideoFiles.push(media);
+                imageAndVideoFiles.push({
+                  ...media,
+                  createdAt: new Date(message.createdAt),
+                });
               } else {
-                documentFiles.push(media);
+                documentFiles.push({
+                  ...media,
+                  createdAt: new Date(message.createdAt),
+                });
               }
             });
           }
@@ -193,6 +205,17 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
             }
           }
         });
+
+        // Sắp xếp media từ mới đến cũ
+        imageAndVideoFiles.sort(
+          (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+        );
+        documentFiles.sort(
+          (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+        );
+        extractedLinks.sort(
+          (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+        );
 
         setMediaFiles(imageAndVideoFiles.slice(0, 20)); // Giới hạn 20 file
         setDocuments(documentFiles.slice(0, 10)); // Giới hạn 10 file
@@ -241,6 +264,15 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
       );
     }
   };
+
+  if (showMediaGallery) {
+    return (
+      <MediaGalleryView
+        mediaFiles={mediaFiles}
+        onClose={() => setShowMediaGallery(false)}
+      />
+    );
+  }
 
   if (showMembersList) {
     return (
@@ -516,6 +548,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                         variant="ghost"
                         size="sm"
                         className="text-blue-500"
+                        onClick={() => setShowMediaGallery(true)}
                       >
                         Xem tất cả
                       </Button>
