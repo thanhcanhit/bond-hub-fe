@@ -21,6 +21,8 @@ import {
   Video,
   File,
   ChevronDown,
+  ArrowLeft,
+  MoreHorizontal,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -49,8 +51,56 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
     { url: string; title: string; timestamp: Date }[]
   >([]);
   const [isLoadingMedia, setIsLoadingMedia] = useState(true);
+  const [showMembersList, setShowMembersList] = useState(false);
+  const [memberDetails, setMemberDetails] = useState<
+    Map<string, User & { userInfo: UserInfo }>
+  >(new Map());
 
   const messages = useChatStore((state) => state.messages);
+
+  // Lấy thông tin chi tiết của các thành viên
+  useEffect(() => {
+    if (group?.id && group.members) {
+      const fetchMemberDetails = async () => {
+        const newMemberDetails = new Map<
+          string,
+          User & { userInfo: UserInfo }
+        >();
+
+        // Lấy thông tin chi tiết của từng thành viên
+        for (const member of group.members) {
+          try {
+            // Kiểm tra xem đã có thông tin chi tiết chưa
+            if (member.user?.userInfo) {
+              newMemberDetails.set(
+                member.userId,
+                member.user as User & { userInfo: UserInfo },
+              );
+              continue;
+            }
+
+            // Nếu chưa có, gọi API để lấy
+            const result = await getUserDataById(member.userId);
+            if (result.success && result.user) {
+              newMemberDetails.set(
+                member.userId,
+                result.user as User & { userInfo: UserInfo },
+              );
+            }
+          } catch (error) {
+            console.error(
+              `Error fetching details for member ${member.userId}:`,
+              error,
+            );
+          }
+        }
+
+        setMemberDetails(newMemberDetails);
+      };
+
+      fetchMemberDetails();
+    }
+  }, [group?.id, group?.members]);
 
   // Lấy media từ tin nhắn
   useEffect(() => {
@@ -123,7 +173,18 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   }
 
   const handleMemberClick = async (memberId: string) => {
+    // Nếu member.user đã có đầy đủ thông tin, sử dụng luôn mà không cần gọi API
+    const memberWithData = group?.members?.find(
+      (m) => m.userId === memberId && m.user?.userInfo,
+    );
+    if (memberWithData?.user) {
+      setSelectedMember(memberWithData.user as User & { userInfo: UserInfo });
+      setShowProfileDialog(true);
+      return;
+    }
+
     try {
+      // Nếu không có sẵn thông tin, gọi API để lấy
       const result = await getUserDataById(memberId);
       if (result.success && result.user) {
         setSelectedMember(result.user as User & { userInfo: UserInfo });
@@ -131,8 +192,94 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
       }
     } catch (error) {
       console.error("Error fetching member data:", error);
+      // Không hiển thị dialog nếu không thể lấy thông tin chi tiết
+      console.log(
+        "Không thể lấy thông tin thành viên, bỏ qua việc mở ProfileDialog",
+      );
     }
   };
+
+  if (showMembersList) {
+    return (
+      <div className="h-full flex flex-col bg-white border-l">
+        <div className="p-4 flex items-center justify-between border-b">
+          <div className="flex items-center">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="mr-2"
+              onClick={() => setShowMembersList(false)}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h2 className="font-semibold">Thành viên</h2>
+          </div>
+        </div>
+
+        <div className="p-4 border-b">
+          <Button className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-black">
+            <UserPlus className="h-4 w-4" />
+            <span>Thêm thành viên</span>
+          </Button>
+        </div>
+
+        <div className="p-4 flex justify-between items-center">
+          <span className="text-sm">
+            Danh sách thành viên ({group.members?.length || 0})
+          </span>
+          <Button variant="ghost" size="icon">
+            <MoreHorizontal className="h-5 w-5" />
+          </Button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {group.members?.map((member) => {
+            const memberData = memberDetails.get(member.userId);
+            const initials = memberData?.userInfo?.fullName
+              ? memberData.userInfo.fullName.slice(0, 2).toUpperCase()
+              : "??";
+
+            return (
+              <div
+                key={member.userId}
+                className="flex items-center p-4 hover:bg-gray-100 cursor-pointer justify-between"
+                onClick={() => handleMemberClick(member.userId)}
+              >
+                <div className="flex items-center">
+                  <Avatar className="h-10 w-10 mr-3">
+                    <AvatarImage
+                      src={memberData?.userInfo?.profilePictureUrl || undefined}
+                      className="object-cover"
+                    />
+                    <AvatarFallback className="bg-gray-200 text-gray-600">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium">
+                      {memberData?.userInfo?.fullName || "Thành viên"}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {member.role === "LEADER"
+                        ? "Trưởng nhóm"
+                        : member.role === "CO_LEADER"
+                          ? "Phó nhóm"
+                          : ""}
+                    </p>
+                  </div>
+                </div>
+                {member.role !== "LEADER" && (
+                  <Button variant="ghost" size="icon">
+                    <MoreHorizontal className="h-5 w-5" />
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-white border-l">
@@ -219,55 +366,18 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
             <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50">
               <div className="flex items-center">
                 <Users className="h-5 w-5 mr-2 text-gray-500" />
-                <span className="font-medium">
-                  {group.members?.length || 0} thành viên
-                </span>
+                <span className="font-medium">Thành viên nhóm</span>
               </div>
               <ChevronDown className="h-5 w-5 text-gray-500" />
             </CollapsibleTrigger>
             <CollapsibleContent>
               <Separator />
-              <div className="max-h-[200px] overflow-y-auto">
-                {group.members?.slice(0, 5).map((member: GroupMember) => (
-                  <div
-                    key={member.id}
-                    className="flex items-center p-3 hover:bg-gray-50 cursor-pointer"
-                    onClick={() => handleMemberClick(member.userId)}
-                  >
-                    <Avatar className="h-10 w-10 mr-3">
-                      <AvatarImage
-                        src={
-                          member.user?.userInfo?.profilePictureUrl || undefined
-                        }
-                        className="object-cover"
-                      />
-                      <AvatarFallback>
-                        {member.user?.userInfo?.fullName
-                          ?.slice(0, 2)
-                          .toUpperCase() || "??"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">
-                        {member.user?.userInfo?.fullName || "Thành viên"}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {member.role === "LEADER"
-                          ? "Trưởng nhóm"
-                          : member.role === "CO_LEADER"
-                            ? "Phó nhóm"
-                            : "Thành viên"}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                {group.members && group.members.length > 5 && (
-                  <div className="p-3 text-center">
-                    <Button variant="ghost" size="sm" className="text-blue-500">
-                      Xem tất cả thành viên
-                    </Button>
-                  </div>
-                )}
+              <div
+                className="p-3 flex items-center hover:bg-gray-50 cursor-pointer"
+                onClick={() => setShowMembersList(true)}
+              >
+                <Users className="h-5 w-5 mr-2 text-gray-500" />
+                <span>{group.members?.length || 0} thành viên</span>
               </div>
             </CollapsibleContent>
           </Collapsible>
