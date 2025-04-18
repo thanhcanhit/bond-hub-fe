@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Group, GroupMember, User, UserInfo, Media } from "@/types/base";
+import { Group, User, UserInfo, Media } from "@/types/base";
 import {
   X,
   Users,
@@ -34,6 +34,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useChatStore } from "@/stores/chatStore";
+import { useAuthStore } from "@/stores/authStore";
 
 interface GroupInfoProps {
   group: Group | null;
@@ -52,40 +53,38 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   >([]);
   const [isLoadingMedia, setIsLoadingMedia] = useState(true);
   const [showMembersList, setShowMembersList] = useState(false);
-  const [memberDetails, setMemberDetails] = useState<
-    Map<string, User & { userInfo: UserInfo }>
-  >(new Map());
+  const [memberDetails, setMemberDetails] = useState<{
+    [key: string]: User & { userInfo: UserInfo };
+  }>({});
 
   const messages = useChatStore((state) => state.messages);
+  const currentUser = useAuthStore((state) => state.user);
 
   // Lấy thông tin chi tiết của các thành viên
   useEffect(() => {
     if (group?.id && group.members) {
       const fetchMemberDetails = async () => {
-        const newMemberDetails = new Map<
-          string,
-          User & { userInfo: UserInfo }
-        >();
+        const newMemberDetails: {
+          [key: string]: User & { userInfo: UserInfo };
+        } = {};
 
         // Lấy thông tin chi tiết của từng thành viên
         for (const member of group.members) {
           try {
             // Kiểm tra xem đã có thông tin chi tiết chưa
             if (member.user?.userInfo) {
-              newMemberDetails.set(
-                member.userId,
-                member.user as User & { userInfo: UserInfo },
-              );
+              newMemberDetails[member.userId] = member.user as User & {
+                userInfo: UserInfo;
+              };
               continue;
             }
 
             // Nếu chưa có, gọi API để lấy
             const result = await getUserDataById(member.userId);
             if (result.success && result.user) {
-              newMemberDetails.set(
-                member.userId,
-                result.user as User & { userInfo: UserInfo },
-              );
+              newMemberDetails[member.userId] = result.user as User & {
+                userInfo: UserInfo;
+              };
             }
           } catch (error) {
             console.error(
@@ -173,6 +172,13 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   }
 
   const handleMemberClick = async (memberId: string) => {
+    // Kiểm tra xem đã có thông tin thành viên trong memberDetails chưa
+    if (memberDetails[memberId]) {
+      setSelectedMember(memberDetails[memberId]);
+      setShowProfileDialog(true);
+      return;
+    }
+
     // Nếu member.user đã có đầy đủ thông tin, sử dụng luôn mà không cần gọi API
     const memberWithData = group?.members?.find(
       (m) => m.userId === memberId && m.user?.userInfo,
@@ -234,7 +240,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
 
         <div className="flex-1 overflow-y-auto">
           {group.members?.map((member) => {
-            const memberData = memberDetails.get(member.userId);
+            const memberData = memberDetails[member.userId];
             const initials = memberData?.userInfo?.fullName
               ? memberData.userInfo.fullName.slice(0, 2).toUpperCase()
               : "??";
@@ -277,6 +283,15 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
             );
           })}
         </div>
+
+        {showProfileDialog && selectedMember && (
+          <ProfileDialog
+            user={selectedMember}
+            isOpen={showProfileDialog}
+            onOpenChange={setShowProfileDialog}
+            isOwnProfile={selectedMember.id === currentUser?.id}
+          />
+        )}
       </div>
     );
   }
@@ -594,7 +609,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
           user={selectedMember}
           isOpen={showProfileDialog}
           onOpenChange={setShowProfileDialog}
-          isOwnProfile={false}
+          isOwnProfile={selectedMember.id === currentUser?.id}
         />
       )}
     </div>
