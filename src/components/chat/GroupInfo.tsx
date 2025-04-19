@@ -105,6 +105,9 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   const [selectedMember, setSelectedMember] = useState<User | null>(null);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
   const [showFriendRequestForm, setShowFriendRequestForm] = useState(false);
+  const [openDropdownMemberId, setOpenDropdownMemberId] = useState<
+    string | null
+  >(null);
 
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
@@ -381,6 +384,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
       setSelectedMember(memberData);
       setShowFriendRequestForm(true);
       setShowProfileDialog(true);
+      setOpenDropdownMemberId(null); // Close dropdown after action
     }
   };
 
@@ -485,17 +489,29 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                       </Button>
                     )}
 
-                  {/* Hiển thị menu tùy chọn cho thành viên */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-5 w-5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {/* Add friend option if not already friends */}
-                      {member.userId !== currentUser?.id &&
-                        relationships[member.userId] === "NONE" && (
+                  {/* Hiển thị menu tùy chọn cho thành viên (không hiển thị cho chính mình) */}
+                  {member.userId !== currentUser?.id && (
+                    <DropdownMenu
+                      open={openDropdownMemberId === member.userId}
+                      onOpenChange={(open) => {
+                        if (open) {
+                          setOpenDropdownMemberId(member.userId);
+                        } else if (openDropdownMemberId === member.userId) {
+                          setOpenDropdownMemberId(null);
+                        }
+                      }}
+                    >
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-5 w-5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        onEscapeKeyDown={() => setOpenDropdownMemberId(null)}
+                      >
+                        {/* Add friend option if not already friends */}
+                        {relationships[member.userId] === "NONE" && (
                           <DropdownMenuItem
                             onClick={() =>
                               handleSendFriendRequest(member.userId)
@@ -516,45 +532,46 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                           </DropdownMenuItem>
                         )}
 
-                      {/* Leader/Co-leader management options */}
-                      {(currentUserRole === "LEADER" ||
-                        (currentUserRole === "CO_LEADER" &&
-                          member.role === "MEMBER")) && (
-                        <>
-                          {currentUserRole === "LEADER" &&
-                            member.role === "MEMBER" && (
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  handlePromoteMember(member.userId)
-                                }
-                              >
-                                <Shield className="h-4 w-4 mr-2" />
-                                Thăng phó nhóm
-                              </DropdownMenuItem>
-                            )}
-                          {currentUserRole === "LEADER" &&
-                            member.role === "CO_LEADER" && (
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  handleDemoteMember(member.userId)
-                                }
-                              >
-                                <UserMinus className="h-4 w-4 mr-2" />
-                                Hạ xuống thành viên
-                              </DropdownMenuItem>
-                            )}
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => handleKickMember(member.userId)}
-                            className="text-red-500 focus:text-red-500"
-                          >
-                            <Ban className="h-4 w-4 mr-2" />
-                            Xóa khỏi nhóm
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        {/* Leader/Co-leader management options */}
+                        {(currentUserRole === "LEADER" ||
+                          (currentUserRole === "CO_LEADER" &&
+                            member.role === "MEMBER")) && (
+                          <>
+                            {currentUserRole === "LEADER" &&
+                              member.role === "MEMBER" && (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    handlePromoteMember(member.userId)
+                                  }
+                                >
+                                  <Shield className="h-4 w-4 mr-2" />
+                                  Thăng phó nhóm
+                                </DropdownMenuItem>
+                              )}
+                            {currentUserRole === "LEADER" &&
+                              member.role === "CO_LEADER" && (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    handleDemoteMember(member.userId)
+                                  }
+                                >
+                                  <UserMinus className="h-4 w-4 mr-2" />
+                                  Hạ xuống thành viên
+                                </DropdownMenuItem>
+                              )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleKickMember(member.userId)}
+                              className="text-red-500 focus:text-red-500"
+                            >
+                              <Ban className="h-4 w-4 mr-2" />
+                              Xóa khỏi nhóm
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
               </div>
             );
@@ -1156,6 +1173,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   async function handlePromoteMember(memberId: string) {
     setSelectedMemberId(memberId);
     setShowPromoteDialog(true);
+    setOpenDropdownMemberId(null); // Close dropdown after action
   }
 
   // Hàm thực hiện thăng cấp thành viên
@@ -1199,6 +1217,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   async function handleDemoteMember(memberId: string) {
     setSelectedMemberId(memberId);
     setShowDemoteDialog(true);
+    setOpenDropdownMemberId(null); // Close dropdown after action
   }
 
   // Hàm thực hiện hạ cấp thành viên
@@ -1242,6 +1261,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   async function handleKickMember(memberId: string) {
     setSelectedMemberId(memberId);
     setShowKickDialog(true);
+    setOpenDropdownMemberId(null); // Close dropdown after action
     // Keep the member list open when showing the kick dialog
     // This ensures the alert dialog appears on top of the member list
   }
