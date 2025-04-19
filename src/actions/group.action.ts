@@ -282,6 +282,12 @@ export async function updateMemberRole(
   role: GroupRole,
 ) {
   try {
+    console.log(`Updating member role in group ${groupId}:`, {
+      groupId,
+      userId,
+      role,
+    });
+
     const response = await axiosInstance.patch(
       `/groups/${groupId}/members/${userId}/role`,
       { role },
