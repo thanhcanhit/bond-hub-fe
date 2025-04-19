@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -41,27 +41,31 @@ export default function CreateGroupDialog({
   const { user: currentUser } = useAuthStore();
   const { friends } = useFriendStore();
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setAvatarFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+  // Memoize callback functions to prevent unnecessary re-renders
+  const handleAvatarChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        setAvatarFile(file);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setAvatarPreview(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
+    },
+    [],
+  );
 
-  const handleFriendSelection = (friendId: string) => {
+  const handleFriendSelection = useCallback((friendId: string) => {
     setSelectedFriends((prev) =>
       prev.includes(friendId)
         ? prev.filter((id) => id !== friendId)
         : [...prev, friendId],
     );
-  };
+  }, []);
 
-  const handleCreateGroup = async () => {
+  const handleCreateGroup = useCallback(async () => {
     if (!groupName.trim()) {
       toast.error("Vui lòng nhập tên nhóm");
       return;
@@ -157,11 +161,10 @@ export default function CreateGroupDialog({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [groupName, selectedFriends, avatarFile, currentUser, onOpenChange]);
 
   // State for search query
   const [searchQuery, setSearchQuery] = useState("");
-  const [filteredFriends, setFilteredFriends] = useState(friends);
 
   // Pre-select friend if provided
   useEffect(() => {
@@ -178,11 +181,10 @@ export default function CreateGroupDialog({
     }
   }, [preSelectedFriendId, friends]);
 
-  // Filter friends based on search query
-  useEffect(() => {
+  // Use useMemo for filtered friends to avoid recalculating on every render
+  const filteredFriends = useMemo(() => {
     if (!searchQuery.trim()) {
-      setFilteredFriends(friends);
-      return;
+      return friends;
     }
 
     // Check if search query is a phone number or email
@@ -190,7 +192,7 @@ export default function CreateGroupDialog({
     const isEmailValue = isEmail(searchQuery);
 
     // Filter friends based on search query
-    const filtered = friends.filter((friend) => {
+    return friends.filter((friend) => {
       // Search by phone number
       if (isPhone && friend.phoneNumber) {
         return friend.phoneNumber.includes(searchQuery);
@@ -202,8 +204,6 @@ export default function CreateGroupDialog({
       // Search by name (default)
       return friend.fullName.toLowerCase().includes(searchQuery.toLowerCase());
     });
-
-    setFilteredFriends(filtered);
   }, [searchQuery, friends]);
 
   return (
