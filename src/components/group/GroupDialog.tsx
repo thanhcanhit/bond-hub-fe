@@ -1,5 +1,4 @@
 "use client";
-
 import {
   Dialog,
   DialogContent,
@@ -25,21 +24,24 @@ import {
   LogOut,
   Settings,
   Share2,
-  Users,
   Video,
+  Trash,
 } from "lucide-react";
-import { Group, GroupRole, Media, User, UserInfo } from "@/types/base";
+import { Group, Media, User } from "@/types/base";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useState, useEffect } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { deleteGroup, leaveGroup } from "@/actions/group.action";
+import {
+  deleteGroup,
+  leaveGroup,
+  updateGroupAvatar,
+} from "@/actions/group.action";
 import ProfileDialog from "@/components/profile/ProfileDialog";
 import GroupMemberList from "./GroupMemberList";
-import AddGroupMemberDialog from "./AddGroupMemberDialog";
+import AddMemberDialog from "./AddMemberDialog";
 import { getUserDataById } from "@/actions/user.action";
 
 interface GroupDialogProps {
@@ -47,8 +49,6 @@ interface GroupDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   mediaFiles?: Media[];
-  documents?: Media[];
-  links?: { url: string; title: string }[];
   onManageGroup?: () => void;
 }
 
@@ -57,25 +57,24 @@ export default function GroupDialog({
   isOpen,
   onOpenChange,
   mediaFiles = [],
-  documents = [],
-  links = [],
   onManageGroup,
 }: GroupDialogProps) {
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [selectedMember, setSelectedMember] = useState<User | null>(null);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
-  const [memberDetails, setMemberDetails] = useState<{ [key: string]: any }>(
+  const [memberDetails, setMemberDetails] = useState<{ [key: string]: User }>(
     {},
   );
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const router = useRouter();
 
   // Get current user and chat store functions
   const currentUser = useAuthStore((state) => state.user);
-  const { openChat, setSelectedGroup } = useChatStore();
+  const { setSelectedGroup } = useChatStore();
 
   // Determine current user's role in the group
   const currentUserRole =
@@ -86,7 +85,7 @@ export default function GroupDialog({
   useEffect(() => {
     if (group?.id && group.members) {
       const fetchMemberDetails = async () => {
-        const newMemberDetails: { [key: string]: any } = {};
+        const newMemberDetails: { [key: string]: User } = {};
 
         // Get detailed information for each member
         for (const member of group.members) {
@@ -116,6 +115,37 @@ export default function GroupDialog({
       fetchMemberDetails();
     }
   }, [group?.id, group?.members]);
+
+  // Handle avatar change
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0 || !group?.id) return;
+
+    const file = e.target.files[0];
+    setIsUploadingAvatar(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const result = await updateGroupAvatar(group.id, formData);
+
+      if (result.success) {
+        toast.success("Cập nhật ảnh đại diện nhóm thành công");
+        // Refresh the group data or update the UI
+        // This could be done by refreshing the page or updating the group in the store
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
+      } else {
+        toast.error(result.error || "Không thể cập nhật ảnh đại diện nhóm");
+      }
+    } catch (error) {
+      console.error("Error updating group avatar:", error);
+      toast.error("Đã xảy ra lỗi khi cập nhật ảnh đại diện nhóm");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   // Handle copy group link
   const handleCopyGroupLink = () => {
@@ -192,20 +222,26 @@ export default function GroupDialog({
     <>
       <Dialog open={isOpen} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[425px] h-auto !p-0 mt-0 mb-16 max-h-[90vh] overflow-y-auto no-scrollbar">
-          <DialogHeader className="px-6 py-0 flex flex-row justify-between items-center h-10">
-            <DialogTitle className="text-base font-semibold flex items-center h-10">
+          <DialogHeader className="px-4 py-2 flex flex-row items-center border-b">
+            <DialogTitle className="text-base font-semibold">
               Thông tin nhóm
             </DialogTitle>
             <DialogDescription className="sr-only">
               Xem và quản lý thông tin nhóm
             </DialogDescription>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="ml-auto h-8 w-8"
+              onClick={() => onOpenChange(false)}
+            ></Button>
           </DialogHeader>
 
           <div className="flex flex-col overflow-auto no-scrollbar">
             {/* Group Avatar and Name */}
             <div className="flex flex-col items-center text-center p-4 bg-white">
               <div className="relative mb-3">
-                <Avatar className="h-24 w-24">
+                <Avatar className="h-16 w-16">
                   <AvatarImage
                     src={group?.avatarUrl || undefined}
                     className="object-cover"
@@ -215,9 +251,24 @@ export default function GroupDialog({
                   </AvatarFallback>
                 </Avatar>
                 {currentUserRole === "LEADER" && (
-                  <div className="absolute bottom-0 right-0 bg-blue-500 rounded-full p-1 cursor-pointer">
-                    <Camera className="h-4 w-4 text-white" />
-                  </div>
+                  <label
+                    htmlFor="group-avatar-upload"
+                    className="absolute bottom-0 right-0 bg-blue-500 rounded-full p-1 cursor-pointer"
+                  >
+                    {isUploadingAvatar ? (
+                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <Camera className="h-4 w-4 text-white" />
+                    )}
+                    <input
+                      id="group-avatar-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarChange}
+                      disabled={isUploadingAvatar}
+                    />
+                  </label>
                 )}
               </div>
               <h2 className="text-lg font-semibold mb-2">{group?.name}</h2>
@@ -255,6 +306,10 @@ export default function GroupDialog({
                   const initials = memberData?.userInfo?.fullName
                     ? memberData.userInfo.fullName.slice(0, 2).toUpperCase()
                     : "U";
+                  const displayName =
+                    memberData?.userInfo?.fullName || "Thành viên";
+                  const isLeader = member.role === "LEADER";
+                  const isCoLeader = member.role === "CO_LEADER";
 
                   return (
                     <div
@@ -278,6 +333,14 @@ export default function GroupDialog({
                         />
                         <AvatarFallback>{initials}</AvatarFallback>
                       </Avatar>
+                      <span className="text-xs font-medium truncate w-16 text-center">
+                        {displayName}
+                      </span>
+                      {(isLeader || isCoLeader) && (
+                        <span className="text-xs text-gray-500">
+                          {isLeader ? "Trưởng nhóm" : "Phó nhóm"}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -289,6 +352,7 @@ export default function GroupDialog({
                     >
                       <span className="text-sm font-medium">...</span>
                     </div>
+                    <span className="text-xs font-medium">Xem thêm</span>
                   </div>
                 )}
               </div>
@@ -352,6 +416,24 @@ export default function GroupDialog({
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 rounded-full bg-gray-200 ml-2"
+                    onClick={() => {
+                      if (navigator.share && group?.id) {
+                        navigator
+                          .share({
+                            title: `Nhóm ${group.name || "chat"}`,
+                            text: `Tham gia nhóm ${group.name || "chat"} trên Zalo`,
+                            url: `https://zalo.me/g/${group.id}`,
+                          })
+                          .catch((err) => {
+                            console.error("Error sharing:", err);
+                          });
+                      } else {
+                        handleCopyGroupLink();
+                        toast.info(
+                          "Đã sao chép liên kết. Thiết bị của bạn không hỗ trợ chia sẻ trực tiếp.",
+                        );
+                      }
+                    }}
                   >
                     <Share2 className="h-4 w-4" />
                   </Button>
@@ -372,6 +454,18 @@ export default function GroupDialog({
                 <Settings className="h-5 w-5 mr-3 text-gray-500" />
                 <span className="text-sm">Quản lý nhóm</span>
               </div>
+
+              {/* Leave group option - for everyone */}
+              {/* Delete group option - only for leader */}
+              {currentUserRole === "LEADER" && (
+                <div
+                  className="flex items-center p-2 cursor-pointer text-red-500"
+                  onClick={() => setShowDeleteDialog(true)}
+                >
+                  <Trash className="h-5 w-5 mr-3" />
+                  <span className="text-sm">Xóa nhóm</span>
+                </div>
+              )}
 
               {/* Leave group option - for everyone */}
               <div
@@ -408,7 +502,7 @@ export default function GroupDialog({
 
       {/* Add Member Dialog */}
       {group?.id && (
-        <AddGroupMemberDialog
+        <AddMemberDialog
           groupId={group.id}
           isOpen={showAddMemberDialog}
           onOpenChange={setShowAddMemberDialog}
@@ -421,8 +515,8 @@ export default function GroupDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>Rời nhóm</AlertDialogTitle>
             <AlertDialogDescription>
-              Bạn có chắc chắn muốn rời khỏi nhóm "{group?.name}"? Bạn sẽ không
-              thể xem tin nhắn trong nhóm này nữa.
+              Bạn có chắc chắn muốn rời khỏi nhóm &quot;{group?.name}&quot;? Bạn
+              sẽ không thể xem tin nhắn trong nhóm này nữa.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -451,8 +545,9 @@ export default function GroupDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>Xóa nhóm</AlertDialogTitle>
             <AlertDialogDescription>
-              Bạn có chắc chắn muốn xóa nhóm "{group?.name}"? Hành động này
-              không thể hoàn tác và tất cả tin nhắn trong nhóm sẽ bị xóa.
+              Bạn có chắc chắn muốn xóa nhóm &quot;{group?.name}&quot;? Hành
+              động này không thể hoàn tác và tất cả tin nhắn trong nhóm sẽ bị
+              xóa.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

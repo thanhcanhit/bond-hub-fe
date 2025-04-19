@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { useAuthStore } from "@/stores/authStore";
 import { GroupRole } from "@/types/base";
 
-interface AddGroupMemberDialogProps {
+interface AddMemberDialogProps {
   groupId: string;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -29,7 +29,7 @@ export default function AddGroupMemberDialog({
   groupId,
   isOpen,
   onOpenChange,
-}: AddGroupMemberDialogProps) {
+}: AddMemberDialogProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);

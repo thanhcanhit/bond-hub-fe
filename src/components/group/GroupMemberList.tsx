@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Group, User, UserInfo, GroupRole } from "@/types/base";
+import { Group, User, GroupRole } from "@/types/base";
 import {
   ArrowLeft,
   MoreHorizontal,
@@ -11,9 +11,8 @@ import {
   UserMinus,
   Ban,
   UserPlus,
-  X,
 } from "lucide-react";
-import AddGroupMemberDialog from "./AddGroupMemberDialog";
+import AddMemberDialog from "./AddMemberDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,12 +56,12 @@ export default function GroupMemberList({
   onOpenChange,
   onBack,
 }: GroupMemberListProps) {
-  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [selectedMember, setSelectedMember] = useState<User | null>(null);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
   const [showKickDialog, setShowKickDialog] = useState(false);
   const [memberToKick, setMemberToKick] = useState<string | null>(null);
-  const [memberDetails, setMemberDetails] = useState<{ [key: string]: any }>(
+  const [memberDetails, setMemberDetails] = useState<{ [key: string]: User }>(
     {},
   );
   const [isProcessing, setIsProcessing] = useState(false);
@@ -78,7 +77,7 @@ export default function GroupMemberList({
   useEffect(() => {
     if (group?.id && group.members) {
       const fetchMemberDetails = async () => {
-        const newMemberDetails: { [key: string]: any } = {};
+        const newMemberDetails: { [key: string]: User } = {};
 
         // Get detailed information for each member
         for (const member of group.members) {
@@ -193,7 +192,15 @@ export default function GroupMemberList({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <Dialog
+        open={isOpen}
+        onOpenChange={(open) => {
+          // Only close the dialog if no other dialogs are open
+          if (!showKickDialog && !showProfileDialog && !showAddMemberDialog) {
+            onOpenChange(open);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[425px] h-auto !p-0 mt-0 mb-16 max-h-[90vh] overflow-y-auto no-scrollbar">
           <DialogHeader className="px-4 py-2 flex flex-row items-center border-b">
             <Button
@@ -212,9 +219,7 @@ export default function GroupMemberList({
               size="icon"
               className="ml-auto h-8 w-8"
               onClick={() => onOpenChange(false)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            ></Button>
           </DialogHeader>
 
           <div className="p-4 border-b">
@@ -227,13 +232,10 @@ export default function GroupMemberList({
             </Button>
           </div>
 
-          <div className="p-4 flex justify-between items-center">
+          <div className="px-4 flex justify-between items-center">
             <span className="text-sm">
               Danh sách thành viên ({group?.members?.length || 0})
             </span>
-            <Button variant="ghost" size="icon">
-              <MoreHorizontal className="h-5 w-5" />
-            </Button>
           </div>
 
           <ScrollArea className="flex-1">
@@ -246,7 +248,7 @@ export default function GroupMemberList({
               return (
                 <div
                   key={member.userId}
-                  className="flex items-center p-4 hover:bg-gray-100 justify-between"
+                  className="flex items-center px-4 py-2 hover:bg-gray-100 justify-between"
                 >
                   <div
                     className="flex items-center cursor-pointer"
@@ -336,15 +338,32 @@ export default function GroupMemberList({
 
       {/* Add Member Dialog */}
       {group?.id && (
-        <AddGroupMemberDialog
+        <AddMemberDialog
           groupId={group.id}
           isOpen={showAddMemberDialog}
-          onOpenChange={setShowAddMemberDialog}
+          onOpenChange={(open) => {
+            setShowAddMemberDialog(open);
+            // If the add member dialog is closed and the member list should still be open
+            if (!open && isOpen) {
+              // Force the member list to stay open
+              setTimeout(() => onOpenChange(true), 0);
+            }
+          }}
         />
       )}
 
       {/* Kick Member Confirmation Dialog */}
-      <AlertDialog open={showKickDialog} onOpenChange={setShowKickDialog}>
+      <AlertDialog
+        open={showKickDialog}
+        onOpenChange={(open) => {
+          setShowKickDialog(open);
+          // If the kick dialog is closed and the member list should still be open
+          if (!open && isOpen) {
+            // Force the member list to stay open
+            setTimeout(() => onOpenChange(true), 0);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xóa thành viên</AlertDialogTitle>

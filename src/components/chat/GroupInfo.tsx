@@ -24,6 +24,7 @@ import {
   Shield,
   Ban,
 } from "lucide-react";
+import GroupDialog from "../group/GroupDialog";
 import MediaGalleryView from "./MediaGalleryView";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ProfileDialog from "@/components/profile/ProfileDialog";
@@ -35,6 +36,7 @@ import {
 } from "@/components/ui/collapsible";
 import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,7 +60,7 @@ import {
   removeGroupMember,
   updateMemberRole,
 } from "@/actions/group.action";
-import AddGroupMemberDialog from "../group/AddMemberDialog";
+import AddMemberDialog from "../group/AddMemberDialog";
 
 interface GroupInfoProps {
   group: Group | null;
@@ -92,6 +94,11 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   const [currentUserRole, setCurrentUserRole] = useState<GroupRole | null>(
     null,
   );
+  const [showGroupDialog, setShowGroupDialog] = useState(false);
+  const [showKickDialog, setShowKickDialog] = useState(false);
+  const [showPromoteDialog, setShowPromoteDialog] = useState(false);
+  const [showDemoteDialog, setShowDemoteDialog] = useState(false);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
@@ -292,7 +299,10 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
         <div className="p-4 border-b">
           <Button
             className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-black"
-            onClick={() => setShowAddMemberDialog(true)}
+            onClick={() => {
+              setShowMembersList(false);
+              setShowAddMemberDialog(true);
+            }}
           >
             <UserPlus className="h-4 w-4" />
             <span>Thêm thành viên</span>
@@ -421,7 +431,10 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
         <div className="space-y-2 bg-[#ebecf0]">
           {/* Thông tin nhóm */}
           <div className="flex flex-col items-center text-center bg-white p-2">
-            <Avatar className="h-20 w-20 mb-3">
+            <Avatar
+              className="h-20 w-20 mb-3 cursor-pointer"
+              onClick={() => setShowGroupDialog(true)}
+            >
               <AvatarImage
                 src={group.avatarUrl || undefined}
                 className="object-cover"
@@ -461,7 +474,9 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                   variant="ghost"
                   size="icon"
                   className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1"
-                  onClick={() => setShowAddMemberDialog(true)}
+                  onClick={() => {
+                    setShowAddMemberDialog(true);
+                  }}
                 >
                   <UserPlus className="h-6 w-6" />
                 </Button>
@@ -768,34 +783,140 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
         </AlertDialogContent>
       </AlertDialog>
       {showAddMemberDialog && group && (
-        <AddGroupMemberDialog
+        <AddMemberDialog
           isOpen={showAddMemberDialog}
           onOpenChange={setShowAddMemberDialog}
           groupId={group.id}
         />
       )}
+
+      {/* Group Dialog */}
+      {showGroupDialog && group && (
+        <GroupDialog
+          group={group}
+          isOpen={showGroupDialog}
+          onOpenChange={setShowGroupDialog}
+          mediaFiles={mediaFiles}
+        />
+      )}
+
+      {/* Kick Member Confirmation Dialog */}
+      <AlertDialog open={showKickDialog} onOpenChange={setShowKickDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa thành viên</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa thành viên này khỏi nhóm? Họ sẽ không
+              thể xem tin nhắn trong nhóm này nữa.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeKickMember}
+              disabled={isProcessing}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {isProcessing ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                  Đang xử lý...
+                </>
+              ) : (
+                "Xóa thành viên"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Promote Member Confirmation Dialog */}
+      <AlertDialog open={showPromoteDialog} onOpenChange={setShowPromoteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Thăng cấp thành viên</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn thăng cấp thành viên này lên phó nhóm? Họ sẽ
+              có quyền quản lý nhóm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executePromoteMember}
+              disabled={isProcessing}
+              className="bg-blue-500 hover:bg-blue-600"
+            >
+              {isProcessing ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                  Đang xử lý...
+                </>
+              ) : (
+                "Thăng cấp"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Demote Member Confirmation Dialog */}
+      <AlertDialog open={showDemoteDialog} onOpenChange={setShowDemoteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hạ cấp thành viên</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn hạ cấp phó nhóm này xuống thành viên thường?
+              Họ sẽ mất quyền quản lý nhóm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeDemoteMember}
+              disabled={isProcessing}
+              className="bg-blue-500 hover:bg-blue-600"
+            >
+              {isProcessing ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                  Đang xử lý...
+                </>
+              ) : (
+                "Hạ cấp"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 
   // Hàm xử lý thăng cấp thành viên lên phó nhóm
   async function handlePromoteMember(memberId: string) {
-    if (!group?.id) return;
+    setSelectedMemberId(memberId);
+    setShowPromoteDialog(true);
+  }
+
+  // Hàm thực hiện thăng cấp thành viên
+  async function executePromoteMember() {
+    if (!group?.id || !selectedMemberId) return;
     setIsProcessing(true);
     try {
       const result = await updateMemberRole(
         group.id,
-        memberId,
+        selectedMemberId,
         GroupRole.CO_LEADER,
       );
       if (result.success) {
         // Cập nhật UI hoặc reload dữ liệu nhóm
-        alert("Đã thăng cấp thành viên thành phó nhóm");
+        setShowPromoteDialog(false);
       } else {
-        alert(`Lỗi: ${result.error}`);
+        toast.error(`Lỗi: ${result.error}`);
       }
     } catch (error) {
       console.error("Error promoting member:", error);
-      alert("Đã xảy ra lỗi khi thăng cấp thành viên");
+      toast.error("Đã xảy ra lỗi khi thăng cấp thành viên");
     } finally {
       setIsProcessing(false);
     }
@@ -803,23 +924,29 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
 
   // Hàm xử lý hạ cấp phó nhóm xuống thành viên thường
   async function handleDemoteMember(memberId: string) {
-    if (!group?.id) return;
+    setSelectedMemberId(memberId);
+    setShowDemoteDialog(true);
+  }
+
+  // Hàm thực hiện hạ cấp thành viên
+  async function executeDemoteMember() {
+    if (!group?.id || !selectedMemberId) return;
     setIsProcessing(true);
     try {
       const result = await updateMemberRole(
         group.id,
-        memberId,
+        selectedMemberId,
         GroupRole.MEMBER,
       );
       if (result.success) {
         // Cập nhật UI hoặc reload dữ liệu nhóm
-        alert("Đã hạ cấp phó nhóm xuống thành viên thường");
+        setShowDemoteDialog(false);
       } else {
-        alert(`Lỗi: ${result.error}`);
+        toast.error(`Lỗi: ${result.error}`);
       }
     } catch (error) {
       console.error("Error demoting member:", error);
-      alert("Đã xảy ra lỗi khi hạ cấp thành viên");
+      toast.error("Đã xảy ra lỗi khi hạ cấp thành viên");
     } finally {
       setIsProcessing(false);
     }
@@ -827,21 +954,27 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
 
   // Hàm xử lý xóa thành viên khỏi nhóm
   async function handleKickMember(memberId: string) {
-    if (!group?.id) return;
-    if (!confirm("Bạn có chắc chắn muốn xóa thành viên này khỏi nhóm?")) return;
+    setSelectedMemberId(memberId);
+    setShowKickDialog(true);
+    // Keep the member list open when showing the kick dialog
+    // This ensures the alert dialog appears on top of the member list
+  }
 
+  // Hàm thực hiện xóa thành viên
+  async function executeKickMember() {
+    if (!group?.id || !selectedMemberId) return;
     setIsProcessing(true);
     try {
-      const result = await removeGroupMember(group.id, memberId);
+      const result = await removeGroupMember(group.id, selectedMemberId);
       if (result.success) {
         // Cập nhật UI hoặc reload dữ liệu nhóm
-        alert("Đã xóa thành viên khỏi nhóm");
+        setShowKickDialog(false);
       } else {
-        alert(`Lỗi: ${result.error}`);
+        toast.error(`Lỗi: ${result.error}`);
       }
     } catch (error) {
       console.error("Error removing member:", error);
-      alert("Đã xảy ra lỗi khi xóa thành viên");
+      toast.error("Đã xảy ra lỗi khi xóa thành viên");
     } finally {
       setIsProcessing(false);
     }
