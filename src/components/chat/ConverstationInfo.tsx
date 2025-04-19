@@ -19,6 +19,7 @@ import {
 import MediaGalleryView from "./MediaGalleryView";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ProfileDialog from "@/components/profile/ProfileDialog";
+import CreateGroupDialog from "@/components/group/CreateGroupDialog";
 import {
   Collapsible,
   CollapsibleContent,
@@ -56,6 +57,7 @@ export default function ContactInfo({
   const [activeGalleryTab, setActiveGalleryTab] = useState<
     "media" | "files" | "links"
   >("media");
+  const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
 
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
@@ -236,8 +238,8 @@ export default function ContactInfo({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1 opacity-60"
-                  onClick={() => toast.info("Tính năng này chưa được hỗ trợ")}
+                  className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1"
+                  onClick={() => setShowCreateGroupDialog(true)}
                 >
                   <Users className="h-6 w-6" />
                 </Button>
@@ -468,6 +470,15 @@ export default function ContactInfo({
           isOpen={showProfileDialog}
           onOpenChange={setShowProfileDialog}
           isOwnProfile={contact.id === currentUser?.id}
+        />
+      )}
+
+      {/* Create Group Dialog */}
+      {contact && (
+        <CreateGroupDialog
+          isOpen={showCreateGroupDialog}
+          onOpenChange={setShowCreateGroupDialog}
+          preSelectedFriendId={contact.id}
         />
       )}
     </div>

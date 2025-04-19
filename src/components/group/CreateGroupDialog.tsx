@@ -24,11 +24,13 @@ import { isEmail, isPhoneNumber } from "@/utils/helpers";
 interface CreateGroupDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  preSelectedFriendId?: string;
 }
 
 export default function CreateGroupDialog({
   isOpen,
   onOpenChange,
+  preSelectedFriendId,
 }: CreateGroupDialogProps) {
   const [groupName, setGroupName] = useState("");
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
@@ -160,6 +162,21 @@ export default function CreateGroupDialog({
   // State for search query
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredFriends, setFilteredFriends] = useState(friends);
+
+  // Pre-select friend if provided
+  useEffect(() => {
+    if (
+      preSelectedFriendId &&
+      friends.some((friend) => friend.id === preSelectedFriendId)
+    ) {
+      setSelectedFriends((prev) => {
+        if (!prev.includes(preSelectedFriendId)) {
+          return [...prev, preSelectedFriendId];
+        }
+        return prev;
+      });
+    }
+  }, [preSelectedFriendId, friends]);
 
   // Filter friends based on search query
   useEffect(() => {
