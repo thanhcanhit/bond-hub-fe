@@ -111,6 +111,9 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
     string | null
   >(null);
   const [showEditNameDialog, setShowEditNameDialog] = useState(false);
+  const [activeGalleryTab, setActiveGalleryTab] = useState<
+    "media" | "files" | "links"
+  >("media");
 
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
@@ -384,6 +387,9 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
     return (
       <MediaGalleryView
         mediaFiles={mediaFiles}
+        documents={documents}
+        links={links}
+        initialTab={activeGalleryTab}
         onClose={() => setShowMediaGallery(false)}
       />
     );
@@ -859,7 +865,10 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                         variant="ghost"
                         size="sm"
                         className="text-sm font-semibold w-full bg-[#e5e7eb] hover:bg-gray-300"
-                        onClick={() => setShowMediaGallery(true)}
+                        onClick={() => {
+                          setActiveGalleryTab("media");
+                          setShowMediaGallery(true);
+                        }}
                       >
                         Xem tất cả
                       </Button>
@@ -896,6 +905,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                     <div
                       key={index}
                       className="flex items-center py-2 px-4 hover:bg-gray-200 cursor-pointer"
+                      onClick={() => window.open(doc.url, "_blank")}
                     >
                       <div className="bg-blue-100 p-2 rounded-md mr-3">
                         <FileImage className="h-5 w-5 text-blue-500" />
@@ -920,6 +930,10 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                         variant="ghost"
                         size="sm"
                         className="text-sm font-semibold w-full bg-[#e5e7eb] hover:bg-gray-300"
+                        onClick={() => {
+                          setActiveGalleryTab("files");
+                          setShowMediaGallery(true);
+                        }}
                       >
                         Xem tất cả
                       </Button>
@@ -995,6 +1009,10 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                         variant="ghost"
                         size="sm"
                         className="text-sm font-semibold w-full bg-[#e5e7eb] hover:bg-gray-300"
+                        onClick={() => {
+                          setActiveGalleryTab("links");
+                          setShowMediaGallery(true);
+                        }}
                       >
                         Xem tất cả
                       </Button>
