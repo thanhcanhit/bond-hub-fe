@@ -135,6 +135,7 @@ interface ChatState {
     id: string,
     type: "USER" | "GROUP",
   ) => Promise<void>;
+  refreshSelectedGroup: () => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -1799,5 +1800,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Xóa toàn bộ cache
   clearAllCache: () => {
     set({ messageCache: {} });
+  },
+
+  // Refresh the selected group data
+  refreshSelectedGroup: async () => {
+    console.log(`[chatStore] Refreshing selected group data`);
+    const { selectedGroup } = get();
+
+    if (!selectedGroup || !selectedGroup.id) {
+      console.log(`[chatStore] No selected group to refresh`);
+      return;
+    }
+
+    try {
+      // Fetch updated group data
+      const result = await getGroupById(selectedGroup.id);
+
+      if (result.success && result.group) {
+        console.log(
+          `[chatStore] Group data refreshed successfully for ${selectedGroup.id}`,
+        );
+
+        // Update the selected group with new data
+        set({ selectedGroup: result.group });
+
+        // Also reload messages to ensure everything is up to date
+        await get().reloadConversationMessages(selectedGroup.id, "GROUP");
+      } else {
+        console.log(
+          `[chatStore] Failed to refresh group data for ${selectedGroup.id}`,
+        );
+      }
+    } catch (error) {
+      console.error("Error refreshing group data:", error);
+    }
   },
 }));

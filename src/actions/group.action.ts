@@ -216,13 +216,29 @@ export async function deleteGroup(groupId: string) {
  * Add a member to a group
  * @param groupId Group ID
  * @param userId User ID to add
+ * @param addedById ID of the user who is adding the member
+ * @param role Role of the new member (default: MEMBER)
  * @returns Added group member
  */
-export async function addGroupMember(groupId: string, userId: string) {
+export async function addGroupMember(
+  groupId: string,
+  userId: string,
+  addedById: string,
+  role: GroupRole.MEMBER,
+) {
   try {
+    console.log(`Adding member to group ${groupId}:`, {
+      groupId,
+      userId,
+      addedById,
+      role,
+    });
+
     const response = await axiosInstance.post("/groups/members", {
       groupId,
       userId,
+      addedById,
+      role,
     });
     return { success: true, member: response.data };
   } catch (error) {

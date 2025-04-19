@@ -58,6 +58,7 @@ import {
   removeGroupMember,
   updateMemberRole,
 } from "@/actions/group.action";
+import AddGroupMemberDialog from "../group/AddMemberDialog";
 
 interface GroupInfoProps {
   group: Group | null;
@@ -86,6 +87,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   }>({});
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState<GroupRole | null>(
     null,
@@ -288,7 +290,10 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
         </div>
 
         <div className="p-4 border-b">
-          <Button className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-black">
+          <Button
+            className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-black"
+            onClick={() => setShowAddMemberDialog(true)}
+          >
             <UserPlus className="h-4 w-4" />
             <span>Thêm thành viên</span>
           </Button>
@@ -456,6 +461,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                   variant="ghost"
                   size="icon"
                   className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1"
+                  onClick={() => setShowAddMemberDialog(true)}
                 >
                   <UserPlus className="h-6 w-6" />
                 </Button>
@@ -761,6 +767,13 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {showAddMemberDialog && group && (
+        <AddGroupMemberDialog
+          isOpen={showAddMemberDialog}
+          onOpenChange={setShowAddMemberDialog}
+          groupId={group.id}
+        />
+      )}
     </div>
   );
 
