@@ -897,9 +897,11 @@ export default function SearchHeader({ className }: { className?: string }) {
                     <div className="h-10 w-10 rounded-full overflow-hidden mr-3 flex-shrink-0">
                       {senderDetails[message.sender.id]?.userInfo
                         ?.profilePictureUrl &&
+                      typeof senderDetails[message.sender.id]?.userInfo
+                        ?.profilePictureUrl === "string" &&
                       senderDetails[
                         message.sender.id
-                      ]?.userInfo?.profilePictureUrl.trim() !== "" ? (
+                      ]?.userInfo?.profilePictureUrl?.trim() !== "" ? (
                         <Image
                           src={
                             senderDetails[message.sender.id]?.userInfo
@@ -1030,7 +1032,8 @@ export default function SearchHeader({ className }: { className?: string }) {
                             <Image
                               src={
                                 friend.profilePictureUrl &&
-                                friend.profilePictureUrl.trim() !== ""
+                                typeof friend.profilePictureUrl === "string" &&
+                                friend.profilePictureUrl?.trim() !== ""
                                   ? friend.profilePictureUrl
                                   : "/images/default-avatar.png"
                               }

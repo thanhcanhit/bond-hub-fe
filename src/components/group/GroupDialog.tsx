@@ -93,13 +93,12 @@ export default function GroupDialog({
             // If member already has user info, use it
             if (member.user?.userInfo) {
               newMemberDetails[member.userId] = member.user;
-              continue;
-            }
-
-            // Otherwise fetch from API
-            const result = await getUserDataById(member.userId);
-            if (result.success && result.user) {
-              newMemberDetails[member.userId] = result.user;
+            } else {
+              // Otherwise fetch from API
+              const result = await getUserDataById(member.userId);
+              if (result.success && result.user) {
+                newMemberDetails[member.userId] = result.user;
+              }
             }
           } catch (error) {
             console.error(

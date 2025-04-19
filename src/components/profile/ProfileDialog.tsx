@@ -58,6 +58,7 @@ interface ProfileDialogProps {
   isOwnProfile?: boolean;
   onChat?: () => void;
   onCall?: () => void;
+  initialShowFriendRequestForm?: boolean;
 }
 
 export default function ProfileDialog({
@@ -67,13 +68,16 @@ export default function ProfileDialog({
   isOwnProfile = false,
   onChat,
   onCall,
+  initialShowFriendRequestForm = false,
 }: ProfileDialogProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [relationship, setRelationship] = useState<string | null>(null);
   const [isLoadingRelationship, setIsLoadingRelationship] = useState(false);
-  const [showFriendRequestForm, setShowFriendRequestForm] = useState(false);
+  const [showFriendRequestForm, setShowFriendRequestForm] = useState(
+    initialShowFriendRequestForm,
+  );
   const [requestMessage, setRequestMessage] = useState("");
   const [isSendingRequest, setIsSendingRequest] = useState(false);
   const [isAcceptingRequest, setIsAcceptingRequest] = useState(false);
@@ -623,7 +627,7 @@ export default function ProfileDialog({
                             onOpenChange(false);
 
                             // Open the chat with this user
-                            await openChat(user.id);
+                            await openChat(user.id, "USER");
 
                             // Navigate to chat page if not already there
                             router.push("/dashboard/chat");
@@ -657,7 +661,7 @@ export default function ProfileDialog({
                             );
 
                             // Open the chat with this user
-                            await openChat(user.id);
+                            await openChat(user.id, "USER");
 
                             // Navigate to chat page if not already there
                             router.push("/dashboard/chat");
@@ -709,7 +713,7 @@ export default function ProfileDialog({
                             );
 
                             // Open the chat with this user
-                            await openChat(user.id);
+                            await openChat(user.id, "USER");
 
                             // Navigate to chat page if not already there
                             router.push("/dashboard/chat");
@@ -790,7 +794,7 @@ export default function ProfileDialog({
                             );
 
                             // Open the chat with this user
-                            await openChat(user.id);
+                            await openChat(user.id, "USER");
 
                             // Navigate to chat page if not already there
                             router.push("/dashboard/chat");

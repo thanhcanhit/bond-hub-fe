@@ -23,6 +23,7 @@ import {
   UserMinus,
   Shield,
   Ban,
+  Link as LinkIcon,
 } from "lucide-react";
 import GroupDialog from "../group/GroupDialog";
 import MediaGalleryView from "./MediaGalleryView";
@@ -37,6 +38,7 @@ import {
 import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
+import { getRelationship } from "@/actions/friend.action";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,10 +70,6 @@ interface GroupInfoProps {
 }
 
 export default function GroupInfo({ group, onClose }: GroupInfoProps) {
-  const [selectedMember, setSelectedMember] = useState<
-    (User & { userInfo: UserInfo }) | null
-  >(null);
-  const [showProfileDialog, setShowProfileDialog] = useState(false);
   const [mediaFiles, setMediaFiles] = useState<(Media & { createdAt: Date })[]>(
     [],
   );
@@ -87,6 +85,11 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   const [memberDetails, setMemberDetails] = useState<{
     [key: string]: User & { userInfo: UserInfo };
   }>({});
+  const [adderDetails, setAdderDetails] = useState<{ [key: string]: User }>({});
+  const [relationships, setRelationships] = useState<{ [key: string]: string }>(
+    {},
+  );
+  const [isSendingRequest] = useState<{ [key: string]: boolean }>({});
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
@@ -99,6 +102,9 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   const [showPromoteDialog, setShowPromoteDialog] = useState(false);
   const [showDemoteDialog, setShowDemoteDialog] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [selectedMember, setSelectedMember] = useState<User | null>(null);
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
+  const [showFriendRequestForm, setShowFriendRequestForm] = useState(false);
 
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
@@ -110,6 +116,8 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
         const newMemberDetails: {
           [key: string]: User & { userInfo: UserInfo };
         } = {};
+        const newAdderDetails: { [key: string]: User } = {};
+        const newRelationships: { [key: string]: string } = {};
 
         // Lấy thông tin chi tiết của từng thành viên
         for (const member of group.members) {
@@ -119,15 +127,105 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
               newMemberDetails[member.userId] = member.user as User & {
                 userInfo: UserInfo;
               };
-              continue;
+            } else {
+              // Nếu chưa có, gọi API để lấy
+              const result = await getUserDataById(member.userId);
+              if (result.success && result.user) {
+                newMemberDetails[member.userId] = result.user as User & {
+                  userInfo: UserInfo;
+                };
+              }
             }
 
-            // Nếu chưa có, gọi API để lấy
-            const result = await getUserDataById(member.userId);
-            if (result.success && result.user) {
-              newMemberDetails[member.userId] = result.user as User & {
-                userInfo: UserInfo;
+            // Store information about who added this member
+            // If addedBy is directly available in the API response as an object with id and fullName
+            if (
+              member.addedBy &&
+              typeof member.addedBy === "object" &&
+              "id" in member.addedBy &&
+              "fullName" in member.addedBy
+            ) {
+              // Create a simple User object with the addedBy information
+              const adderInfo = member.addedBy as unknown as {
+                id: string;
+                fullName: string;
               };
+              newAdderDetails[member.userId] = {
+                id: adderInfo.id,
+                userInfo: {
+                  id: adderInfo.id,
+                  fullName: adderInfo.fullName,
+                  blockStrangers: false,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                  userAuth: { id: adderInfo.id } as User,
+                },
+              } as unknown as User;
+            }
+            // Fallback to the old method if needed
+            else if (member.addedById && member.addedById !== currentUser?.id) {
+              if (member.addedBy && "userInfo" in member.addedBy) {
+                newAdderDetails[member.userId] = member.addedBy as User;
+              } else {
+                const result = await getUserDataById(member.addedById);
+                if (result.success && result.user) {
+                  newAdderDetails[member.userId] = result.user;
+                }
+              }
+            }
+
+            // Check relationship with this member if it's not the current user
+            if (member.userId !== currentUser?.id) {
+              try {
+                // Lấy accessToken từ authStore để tránh lỗi 401
+                const accessToken =
+                  useAuthStore.getState().accessToken || undefined;
+                const result = await getRelationship(
+                  member.userId,
+                  accessToken,
+                );
+                console.log(`Relationship with ${member.userId}:`, result.data);
+                if (result.success && result.data) {
+                  // API có thể trả về các giá trị khác nhau như "ACCEPTED", "FRIEND", v.v.
+                  // Chuẩn hóa các giá trị để đảm bảo tính nhất quán
+                  const status = result.data.status || "NONE";
+
+                  // Nếu đã là bạn bè (ACCEPTED hoặc FRIEND), đặt thành "ACCEPTED"
+                  if (status === "ACCEPTED" || status === "FRIEND") {
+                    newRelationships[member.userId] = "ACCEPTED";
+                  }
+                  // Nếu đã gửi lời mời kết bạn, đặt thành "PENDING_SENT"
+                  else if (status === "PENDING_SENT") {
+                    newRelationships[member.userId] = "PENDING_SENT";
+                  }
+                  // Nếu đã nhận lời mời kết bạn, đặt thành "PENDING_RECEIVED"
+                  else if (status === "PENDING_RECEIVED") {
+                    newRelationships[member.userId] = "PENDING_RECEIVED";
+                  }
+                  // Các trường hợp khác, giữ nguyên giá trị
+                  else {
+                    newRelationships[member.userId] = status;
+                  }
+
+                  console.log(
+                    `Normalized relationship with ${member.userId}:`,
+                    newRelationships[member.userId],
+                  );
+                } else {
+                  newRelationships[member.userId] = "NONE";
+                }
+              } catch (error) {
+                console.error(
+                  `Error checking relationship with member ${member.userId}:`,
+                  error,
+                );
+                newRelationships[member.userId] = "NONE";
+              }
+            }
+
+            // Kiểm tra vai trò của người dùng hiện tại
+            if (currentUser && member.userId === currentUser.id) {
+              setCurrentUserRole(member.role);
             }
           } catch (error) {
             console.error(
@@ -135,14 +233,11 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
               error,
             );
           }
-
-          // Kiểm tra vai trò của người dùng hiện tại
-          if (currentUser && member.userId === currentUser.id) {
-            setCurrentUserRole(member.role);
-          }
         }
 
         setMemberDetails(newMemberDetails);
+        setAdderDetails(newAdderDetails);
+        setRelationships(newRelationships);
       };
 
       fetchMemberDetails();
@@ -279,6 +374,16 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
     );
   }
 
+  // Handle send friend request
+  const handleSendFriendRequest = (userId: string) => {
+    const memberData = memberDetails[userId];
+    if (memberData) {
+      setSelectedMember(memberData);
+      setShowFriendRequestForm(true);
+      setShowProfileDialog(true);
+    }
+  };
+
   if (showMembersList) {
     return (
       <div className="h-full flex flex-col bg-white border-l">
@@ -354,12 +459,33 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                           ? "Phó nhóm"
                           : ""}
                     </p>
+                    {/* Hiển thị thông tin người thêm */}
+                    {member.userId !== currentUser?.id && (
+                      <p className="text-xs text-gray-500">
+                        {member.addedBy && "fullName" in member.addedBy
+                          ? `Thêm bởi ${(member.addedBy as unknown as { fullName: string }).fullName}`
+                          : adderDetails[member.userId]?.userInfo?.fullName
+                            ? `Thêm bởi ${adderDetails[member.userId]?.userInfo?.fullName}`
+                            : ""}
+                      </p>
+                    )}
                   </div>
                 </div>
-                {/* Hiển thị menu tùy chọn cho thành viên nếu người dùng hiện tại là trưởng nhóm hoặc phó nhóm */}
-                {(currentUserRole === "LEADER" ||
-                  (currentUserRole === "CO_LEADER" &&
-                    member.role === "MEMBER")) && (
+                <div className="flex items-center">
+                  {/* Show pending status */}
+                  {member.userId !== currentUser?.id &&
+                    relationships[member.userId] === "PENDING_SENT" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled
+                        title="Đã gửi lời mời kết bạn"
+                      >
+                        <LinkIcon className="h-4 w-4 text-gray-400" />
+                      </Button>
+                    )}
+
+                  {/* Hiển thị menu tùy chọn cho thành viên */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon">
@@ -367,35 +493,69 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      {currentUserRole === "LEADER" &&
-                        member.role === "MEMBER" && (
+                      {/* Add friend option if not already friends */}
+                      {member.userId !== currentUser?.id &&
+                        relationships[member.userId] === "NONE" && (
                           <DropdownMenuItem
-                            onClick={() => handlePromoteMember(member.userId)}
+                            onClick={() =>
+                              handleSendFriendRequest(member.userId)
+                            }
+                            disabled={isSendingRequest[member.userId]}
                           >
-                            <Shield className="h-4 w-4 mr-2" />
-                            Thăng phó nhóm
+                            {isSendingRequest[member.userId] ? (
+                              <>
+                                <div className="h-4 w-4 mr-2 rounded-full border-2 border-gray-600 border-t-transparent animate-spin"></div>
+                                Đang gửi...
+                              </>
+                            ) : (
+                              <>
+                                <UserPlus className="h-4 w-4 mr-2 text-blue-500" />
+                                Kết bạn
+                              </>
+                            )}
                           </DropdownMenuItem>
                         )}
-                      {currentUserRole === "LEADER" &&
-                        member.role === "CO_LEADER" && (
+
+                      {/* Leader/Co-leader management options */}
+                      {(currentUserRole === "LEADER" ||
+                        (currentUserRole === "CO_LEADER" &&
+                          member.role === "MEMBER")) && (
+                        <>
+                          {currentUserRole === "LEADER" &&
+                            member.role === "MEMBER" && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  handlePromoteMember(member.userId)
+                                }
+                              >
+                                <Shield className="h-4 w-4 mr-2" />
+                                Thăng phó nhóm
+                              </DropdownMenuItem>
+                            )}
+                          {currentUserRole === "LEADER" &&
+                            member.role === "CO_LEADER" && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  handleDemoteMember(member.userId)
+                                }
+                              >
+                                <UserMinus className="h-4 w-4 mr-2" />
+                                Hạ xuống thành viên
+                              </DropdownMenuItem>
+                            )}
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
-                            onClick={() => handleDemoteMember(member.userId)}
+                            onClick={() => handleKickMember(member.userId)}
+                            className="text-red-500 focus:text-red-500"
                           >
-                            <UserMinus className="h-4 w-4 mr-2" />
-                            Hạ xuống thành viên
+                            <Ban className="h-4 w-4 mr-2" />
+                            Xóa khỏi nhóm
                           </DropdownMenuItem>
-                        )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => handleKickMember(member.userId)}
-                        className="text-red-500 focus:text-red-500"
-                      >
-                        <Ban className="h-4 w-4 mr-2" />
-                        Xóa khỏi nhóm
-                      </DropdownMenuItem>
+                        </>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
-                )}
+                </div>
               </div>
             );
           })}
@@ -405,8 +565,15 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
           <ProfileDialog
             user={selectedMember}
             isOpen={showProfileDialog}
-            onOpenChange={setShowProfileDialog}
+            onOpenChange={(open) => {
+              setShowProfileDialog(open);
+              if (!open) {
+                setSelectedMember(null);
+                setShowFriendRequestForm(false);
+              }
+            }}
             isOwnProfile={selectedMember.id === currentUser?.id}
+            initialShowFriendRequestForm={showFriendRequestForm}
           />
         )}
       </div>

@@ -28,7 +28,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import ProfileDialog from "@/components/profile/ProfileDialog";
 import { getUserDataById } from "@/actions/user.action";
 import { useAuthStore } from "@/stores/authStore";
-import { getRelationship, sendFriendRequest } from "@/actions/friend.action";
+import { getRelationship } from "@/actions/friend.action";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,18 +60,19 @@ export default function GroupMemberList({
 }: GroupMemberListProps) {
   const [selectedMember, setSelectedMember] = useState<User | null>(null);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
+  const [showFriendRequestForm, setShowFriendRequestForm] = useState(false);
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
   const [showKickDialog, setShowKickDialog] = useState(false);
   const [memberToKick, setMemberToKick] = useState<string | null>(null);
   const [memberDetails, setMemberDetails] = useState<{ [key: string]: User }>(
     {},
   );
+  const [isProcessing, setIsProcessing] = useState(false);
   const [adderDetails, setAdderDetails] = useState<{ [key: string]: User }>({});
   const [relationships, setRelationships] = useState<{ [key: string]: string }>(
     {},
   );
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isSendingRequest, setIsSendingRequest] = useState<{
+  const [isSendingRequest] = useState<{
     [key: string]: boolean;
   }>({});
 
@@ -104,10 +105,35 @@ export default function GroupMemberList({
               }
             }
 
-            // Get information about who added this member
-            if (member.addedById && member.addedById !== currentUser?.id) {
-              if (member.addedBy?.userInfo) {
-                newAdderDetails[member.userId] = member.addedBy;
+            // Store information about who added this member
+            // If addedBy is directly available in the API response as an object with id and fullName
+            if (
+              member.addedBy &&
+              typeof member.addedBy === "object" &&
+              "id" in member.addedBy &&
+              "fullName" in member.addedBy
+            ) {
+              // Create a simple User object with the addedBy information
+              const adderInfo = member.addedBy as unknown as {
+                id: string;
+                fullName: string;
+              };
+              newAdderDetails[member.userId] = {
+                id: adderInfo.id,
+                userInfo: {
+                  id: adderInfo.id,
+                  fullName: adderInfo.fullName,
+                  blockStrangers: false,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                  userAuth: { id: adderInfo.id } as User,
+                },
+              } as unknown as User;
+            }
+            // Fallback to the old method if needed
+            else if (member.addedById && member.addedById !== currentUser?.id) {
+              if (member.addedBy && "userInfo" in member.addedBy) {
+                newAdderDetails[member.userId] = member.addedBy as User;
               } else {
                 const result = await getUserDataById(member.addedById);
                 if (result.success && result.user) {
@@ -119,10 +145,40 @@ export default function GroupMemberList({
             // Check relationship with this member if it's not the current user
             if (member.userId !== currentUser?.id) {
               try {
-                const result = await getRelationship(member.userId);
+                // Lấy accessToken từ authStore để tránh lỗi 401
+                const accessToken =
+                  useAuthStore.getState().accessToken || undefined;
+                const result = await getRelationship(
+                  member.userId,
+                  accessToken,
+                );
+                console.log(`Relationship with ${member.userId}:`, result.data);
                 if (result.success && result.data) {
-                  newRelationships[member.userId] =
-                    result.data.status || "NONE";
+                  // API có thể trả về các giá trị khác nhau như "ACCEPTED", "FRIEND", v.v.
+                  // Chuẩn hóa các giá trị để đảm bảo tính nhất quán
+                  const status = result.data.status || "NONE";
+
+                  // Nếu đã là bạn bè (ACCEPTED hoặc FRIEND), đặt thành "ACCEPTED"
+                  if (status === "ACCEPTED" || status === "FRIEND") {
+                    newRelationships[member.userId] = "ACCEPTED";
+                  }
+                  // Nếu đã gửi lời mời kết bạn, đặt thành "PENDING_SENT"
+                  else if (status === "PENDING_SENT") {
+                    newRelationships[member.userId] = "PENDING_SENT";
+                  }
+                  // Nếu đã nhận lời mời kết bạn, đặt thành "PENDING_RECEIVED"
+                  else if (status === "PENDING_RECEIVED") {
+                    newRelationships[member.userId] = "PENDING_RECEIVED";
+                  }
+                  // Các trường hợp khác, giữ nguyên giá trị
+                  else {
+                    newRelationships[member.userId] = status;
+                  }
+
+                  console.log(
+                    `Normalized relationship with ${member.userId}:`,
+                    newRelationships[member.userId],
+                  );
                 } else {
                   newRelationships[member.userId] = "NONE";
                 }
@@ -156,28 +212,18 @@ export default function GroupMemberList({
     const memberData = memberDetails[memberId];
     if (memberData) {
       setSelectedMember(memberData);
+      setShowFriendRequestForm(false);
       setShowProfileDialog(true);
     }
   };
 
   // Handle send friend request
-  const handleSendFriendRequest = async (userId: string) => {
-    if (!userId) return;
-
-    try {
-      setIsSendingRequest((prev) => ({ ...prev, [userId]: true }));
-      const result = await sendFriendRequest(userId);
-      if (result.success) {
-        toast.success("Lời mời kết bạn đã được gửi!");
-        setRelationships((prev) => ({ ...prev, [userId]: "PENDING_SENT" }));
-      } else {
-        toast.error(`Không thể gửi lời mời kết bạn: ${result.error}`);
-      }
-    } catch (error) {
-      console.error("Error sending friend request:", error);
-      toast.error("Đã xảy ra lỗi khi gửi lời mời kết bạn");
-    } finally {
-      setIsSendingRequest((prev) => ({ ...prev, [userId]: false }));
+  const handleSendFriendRequest = (userId: string) => {
+    const memberData = memberDetails[userId];
+    if (memberData) {
+      setSelectedMember(memberData);
+      setShowFriendRequestForm(true);
+      setShowProfileDialog(true);
     }
   };
 
@@ -286,9 +332,9 @@ export default function GroupMemberList({
             ></Button>
           </DialogHeader>
 
-          <div className="p-4 border-b">
+          <div className="px-4 pb-4 border-b">
             <Button
-              className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-black"
+              className="w-full flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-black"
               onClick={() => setShowAddMemberDialog(true)}
             >
               <UserPlus className="h-4 w-4" />
@@ -340,15 +386,19 @@ export default function GroupMemberList({
                             ? "Phó nhóm"
                             : ""}
                       </p>
-                      {member.userId !== currentUser?.id &&
-                        member.addedById &&
-                        adderDetails[member.userId] && (
-                          <p className="text-xs text-gray-500">
-                            Thêm bởi{" "}
-                            {adderDetails[member.userId]?.userInfo?.fullName ||
+                      {member.userId !== currentUser?.id && (
+                        <p className="text-xs text-gray-500">
+                          Thêm bởi{" "}
+                          {member.addedBy && "fullName" in member.addedBy
+                            ? (
+                                member.addedBy as unknown as {
+                                  fullName: string;
+                                }
+                              ).fullName
+                            : adderDetails[member.userId]?.userInfo?.fullName ||
                               "Người dùng"}
-                          </p>
-                        )}
+                        </p>
+                      )}
                       {member.userId !== currentUser?.id &&
                         member.userId !== group?.creatorId && (
                           <p className="text-xs text-gray-500">
@@ -360,26 +410,6 @@ export default function GroupMemberList({
                   </div>
 
                   <div className="flex items-center">
-                    {/* Add friend button if not current user and not already friends */}
-                    {member.userId !== currentUser?.id &&
-                      relationships[member.userId] === "NONE" && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSendFriendRequest(member.userId);
-                          }}
-                          disabled={isSendingRequest[member.userId]}
-                        >
-                          {isSendingRequest[member.userId] ? (
-                            <div className="h-4 w-4 rounded-full border-2 border-gray-600 border-t-transparent animate-spin"></div>
-                          ) : (
-                            <UserPlus className="h-4 w-4 text-blue-500" />
-                          )}
-                        </Button>
-                      )}
-
                     {/* Show pending status */}
                     {member.userId !== currentUser?.id &&
                       relationships[member.userId] === "PENDING_SENT" && (
@@ -393,10 +423,8 @@ export default function GroupMemberList({
                         </Button>
                       )}
 
-                    {/* Show dropdown menu for members if current user is leader or co-leader */}
-                    {(currentUserRole === "LEADER" ||
-                      (currentUserRole === "CO_LEADER" &&
-                        member.role === "MEMBER")) && (
+                    {/* Show dropdown menu for all members except current user */}
+                    {member.userId !== currentUser?.id && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
@@ -404,36 +432,67 @@ export default function GroupMemberList({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          {currentUserRole === "LEADER" &&
-                            member.role === "MEMBER" && (
+                          {/* Add friend option if not already friends */}
+                          {relationships[member.userId] === "NONE" && (
+                            <DropdownMenuItem
+                              onClick={() =>
+                                handleSendFriendRequest(member.userId)
+                              }
+                              disabled={isSendingRequest[member.userId]}
+                            >
+                              {isSendingRequest[member.userId] ? (
+                                <>
+                                  <div className="h-4 w-4 mr-2 rounded-full border-2 border-gray-600 border-t-transparent animate-spin"></div>
+                                  Đang gửi...
+                                </>
+                              ) : (
+                                <>
+                                  <UserPlus className="h-4 w-4 mr-2 text-blue-500" />
+                                  Kết bạn
+                                </>
+                              )}
+                            </DropdownMenuItem>
+                          )}
+
+                          {/* Leader/Co-leader management options */}
+                          {(currentUserRole === "LEADER" ||
+                            (currentUserRole === "CO_LEADER" &&
+                              member.role === "MEMBER")) && (
+                            <>
+                              {currentUserRole === "LEADER" &&
+                                member.role === "MEMBER" && (
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      handlePromoteMember(member.userId)
+                                    }
+                                  >
+                                    <Shield className="h-4 w-4 mr-2" />
+                                    Thăng phó nhóm
+                                  </DropdownMenuItem>
+                                )}
+                              {currentUserRole === "LEADER" &&
+                                member.role === "CO_LEADER" && (
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      handleDemoteMember(member.userId)
+                                    }
+                                  >
+                                    <UserMinus className="h-4 w-4 mr-2" />
+                                    Hạ xuống thành viên
+                                  </DropdownMenuItem>
+                                )}
+                              <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onClick={() =>
-                                  handlePromoteMember(member.userId)
+                                  openKickMemberDialog(member.userId)
                                 }
+                                className="text-red-500 focus:text-red-500"
                               >
-                                <Shield className="h-4 w-4 mr-2" />
-                                Thăng phó nhóm
+                                <Ban className="h-4 w-4 mr-2" />
+                                Xóa khỏi nhóm
                               </DropdownMenuItem>
-                            )}
-                          {currentUserRole === "LEADER" &&
-                            member.role === "CO_LEADER" && (
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  handleDemoteMember(member.userId)
-                                }
-                              >
-                                <UserMinus className="h-4 w-4 mr-2" />
-                                Hạ xuống thành viên
-                              </DropdownMenuItem>
-                            )}
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => openKickMemberDialog(member.userId)}
-                            className="text-red-500 focus:text-red-500"
-                          >
-                            <Ban className="h-4 w-4 mr-2" />
-                            Xóa khỏi nhóm
-                          </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
@@ -450,8 +509,15 @@ export default function GroupMemberList({
         <ProfileDialog
           user={selectedMember}
           isOpen={showProfileDialog}
-          onOpenChange={setShowProfileDialog}
+          onOpenChange={(open) => {
+            setShowProfileDialog(open);
+            if (!open) {
+              setSelectedMember(null);
+              setShowFriendRequestForm(false);
+            }
+          }}
           isOwnProfile={selectedMember.id === currentUser?.id}
+          initialShowFriendRequestForm={showFriendRequestForm}
         />
       )}
 
