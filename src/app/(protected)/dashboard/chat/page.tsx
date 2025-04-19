@@ -15,6 +15,9 @@ import { getUserDataById } from "@/actions/user.action";
 export default function ChatPage() {
   const [isTabContentVisible, setIsTabContentVisible] = useState(true);
   const [showContactInfo, setShowContactInfo] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1024,
+  );
 
   // Get state from stores
   const currentUser = useAuthStore((state) => state.user);
@@ -64,18 +67,28 @@ export default function ChatPage() {
     handleUrlParams();
   }, [groupIdParam, userIdParam, currentUser?.id]);
 
+  // Track if a chat is currently open
+  const isChatOpen = selectedContact !== null || selectedGroup !== null;
+
   // Handle window resize for responsive layout
   useEffect(() => {
     const handleResize = () => {
-      setIsTabContentVisible(window.innerWidth >= 768);
-      if (window.innerWidth < 1024) {
+      const width = window.innerWidth;
+      setWindowWidth(width);
+
+      // Show conversation list if no chat is open or screen is large enough
+      // Hide conversation list on small screens when a chat is open
+      setIsTabContentVisible(!isChatOpen || width >= 768);
+
+      // Hide contact info on smaller screens
+      if (width < 1024) {
         setShowContactInfo(false);
       }
     };
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [isChatOpen]);
 
   // Handle selecting a contact or group
   const handleSelectContact = async (
@@ -161,20 +174,36 @@ export default function ChatPage() {
     setShowContactInfo((prev) => !prev);
   };
 
+  // Function to go back to conversation list on mobile
+  const handleBackToList = () => {
+    setIsTabContentVisible(true);
+  };
+
   return (
     <div className="flex h-full w-full bg-gray-100 overflow-hidden">
       {/* Left Sidebar - Contact List */}
       <div
-        className={`w-[340px] bg-white border-r flex flex-col overflow-hidden ${isTabContentVisible ? "flex" : "hidden"}`}
+        className={`w-full md:w-[340px] bg-white border-r flex flex-col overflow-hidden ${isTabContentVisible ? "flex" : "hidden"}`}
       >
-        <ContactList onSelectConversation={handleSelectContact} />
+        <ContactList
+          onSelectConversation={(id, type) => {
+            handleSelectContact(id, type);
+            // Hide conversation list on mobile when selecting a chat
+            if (windowWidth < 768) {
+              setIsTabContentVisible(false);
+            }
+          }}
+        />
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div
+        className={`flex-1 flex flex-col overflow-hidden ${isTabContentVisible && windowWidth < 768 ? "hidden" : "flex"}`}
+      >
         <ChatArea
           currentUser={currentUser as User}
           onToggleInfo={toggleContactInfo}
+          onBackToList={handleBackToList}
         />
       </div>
 

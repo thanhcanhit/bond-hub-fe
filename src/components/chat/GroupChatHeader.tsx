@@ -4,18 +4,20 @@ import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Group } from "@/types/base";
-import { Info, Search, X, Users } from "lucide-react";
+import { Info, Search, X, Users, ChevronLeft } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import { Input } from "@/components/ui/input";
 
 interface GroupChatHeaderProps {
   group: Group | null;
   onToggleInfo: () => void;
+  onBackToList?: () => void;
 }
 
 export default function GroupChatHeader({
   group,
   onToggleInfo,
+  onBackToList,
 }: GroupChatHeaderProps) {
   const [isSearching, setIsSearching] = useState(false);
   const { searchText, setSearchText, searchMessages, clearSearch } =
@@ -46,26 +48,38 @@ export default function GroupChatHeader({
   return (
     <>
       <div className="bg-white border-b border-gray-200 p-3 h-[69px] flex items-center justify-between">
-        <div className="flex items-center cursor-pointer hover:bg-gray-100 p-1 rounded-md transition-colors">
-          <div className="relative">
-            <Avatar className="h-10 w-10 mr-3">
-              <AvatarImage
-                src={group.avatarUrl || undefined}
-                className="object-cover"
-              />
-              <AvatarFallback>
-                {group.name?.slice(0, 2).toUpperCase() || "GR"}
-              </AvatarFallback>
-            </Avatar>
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold">
-              {group.name || "Nhóm chat"}
-            </h2>
-            <p className="text-xs text-gray-500 flex items-center">
-              <Users className="h-3 w-3 mr-1" />
-              {group.members?.length || 0} thành viên
-            </p>
+        <div className="flex items-center">
+          {onBackToList && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="mr-2 md:hidden"
+              onClick={onBackToList}
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+          )}
+          <div className="flex items-center cursor-pointer hover:bg-gray-100 p-1 rounded-md transition-colors">
+            <div className="relative">
+              <Avatar className="h-10 w-10 mr-3">
+                <AvatarImage
+                  src={group.avatarUrl || undefined}
+                  className="object-cover"
+                />
+                <AvatarFallback>
+                  {group.name?.slice(0, 2).toUpperCase() || "GR"}
+                </AvatarFallback>
+              </Avatar>
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold">
+                {group.name || "Nhóm chat"}
+              </h2>
+              <p className="text-xs text-gray-500 flex items-center">
+                <Users className="h-3 w-3 mr-1" />
+                {group.members?.length || 0} thành viên
+              </p>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">

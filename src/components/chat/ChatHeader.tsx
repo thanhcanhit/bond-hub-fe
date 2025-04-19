@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { User, UserInfo } from "@/types/base";
-import { Info, Search, X } from "lucide-react";
+import { Info, Search, X, ChevronLeft } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 
 import { Input } from "@/components/ui/input";
@@ -16,9 +16,14 @@ interface ChatHeaderProps {
     | (User & { userInfo: UserInfo; online?: boolean; lastSeen?: Date })
     | null;
   onToggleInfo: () => void;
+  onBackToList?: () => void;
 }
 
-export default function ChatHeader({ contact, onToggleInfo }: ChatHeaderProps) {
+export default function ChatHeader({
+  contact,
+  onToggleInfo,
+  onBackToList,
+}: ChatHeaderProps) {
   const [isSearching, setIsSearching] = useState(false);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
   const { searchText, setSearchText, searchMessages, clearSearch } =
@@ -49,36 +54,49 @@ export default function ChatHeader({ contact, onToggleInfo }: ChatHeaderProps) {
   return (
     <>
       <div className="bg-white border-b border-gray-200 p-3 h-[69px] flex items-center justify-between">
-        <div
-          className="flex items-center cursor-pointer hover:bg-gray-100 p-1 rounded-md transition-colors"
-          onClick={() => setShowProfileDialog(true)}
-        >
-          <div className="relative">
-            <Avatar className="h-10 w-10 mr-3">
-              <AvatarImage
-                src={contact.userInfo?.profilePictureUrl || undefined}
-                className="object-cover"
-              />
-              <AvatarFallback>
-                {contact.userInfo?.fullName?.slice(0, 2).toUpperCase() || "??"}
-              </AvatarFallback>
-            </Avatar>
-            {/* Online status indicator */}
-            {contact.online && (
-              <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white"></span>
-            )}
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold">
-              {contact.userInfo?.fullName || "Người dùng"}
-            </h2>
-            <p className="text-xs text-gray-500">
-              {contact.online
-                ? "Đang hoạt động"
-                : contact.lastSeen
-                  ? `Hoạt động ${new Date(contact.lastSeen).toLocaleString()}`
-                  : contact.userInfo?.statusMessage || "Không có trạng thái"}
-            </p>
+        <div className="flex items-center">
+          {onBackToList && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="mr-2 md:hidden"
+              onClick={onBackToList}
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+          )}
+          <div
+            className="flex items-center cursor-pointer hover:bg-gray-100 p-1 rounded-md transition-colors"
+            onClick={() => setShowProfileDialog(true)}
+          >
+            <div className="relative">
+              <Avatar className="h-10 w-10 mr-3">
+                <AvatarImage
+                  src={contact.userInfo?.profilePictureUrl || undefined}
+                  className="object-cover"
+                />
+                <AvatarFallback>
+                  {contact.userInfo?.fullName?.slice(0, 2).toUpperCase() ||
+                    "??"}
+                </AvatarFallback>
+              </Avatar>
+              {/* Online status indicator */}
+              {contact.online && (
+                <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white"></span>
+              )}
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold">
+                {contact.userInfo?.fullName || "Người dùng"}
+              </h2>
+              <p className="text-xs text-gray-500">
+                {contact.online
+                  ? "Đang hoạt động"
+                  : contact.lastSeen
+                    ? `Hoạt động ${new Date(contact.lastSeen).toLocaleString()}`
+                    : contact.userInfo?.statusMessage || "Không có trạng thái"}
+              </p>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">

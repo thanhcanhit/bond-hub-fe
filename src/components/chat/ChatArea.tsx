@@ -20,9 +20,14 @@ import { X } from "lucide-react";
 interface ChatAreaProps {
   currentUser: User;
   onToggleInfo: () => void;
+  onBackToList?: () => void;
 }
 
-export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
+export default function ChatArea({
+  currentUser,
+  onToggleInfo,
+  onBackToList,
+}: ChatAreaProps) {
   const {
     messages,
     selectedContact,
@@ -458,9 +463,17 @@ export default function ChatArea({ currentUser, onToggleInfo }: ChatAreaProps) {
   return (
     <div className="flex flex-col h-full w-full">
       {currentChatType === "USER" ? (
-        <ChatHeader contact={selectedContact} onToggleInfo={onToggleInfo} />
+        <ChatHeader
+          contact={selectedContact}
+          onToggleInfo={onToggleInfo}
+          onBackToList={onBackToList}
+        />
       ) : (
-        <GroupChatHeader group={selectedGroup} onToggleInfo={onToggleInfo} />
+        <GroupChatHeader
+          group={selectedGroup}
+          onToggleInfo={onToggleInfo}
+          onBackToList={onBackToList}
+        />
       )}
 
       <ChatMessagesDropZone
