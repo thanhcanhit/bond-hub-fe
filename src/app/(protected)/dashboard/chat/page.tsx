@@ -15,9 +15,6 @@ import { getUserDataById } from "@/actions/user.action";
 export default function ChatPage() {
   const [isTabContentVisible, setIsTabContentVisible] = useState(true);
   const [showContactInfo, setShowContactInfo] = useState(false);
-  const [windowWidth, setWindowWidth] = useState(
-    typeof window !== "undefined" ? window.innerWidth : 1024,
-  );
   const [isMobile, setIsMobile] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
 
@@ -76,7 +73,6 @@ export default function ChatPage() {
   useEffect(() => {
     const handleResize = () => {
       const width = window.innerWidth;
-      setWindowWidth(width);
 
       // Set device type flags
       setIsMobile(width < 768);
