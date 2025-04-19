@@ -92,6 +92,12 @@ export const useAuthStore = create<AuthState>()(
 
           // Lưu refreshToken vào state nhưng không lưu vào localStorage
           // (partialize sẽ loại bỏ refreshToken khi lưu vào localStorage)
+          console.log("Login successful, saving tokens and deviceId to store", {
+            hasAccessToken: !!result.accessToken,
+            hasRefreshToken: !!result.refreshToken,
+            hasDeviceId: !!result.deviceId,
+          });
+
           set({
             accessToken: result.accessToken,
             refreshToken: result.refreshToken,
@@ -99,10 +105,15 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
-          console.log(
-            "After login, accessToken in store:",
-            useAuthStore.getState().accessToken ? "Token exists" : "No token",
-          );
+
+          // Kiểm tra xem các giá trị đã được lưu đúng chưa
+          const state = useAuthStore.getState();
+          console.log("After login, state check:", {
+            hasAccessToken: !!state.accessToken,
+            hasRefreshToken: !!state.refreshToken,
+            hasDeviceId: !!state.deviceId,
+            isAuthenticated: state.isAuthenticated,
+          });
 
           // Socket sẽ được khởi tạo tự động bởi SocketProvider
           // Then try to get additional user data
@@ -170,8 +181,20 @@ export const useAuthStore = create<AuthState>()(
       setTokens: (accessToken, refreshToken) => {
         console.log(
           "setTokens called with accessToken:",
-          accessToken ? "Token exists" : "No token",
+          accessToken ? `${accessToken.substring(0, 10)}...` : "No token",
+          "and refreshToken:",
+          refreshToken ? `${refreshToken.substring(0, 10)}...` : "No token",
         );
+
+        if (!accessToken) {
+          console.error("Attempted to set tokens with null/empty accessToken");
+          return;
+        }
+
+        if (!refreshToken) {
+          console.error("Attempted to set tokens with null/empty refreshToken");
+          return;
+        }
 
         // Lưu refreshToken vào state nhưng không lưu vào localStorage
         // (được xử lý bởi partialize)
@@ -182,24 +205,44 @@ export const useAuthStore = create<AuthState>()(
           // Keep existing deviceId
         });
 
+        // Kiểm tra xem tokens đã được lưu đúng chưa
+        const state = useAuthStore.getState();
+        console.log("After setTokens, state check:", {
+          hasAccessToken: !!state.accessToken,
+          hasRefreshToken: !!state.refreshToken,
+          isAuthenticated: state.isAuthenticated,
+          accessTokenPrefix: state.accessToken
+            ? state.accessToken.substring(0, 10) + "..."
+            : "none",
+          refreshTokenPrefix: state.refreshToken
+            ? state.refreshToken.substring(0, 10) + "..."
+            : "none",
+        });
+
         // Socket sẽ được cập nhật tự động bởi SocketProvider khi accessToken thay đổi
-        console.log(
-          "After setTokens, accessToken in store:",
-          useAuthStore.getState().accessToken ? "Token exists" : "No token",
-        );
       },
     }),
 
     {
       name: "auth-storage",
       storage: createJSONStorage(() => storage),
-      partialize: (state) => ({
-        accessToken: state.accessToken,
-        // Không lưu refreshToken vào localStorage
-        isAuthenticated: state.isAuthenticated,
-        user: state.user,
-        deviceId: state.deviceId,
-      }),
+      partialize: (state) => {
+        // Ghi log trạng thái trước khi lưu vào localStorage
+        console.log("Persisting auth state to localStorage:", {
+          hasAccessToken: !!state.accessToken,
+          hasRefreshToken: !!state.refreshToken, // Chỉ để debug, không lưu refreshToken
+          hasDeviceId: !!state.deviceId,
+          isAuthenticated: state.isAuthenticated,
+        });
+
+        return {
+          accessToken: state.accessToken,
+          // Không lưu refreshToken vào localStorage vì lý do bảo mật
+          isAuthenticated: state.isAuthenticated,
+          user: state.user,
+          deviceId: state.deviceId, // Đảm bảo deviceId được lưu
+        };
+      },
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.setHasHydrated(true);

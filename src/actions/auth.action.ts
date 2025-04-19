@@ -1,5 +1,8 @@
 "use server";
-import axiosInstance, { createAxiosInstance } from "@/lib/axios";
+import axiosInstance, {
+  createAxiosInstance,
+  refreshTokenAxios,
+} from "@/lib/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { DeviceType } from "@/types/base";
 import { isEmail } from "@/utils/helpers";
@@ -126,48 +129,99 @@ export async function logout() {
 // Làm mới token
 export async function refreshToken() {
   try {
-    const refreshToken = useAuthStore.getState().refreshToken;
-    const deviceId = useAuthStore.getState().deviceId;
+    console.log("[auth.action] Starting token refresh...");
+    const authState = useAuthStore.getState();
+    const refreshToken = authState.refreshToken;
+    const deviceId = authState.deviceId;
+
+    console.log("[auth.action] Auth state during refresh:", {
+      hasRefreshToken: !!refreshToken,
+      hasDeviceId: !!deviceId,
+      isAuthenticated: authState.isAuthenticated,
+    });
 
     if (!refreshToken) {
+      console.error("[auth.action] Refresh token is missing");
       throw new Error("No refresh token available");
     }
 
     if (!deviceId) {
+      console.error("[auth.action] Device ID is missing");
       throw new Error("No device ID available");
     }
 
-    // Send both refreshToken and deviceId in the request body as required by backend
-    // Không cần token cho refresh token
-    const serverAxios = createAxiosInstance();
-    const response = await serverAxios.post("/auth/refresh", {
+    // Sử dụng instance axios dành riêng cho refresh token đã được tạo trong lib/axios.ts
+    console.log(
+      `[auth.action] Sending refresh token request with deviceId: ${deviceId}`,
+    );
+
+    // Gửi refreshToken và deviceId trong request body theo yêu cầu của backend
+    console.log(
+      `[auth.action] Sending refresh token request with refreshToken: ${refreshToken.substring(0, 10)}... and deviceId: ${deviceId}`,
+    );
+
+    const response = await refreshTokenAxios.post("/auth/refresh", {
       refreshToken,
       deviceId,
     });
 
+    console.log(
+      `[auth.action] Refresh token response status: ${response.status}`,
+    );
+
+    if (!response.data || !response.data.accessToken) {
+      console.error(
+        "[auth.action] Invalid response from refresh token API:",
+        response.data,
+      );
+      throw new Error("Invalid response from refresh token API");
+    }
+
     const { accessToken } = response.data;
     const device = response.data.device;
 
+    console.log(
+      `[auth.action] Received new access token: ${accessToken.substring(0, 10)}...`,
+    );
+
     if (typeof window !== "undefined") {
       // Keep the same refreshToken since backend doesn't return a new one
+      console.log("[auth.action] Setting tokens in auth store...");
       useAuthStore.getState().setTokens(accessToken, refreshToken);
     }
 
-    // Cập nhật cookie
-    const { cookies } = await import("next/headers");
-    (await cookies()).set("access_token", accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    });
+    // Cập nhật cookie nếu đang chạy trên server
+    if (typeof window === "undefined") {
+      try {
+        console.log("[auth.action] Setting cookie on server...");
+        const { cookies } = await import("next/headers");
+        (await cookies()).set("access_token", accessToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          maxAge: 60 * 60 * 24 * 7, // 7 days
+          path: "/",
+        });
+      } catch (cookieError) {
+        console.error("[auth.action] Failed to set cookie:", cookieError);
+        // Continue even if cookie setting fails
+      }
+    }
 
+    console.log("[auth.action] Token refresh successful");
     return { success: true, accessToken, device };
   } catch (error) {
-    console.error("Token refresh failed:", error);
+    console.error("[auth.action] Token refresh failed:", error);
+
+    // Only logout if we're in the browser
     if (typeof window !== "undefined") {
-      useAuthStore.getState().logout();
+      console.log("[auth.action] Logging out due to refresh token failure");
+      try {
+        await useAuthStore.getState().logout();
+      } catch (logoutError) {
+        console.error("[auth.action] Error during logout:", logoutError);
+      }
     }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
