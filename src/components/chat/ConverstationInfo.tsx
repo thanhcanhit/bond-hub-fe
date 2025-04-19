@@ -12,16 +12,26 @@ interface ContactInfoProps {
     | (User & { userInfo: UserInfo; online?: boolean; lastSeen?: Date })
     | null;
   onClose: () => void;
+  isOverlay?: boolean;
 }
 
-export default function ContactInfo({ contact, onClose }: ContactInfoProps) {
+export default function ContactInfo({
+  contact,
+  onClose,
+  isOverlay = false,
+}: ContactInfoProps) {
   if (!contact) return null;
 
   return (
     <div className="h-full w-full flex flex-col bg-white">
       <div className="p-3 h-[69px] border-b flex items-center justify-between shrink-0">
         <h3 className="font-semibold">Thông tin hội thoại</h3>
-        <Button variant="ghost" size="icon" onClick={onClose}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          className={isOverlay ? "bg-gray-100 hover:bg-gray-200" : ""}
+        >
           <X className="h-5 w-5" />
         </Button>
       </div>

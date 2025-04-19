@@ -18,6 +18,8 @@ export default function ChatPage() {
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1024,
   );
+  const [isMobile, setIsMobile] = useState(false);
+  const [isTablet, setIsTablet] = useState(false);
 
   // Get state from stores
   const currentUser = useAuthStore((state) => state.user);
@@ -75,6 +77,10 @@ export default function ChatPage() {
     const handleResize = () => {
       const width = window.innerWidth;
       setWindowWidth(width);
+
+      // Set device type flags
+      setIsMobile(width < 768);
+      setIsTablet(width >= 768 && width < 1024);
 
       // Show conversation list if no chat is open or screen is large enough
       // Hide conversation list on small screens when a chat is open
@@ -189,39 +195,66 @@ export default function ChatPage() {
           onSelectConversation={(id, type) => {
             handleSelectContact(id, type);
             // Hide conversation list on mobile when selecting a chat
-            if (windowWidth < 768) {
+            if (isMobile) {
               setIsTabContentVisible(false);
             }
           }}
         />
       </div>
 
-      {/* Main Chat Area */}
-      <div
-        className={`flex-1 flex flex-col overflow-hidden ${isTabContentVisible && windowWidth < 768 ? "hidden" : "flex"}`}
-      >
-        <ChatArea
-          currentUser={currentUser as User}
-          onToggleInfo={toggleContactInfo}
-          onBackToList={handleBackToList}
-        />
-      </div>
+      {/* Main Content Area - Contains Chat and Info Panel */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Main Chat Area */}
+        <div
+          className={`
+            ${isTabContentVisible && isMobile ? "hidden" : "flex"}
+            flex-col overflow-hidden transition-all duration-300
+            ${!isMobile && !isTablet && showContactInfo ? "w-[calc(100%-340px)]" : "w-full"}
+          `}
+        >
+          <ChatArea
+            currentUser={currentUser as User}
+            onToggleInfo={toggleContactInfo}
+            onBackToList={handleBackToList}
+          />
+        </div>
 
-      {/* Right Sidebar - Contact/Group Info */}
-      <div
-        className={`w-[340px] bg-white border-l flex flex-col overflow-hidden transition-all duration-300 ${showContactInfo ? "flex" : "hidden"}`}
-      >
-        {currentChatType === "USER" ? (
-          <ContactInfo
-            contact={selectedContact as (User & { userInfo: UserInfo }) | null}
-            onClose={() => setShowContactInfo(false)}
-          />
-        ) : (
-          <GroupInfo
-            group={selectedGroup}
-            onClose={() => setShowContactInfo(false)}
-          />
-        )}
+        {/* Right Sidebar - Contact/Group Info */}
+        {/* On larger screens, it's a sidebar. On smaller screens, it overlays the chat area */}
+        <div
+          className={`
+            ${isMobile || isTablet ? "absolute right-0 top-0 bottom-0 z-30" : "absolute right-0 top-0 bottom-0"}
+            w-[340px] border-l bg-white flex flex-col overflow-hidden
+            transition-all duration-300 transform
+            ${showContactInfo ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 pointer-events-none"}
+          `}
+        >
+          {/* Semi-transparent backdrop for mobile overlay mode */}
+          {(isMobile || isTablet) && (
+            <div
+              className={`fixed inset-0 bg-black/20 z-20 transition-opacity duration-300 ${showContactInfo ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+              onClick={() => setShowContactInfo(false)}
+            />
+          )}
+
+          <div className="h-full relative z-30">
+            {currentChatType === "USER" ? (
+              <ContactInfo
+                contact={
+                  selectedContact as (User & { userInfo: UserInfo }) | null
+                }
+                onClose={() => setShowContactInfo(false)}
+                isOverlay={isMobile || isTablet}
+              />
+            ) : (
+              <GroupInfo
+                group={selectedGroup}
+                onClose={() => setShowContactInfo(false)}
+                isOverlay={isMobile || isTablet}
+              />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

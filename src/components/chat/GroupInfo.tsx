@@ -69,9 +69,14 @@ import AddMemberDialog from "../group/AddMemberDialog";
 interface GroupInfoProps {
   group: Group | null;
   onClose: () => void;
+  isOverlay?: boolean;
 }
 
-export default function GroupInfo({ group, onClose }: GroupInfoProps) {
+export default function GroupInfo({
+  group,
+  onClose,
+  isOverlay = false,
+}: GroupInfoProps) {
   const [mediaFiles, setMediaFiles] = useState<(Media & { createdAt: Date })[]>(
     [],
   );
@@ -408,7 +413,9 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
 
   if (showMembersList) {
     return (
-      <div className="h-full flex flex-col bg-white border-l">
+      <div
+        className={`h-full flex flex-col bg-white ${!isOverlay ? "border-l" : ""}`}
+      >
         <div className="p-4 flex items-center justify-between border-b">
           <div className="flex items-center">
             <Button
@@ -709,13 +716,15 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-white border-l">
+    <div
+      className={`h-full flex flex-col bg-white ${!isOverlay ? "border-l" : ""}`}
+    >
       <div className="p-4 flex items-center justify-between border-b">
         <h2 className="font-semibold">Thông tin nhóm</h2>
         <Button
           variant="ghost"
           size="icon"
-          className="rounded-full"
+          className={`${isOverlay ? "bg-gray-100 hover:bg-gray-200" : "rounded-full"}`}
           onClick={onClose}
         >
           <X className="h-5 w-5" />
