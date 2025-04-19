@@ -896,11 +896,15 @@ export default function SearchHeader({ className }: { className?: string }) {
                   >
                     <div className="h-10 w-10 rounded-full overflow-hidden mr-3 flex-shrink-0">
                       {senderDetails[message.sender.id]?.userInfo
-                        ?.profilePictureUrl ? (
+                        ?.profilePictureUrl &&
+                      senderDetails[
+                        message.sender.id
+                      ]?.userInfo?.profilePictureUrl.trim() !== "" ? (
                         <Image
                           src={
                             senderDetails[message.sender.id]?.userInfo
-                              ?.profilePictureUrl || ""
+                              ?.profilePictureUrl ||
+                            "/images/default-avatar.png"
                           }
                           alt={
                             senderDetails[message.sender.id]?.userInfo
@@ -1024,7 +1028,12 @@ export default function SearchHeader({ className }: { className?: string }) {
                         <div className="flex items-center">
                           <div className="h-8 w-8 rounded-full overflow-hidden mr-2">
                             <Image
-                              src={friend.profilePictureUrl}
+                              src={
+                                friend.profilePictureUrl &&
+                                friend.profilePictureUrl.trim() !== ""
+                                  ? friend.profilePictureUrl
+                                  : "/images/default-avatar.png"
+                              }
                               alt={friend.fullName}
                               width={32}
                               height={32}
