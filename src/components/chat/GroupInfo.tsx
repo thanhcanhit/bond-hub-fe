@@ -302,9 +302,36 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
             const matches = message.content.text.match(urlRegex);
             if (matches) {
               matches.forEach((url) => {
+                // Try to create a more readable title from the URL
+                let title = url;
+                try {
+                  // Remove protocol and trailing slashes
+                  title = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+                  // Extract path components
+                  const urlObj = new URL(url);
+                  const pathParts = urlObj.pathname.split("/");
+
+                  // If there's a meaningful path, use the last part as title
+                  if (pathParts.length > 1 && pathParts[pathParts.length - 1]) {
+                    // Replace dashes and underscores with spaces and capitalize words
+                    const lastPart = pathParts[pathParts.length - 1]
+                      .replace(/[-_]/g, " ")
+                      .replace(/\.(html|php|asp|jsp)$/, "");
+
+                    if (lastPart.length > 0) {
+                      title =
+                        lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
+                    }
+                  }
+                } catch (e) {
+                  // If URL parsing fails, just use the original URL
+                  console.error("Error parsing URL for title:", e);
+                }
+
                 extractedLinks.push({
                   url,
-                  title: url,
+                  title,
                   timestamp: new Date(message.createdAt),
                 });
               });
@@ -941,33 +968,48 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                 </div>
               ) : links.length > 0 ? (
                 <div className="p-3 space-y-2">
-                  {links.slice(0, 3).map((link, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center p-2 border rounded-md hover:bg-gray-50 cursor-pointer"
-                    >
-                      <div className="bg-blue-100 p-2 rounded-md mr-3">
-                        <ExternalLink className="h-5 w-5 text-blue-500" />
+                  {links.slice(0, 3).map((link, index) => {
+                    // Extract domain from URL
+                    const domain = link.url
+                      .replace(/^https?:\/\//, "")
+                      .split("/")[0];
+                    // Format date as DD/MM
+                    const date = new Date(link.timestamp);
+                    const formattedDate = `${date.getDate().toString().padStart(2, "0")}/${(date.getMonth() + 1).toString().padStart(2, "0")}`;
+
+                    return (
+                      <div
+                        key={index}
+                        className="flex items-center p-2 border rounded-md hover:bg-gray-50 cursor-pointer"
+                        onClick={() =>
+                          window.open(link.url, "_blank", "noopener,noreferrer")
+                        }
+                      >
+                        <div className="bg-gray-100 p-2 rounded-md mr-3">
+                          <ExternalLink className="h-5 w-5 text-gray-500" />
+                        </div>
+                        <div className="flex-1 min-w-0 mr-2">
+                          <p className="font-medium text-sm truncate max-w-[180px]">
+                            {link.title.length > 40
+                              ? link.title.substring(0, 40) + "..."
+                              : link.title}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {domain}
+                          </p>
+                        </div>
+                        <div className="text-xs text-gray-500 whitespace-nowrap">
+                          {formattedDate}
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {link.title}
-                        </p>
-                        <p className="text-xs text-gray-500 truncate">
-                          {link.url}
-                        </p>
-                      </div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {links.length > 3 && (
-                    <div className="text-center pt-1">
+                    <div className="mt-2 text-center">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-blue-500"
+                        className="text-sm font-semibold w-full bg-[#e5e7eb] hover:bg-gray-300"
                       >
                         Xem tất cả
                       </Button>
