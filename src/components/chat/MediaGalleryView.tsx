@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Media } from "@/types/base";
 import Image from "next/image";
 import { getLinkIcon, getLinkTitle } from "@/utils/link-utils";
+import MediaViewer from "@/components/media/MediaViewer";
 
 interface MediaGalleryViewProps {
   mediaFiles: (Media & { createdAt: Date })[];
@@ -34,6 +35,8 @@ export default function MediaGalleryView({
   const [sortBy, setSortBy] = useState<SortOption>("date");
   const [mediaByDate, setMediaByDate] = useState<MediaByDate[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const [showMediaViewer, setShowMediaViewer] = useState(false);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [documentsByDate, setDocumentsByDate] = useState<MediaByDate[]>([]);
   const [linksByDate, setLinksByDate] = useState<
     { date: string; links: { url: string; title: string; timestamp: Date }[] }[]
@@ -209,7 +212,17 @@ export default function MediaGalleryView({
                       {group.media.map((media, index) => (
                         <div
                           key={`${media.fileId}-${index}`}
-                          className="aspect-square rounded-sm overflow-hidden"
+                          className="aspect-square rounded-sm overflow-hidden cursor-pointer"
+                          onClick={() => {
+                            // Find the index of this media in the full mediaFiles array
+                            const fullIndex = mediaFiles.findIndex(
+                              (m) => m.fileId === media.fileId,
+                            );
+                            setSelectedMediaIndex(
+                              fullIndex >= 0 ? fullIndex : index,
+                            );
+                            setShowMediaViewer(true);
+                          }}
                         >
                           <Image
                             src={media.url}
@@ -546,6 +559,15 @@ export default function MediaGalleryView({
           </div>
         )}
       </div>
+      {/* Media Viewer */}
+      {showMediaViewer && mediaFiles.length > 0 && (
+        <MediaViewer
+          isOpen={showMediaViewer}
+          onClose={() => setShowMediaViewer(false)}
+          media={mediaFiles}
+          initialIndex={selectedMediaIndex}
+        />
+      )}
     </div>
   );
 }

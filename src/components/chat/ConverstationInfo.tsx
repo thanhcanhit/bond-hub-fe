@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { User, UserInfo, Media } from "@/types/base";
 import { getLinkIcon, getLinkTitle } from "@/utils/link-utils";
+import MediaViewer from "@/components/media/MediaViewer";
 import {
   X,
   Bell,
@@ -49,6 +50,8 @@ export default function ContactInfo({
     [],
   );
   const [showMediaGallery, setShowMediaGallery] = useState(false);
+  const [showMediaViewer, setShowMediaViewer] = useState(false);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [links, setLinks] = useState<
     { url: string; title: string; timestamp: Date }[]
   >([]);
@@ -69,8 +72,16 @@ export default function ContactInfo({
 
       // Lọc media từ tin nhắn hiện có
       const extractMediaFromMessages = () => {
-        const imageAndVideoFiles: (Media & { createdAt: Date })[] = [];
-        const documentFiles: (Media & { createdAt: Date })[] = [];
+        const imageAndVideoFiles: (Media & {
+          createdAt: Date;
+          sender?: unknown;
+          senderId?: string;
+        })[] = [];
+        const documentFiles: (Media & {
+          createdAt: Date;
+          sender?: unknown;
+          senderId?: string;
+        })[] = [];
         const extractedLinks: {
           url: string;
           title: string;
@@ -101,11 +112,15 @@ export default function ContactInfo({
                 imageAndVideoFiles.push({
                   ...media,
                   createdAt: new Date(message.createdAt),
+                  senderId: message.senderId,
+                  sender: message.sender,
                 });
               } else {
                 documentFiles.push({
                   ...media,
                   createdAt: new Date(message.createdAt),
+                  senderId: message.senderId,
+                  sender: message.sender,
                 });
               }
             });
@@ -269,6 +284,10 @@ export default function ContactInfo({
                       <div
                         key={index}
                         className="aspect-square relative overflow-hidden border border-gray-200 rounded-md cursor-pointer"
+                        onClick={() => {
+                          setSelectedMediaIndex(index);
+                          setShowMediaViewer(true);
+                        }}
                       >
                         <div
                           className="w-full h-full bg-cover bg-center"
@@ -479,6 +498,17 @@ export default function ContactInfo({
           isOpen={showCreateGroupDialog}
           onOpenChange={setShowCreateGroupDialog}
           preSelectedFriendId={contact.id}
+        />
+      )}
+
+      {/* Media Viewer */}
+      {showMediaViewer && mediaFiles.length > 0 && (
+        <MediaViewer
+          isOpen={showMediaViewer}
+          onClose={() => setShowMediaViewer(false)}
+          media={mediaFiles}
+          initialIndex={selectedMediaIndex}
+          chatName={contact.userInfo?.fullName || "Hội thoại"}
         />
       )}
     </div>

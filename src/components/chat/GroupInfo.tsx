@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Group, User, UserInfo, Media, GroupRole } from "@/types/base";
 import { getLinkIcon, getLinkTitle } from "@/utils/link-utils";
+import MediaViewer from "@/components/media/MediaViewer";
 import {
   X,
   Users,
@@ -84,6 +85,8 @@ export default function GroupInfo({
     [],
   );
   const [showMediaGallery, setShowMediaGallery] = useState(false);
+  const [showMediaViewer, setShowMediaViewer] = useState(false);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [links, setLinks] = useState<
     { url: string; title: string; timestamp: Date }[]
   >([]);
@@ -265,8 +268,16 @@ export default function GroupInfo({
 
       // Lọc media từ tin nhắn hiện có
       const extractMediaFromMessages = () => {
-        const imageAndVideoFiles: (Media & { createdAt: Date })[] = [];
-        const documentFiles: (Media & { createdAt: Date })[] = [];
+        const imageAndVideoFiles: (Media & {
+          createdAt: Date;
+          sender?: unknown;
+          senderId?: string;
+        })[] = [];
+        const documentFiles: (Media & {
+          createdAt: Date;
+          sender?: unknown;
+          senderId?: string;
+        })[] = [];
         const extractedLinks: {
           url: string;
           title: string;
@@ -297,11 +308,15 @@ export default function GroupInfo({
                 imageAndVideoFiles.push({
                   ...media,
                   createdAt: new Date(message.createdAt),
+                  sender: message.sender,
+                  senderId: message.senderId,
                 });
               } else {
                 documentFiles.push({
                   ...media,
                   createdAt: new Date(message.createdAt),
+                  sender: message.sender,
+                  senderId: message.senderId,
                 });
               }
             });
@@ -855,6 +870,10 @@ export default function GroupInfo({
                       <div
                         key={index}
                         className="aspect-square relative overflow-hidden border border-gray-200 rounded-md cursor-pointer"
+                        onClick={() => {
+                          setSelectedMediaIndex(index);
+                          setShowMediaViewer(true);
+                        }}
                       >
                         <div
                           className="w-full h-full bg-cover bg-center"
@@ -1167,6 +1186,17 @@ export default function GroupInfo({
               window.location.reload();
             }, 500);
           }}
+        />
+      )}
+
+      {/* Media Viewer */}
+      {showMediaViewer && mediaFiles.length > 0 && (
+        <MediaViewer
+          isOpen={showMediaViewer}
+          onClose={() => setShowMediaViewer(false)}
+          media={mediaFiles}
+          initialIndex={selectedMediaIndex}
+          chatName={group.name || "Nhóm chat"}
         />
       )}
 
