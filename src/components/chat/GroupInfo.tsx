@@ -24,10 +24,12 @@ import {
   Shield,
   Ban,
   Link as LinkIcon,
+  Pencil,
 } from "lucide-react";
 import GroupDialog from "../group/GroupDialog";
 import MediaGalleryView from "./MediaGalleryView";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import EditGroupNameDialog from "../group/EditGroupNameDialog";
 import ProfileDialog from "@/components/profile/ProfileDialog";
 import { getUserDataById } from "@/actions/user.action";
 import {
@@ -108,6 +110,7 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
   const [openDropdownMemberId, setOpenDropdownMemberId] = useState<
     string | null
   >(null);
+  const [showEditNameDialog, setShowEditNameDialog] = useState(false);
 
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
@@ -720,7 +723,17 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                 {group.name?.slice(0, 2).toUpperCase() || "GR"}
               </AvatarFallback>
             </Avatar>
-            <h2 className="text-lg font-semibold">{group.name}</h2>
+            <div className="flex items-center justify-center gap-2">
+              <h2 className="text-lg font-semibold">{group.name}</h2>
+              {currentUserRole === "LEADER" && (
+                <button
+                  className="text-gray-500 hover:text-blue-500 transition-colors"
+                  onClick={() => setShowEditNameDialog(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
+            </div>
 
             {/* Các chức năng chính */}
             <div className="grid grid-cols-4 gap-4 w-full m-2">
@@ -728,7 +741,8 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1"
+                  className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1 opacity-60"
+                  onClick={() => toast.info("Tính năng này chưa được hỗ trợ")}
                 >
                   <Bell className="h-6 w-6" />
                 </Button>
@@ -739,7 +753,8 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1"
+                  className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1 opacity-60"
+                  onClick={() => toast.info("Tính năng này chưa được hỗ trợ")}
                 >
                   <Pin className="h-6 w-6" />
                 </Button>
@@ -764,7 +779,8 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1"
+                  className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 mb-1 opacity-60"
+                  onClick={() => toast.info("Tính năng này chưa được hỗ trợ")}
                 >
                   <Settings className="h-6 w-6" />
                 </Button>
@@ -970,7 +986,8 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
           <div className="space-y-1 bg-white p-2">
             <Button
               variant="ghost"
-              className="w-full justify-start text-red-500 pl-2"
+              className="w-full justify-start text-red-500 pl-2 opacity-60"
+              onClick={() => toast.info("Tính năng này chưa được hỗ trợ")}
             >
               <Trash className="h-5 w-5 mr-3" />
               <span>Xóa lịch sử trò chuyện</span>
@@ -1074,6 +1091,28 @@ export default function GroupInfo({ group, onClose }: GroupInfoProps) {
           isOpen={showGroupDialog}
           onOpenChange={setShowGroupDialog}
           mediaFiles={mediaFiles}
+        />
+      )}
+
+      {/* Edit Group Name Dialog */}
+      {group && (
+        <EditGroupNameDialog
+          group={group}
+          isOpen={showEditNameDialog}
+          onOpenChange={setShowEditNameDialog}
+          onBack={() => setShowEditNameDialog(false)}
+          onSuccess={(updatedGroup) => {
+            // Update the group in the store
+            const chatStore = useChatStore.getState();
+            if (chatStore.selectedGroup?.id === updatedGroup.id) {
+              chatStore.setSelectedGroup(updatedGroup);
+            }
+
+            // Refresh the page after a short delay to ensure all components are updated
+            setTimeout(() => {
+              window.location.reload();
+            }, 500);
+          }}
         />
       )}
 

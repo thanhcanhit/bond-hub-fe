@@ -26,6 +26,7 @@ import {
   Share2,
   Video,
   Trash,
+  Pencil,
 } from "lucide-react";
 import { Group, Media, User } from "@/types/base";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -42,6 +43,7 @@ import {
 import ProfileDialog from "@/components/profile/ProfileDialog";
 import GroupMemberList from "./GroupMemberList";
 import AddMemberDialog from "./AddMemberDialog";
+import EditGroupNameDialog from "./EditGroupNameDialog";
 import { getUserDataById } from "@/actions/user.action";
 
 interface GroupDialogProps {
@@ -49,7 +51,6 @@ interface GroupDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   mediaFiles?: Media[];
-  onManageGroup?: () => void;
 }
 
 export default function GroupDialog({
@@ -57,7 +58,6 @@ export default function GroupDialog({
   isOpen,
   onOpenChange,
   mediaFiles = [],
-  onManageGroup,
 }: GroupDialogProps) {
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -66,6 +66,7 @@ export default function GroupDialog({
   const [showProfileDialog, setShowProfileDialog] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
+  const [showEditNameDialog, setShowEditNameDialog] = useState(false);
   const [memberDetails, setMemberDetails] = useState<{ [key: string]: User }>(
     {},
   );
@@ -236,45 +237,56 @@ export default function GroupDialog({
             ></Button>
           </DialogHeader>
 
-          <div className="flex flex-col overflow-auto no-scrollbar">
+          <div className="flex flex-col gap-2 overflow-auto no-scrollbar bg-[#e5e7eb]">
             {/* Group Avatar and Name */}
-            <div className="flex flex-col items-center text-center p-4 bg-white">
-              <div className="relative mb-3">
-                <Avatar className="h-16 w-16">
-                  <AvatarImage
-                    src={group?.avatarUrl || undefined}
-                    className="object-cover"
-                  />
-                  <AvatarFallback className="text-xl">
-                    {group?.name?.slice(0, 2).toUpperCase() || "GR"}
-                  </AvatarFallback>
-                </Avatar>
-                {currentUserRole === "LEADER" && (
-                  <label
-                    htmlFor="group-avatar-upload"
-                    className="absolute bottom-0 right-0 bg-blue-500 rounded-full p-1 cursor-pointer"
-                  >
-                    {isUploadingAvatar ? (
-                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      <Camera className="h-4 w-4 text-white" />
-                    )}
-                    <input
-                      id="group-avatar-upload"
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleAvatarChange}
-                      disabled={isUploadingAvatar}
+            <div className="flex flex-col gap-2 items-center text-center px-4 py-2 bg-white">
+              <div className="flex flex-row items-center justify-start w-full gap-4">
+                <div className="relative">
+                  <Avatar className="h-16 w-16 border-2">
+                    <AvatarImage
+                      src={group?.avatarUrl || undefined}
+                      className="object-cover"
                     />
-                  </label>
-                )}
+                    <AvatarFallback className="text-xl">
+                      {group?.name?.slice(0, 2).toUpperCase() || "GR"}
+                    </AvatarFallback>
+                  </Avatar>
+                  {currentUserRole === "LEADER" && (
+                    <label
+                      htmlFor="group-avatar-upload"
+                      className="absolute bottom-0 right-0 bg-blue-500 rounded-full p-1 cursor-pointer"
+                    >
+                      {isUploadingAvatar ? (
+                        <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        <Camera className="h-4 w-4 text-white" />
+                      )}
+                      <input
+                        id="group-avatar-upload"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleAvatarChange}
+                        disabled={isUploadingAvatar}
+                      />
+                    </label>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-semibold">{group?.name}</h2>
+                  {currentUserRole === "LEADER" && (
+                    <button
+                      className="text-gray-500 hover:text-blue-500 transition-colors"
+                      onClick={() => setShowEditNameDialog(true)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               </div>
-              <h2 className="text-lg font-semibold mb-2">{group?.name}</h2>
-
               {/* Message Button */}
               <div
-                className="w-full bg-gray-100 py-2 px-4 text-center cursor-pointer hover:bg-gray-200"
+                className="w-full bg-[#e5e7eb] py-2 px-4 text-center cursor-pointer hover:bg-gray-200"
                 onClick={() => {
                   if (group?.id) {
                     // Close the dialog
@@ -288,7 +300,7 @@ export default function GroupDialog({
                   }
                 }}
               >
-                <span className="font-medium">Nhắn tin</span>
+                <span className="font-semibold">Nhắn tin</span>
               </div>
             </div>
 
@@ -444,10 +456,9 @@ export default function GroupDialog({
             <div className="p-4 bg-white space-y-2">
               {/* Manage group button */}
               <div
-                className="flex items-center p-2 cursor-pointer"
+                className="flex items-center p-2 cursor-pointer opacity-60"
                 onClick={() => {
-                  onOpenChange(false);
-                  if (onManageGroup) onManageGroup();
+                  toast.info("Tính năng này chưa được hỗ trợ");
                 }}
               >
                 <Settings className="h-5 w-5 mr-3 text-gray-500" />
@@ -537,6 +548,28 @@ export default function GroupDialog({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Group Name Dialog */}
+      {group && (
+        <EditGroupNameDialog
+          group={group}
+          isOpen={showEditNameDialog}
+          onOpenChange={setShowEditNameDialog}
+          onBack={() => setShowEditNameDialog(false)}
+          onSuccess={(updatedGroup) => {
+            // Update the group in the store
+            const chatStore = useChatStore.getState();
+            if (chatStore.selectedGroup?.id === updatedGroup.id) {
+              chatStore.setSelectedGroup(updatedGroup);
+            }
+
+            // Refresh the page after a short delay to ensure all components are updated
+            setTimeout(() => {
+              window.location.reload();
+            }, 500);
+          }}
+        />
+      )}
 
       {/* Delete Group Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
