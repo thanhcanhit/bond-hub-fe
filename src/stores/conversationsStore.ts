@@ -599,13 +599,40 @@ export const useConversationsStore = create<ConversationsState>()(
       },
 
       removeConversation: (contactId) => {
-        set((state) => ({
-          conversations: state.conversations.filter(
+        console.log(
+          `[conversationsStore] Removing conversation with ID: ${contactId}`,
+        );
+
+        set((state) => {
+          // Log current conversations for debugging
+          console.log(
+            `[conversationsStore] Current conversations before removal:`,
+            state.conversations.map((c) => ({
+              id: c.type === "GROUP" ? c.group?.id : c.contact.id,
+              type: c.type,
+              name:
+                c.type === "GROUP"
+                  ? c.group?.name
+                  : c.contact.userInfo?.fullName,
+            })),
+          );
+
+          // Filter out the conversation
+          const filteredConversations = state.conversations.filter(
             (conv) =>
               conv.contact.id !== contactId &&
               (conv.type !== "GROUP" || conv.group?.id !== contactId),
-          ),
-        }));
+          );
+
+          console.log(
+            `[conversationsStore] Conversations after removal: ${filteredConversations.length}`,
+          );
+
+          return { conversations: filteredConversations };
+        });
+
+        // Force UI update by notifying subscribers
+        set((state) => ({ ...state }));
       },
 
       updateLastMessage: (contactId, message) => {

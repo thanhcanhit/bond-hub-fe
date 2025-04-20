@@ -26,6 +26,7 @@ import {
   Ban,
   Link as LinkIcon,
   Pencil,
+  RefreshCw,
 } from "lucide-react";
 import GroupDialog from "../group/GroupDialog";
 import MediaGalleryView from "./MediaGalleryView";
@@ -742,20 +743,41 @@ export default function GroupInfo({
     );
   }
 
+  // Hàm làm mới dữ liệu nhóm
+  const handleRefreshGroup = () => {
+    if (typeof window !== "undefined" && window.triggerGroupsReload) {
+      toast.info("Đang làm mới dữ liệu nhóm...");
+      window.triggerGroupsReload();
+    } else {
+      toast.error("Không thể làm mới dữ liệu nhóm");
+    }
+  };
+
   return (
     <div
       className={`h-full flex flex-col bg-white ${!isOverlay ? "border-l" : ""}`}
     >
       <div className="p-4 flex items-center justify-between border-b">
         <h2 className="font-semibold">Thông tin nhóm</h2>
-        <Button
-          variant="ghost"
-          size="icon"
-          className={`${isOverlay ? "bg-gray-100 hover:bg-gray-200" : "rounded-full"}`}
-          onClick={onClose}
-        >
-          <X className="h-5 w-5" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full"
+            onClick={handleRefreshGroup}
+            title="Làm mới dữ liệu nhóm"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`${isOverlay ? "bg-gray-100 hover:bg-gray-200" : "rounded-full"}`}
+            onClick={onClose}
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
       </div>
 
       <ScrollArea className="flex-1">

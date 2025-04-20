@@ -1,0 +1,685 @@
+"use client";
+
+import { useEffect, useRef, useCallback } from "react";
+// import { Socket } from "socket.io-client";
+import { useAuthStore } from "@/stores/authStore";
+import { useChatStore } from "@/stores/chatStore";
+import { useConversationsStore } from "@/stores/conversationsStore";
+import { useGroupSocket } from "@/hooks/useGroupSocket";
+import { toast } from "sonner";
+import {
+  // Group,
+  GroupRole,
+} from "@/types/base";
+
+// Define types for socket events
+interface AddedToGroupEventData {
+  groupId: string;
+  group: Record<string, unknown>; // Group data with members
+  addedBy: string;
+  timestamp: Date;
+}
+
+interface GroupCreatedEventData {
+  groupId: string;
+  createdBy: string;
+  timestamp: Date;
+}
+
+interface GroupUpdatedEventData {
+  groupId: string;
+  updatedBy: string;
+  timestamp: Date;
+}
+
+interface GroupDeletedEventData {
+  groupId: string;
+  deletedById: string;
+  timestamp: Date;
+}
+
+// Define types for backend event names
+interface GroupDissolvedEventData {
+  groupId: string;
+  groupName?: string;
+  dissolvedBy: string;
+  userId?: string; // Backend có thể gửi userId nếu gửi trực tiếp đến người dùng
+  timestamp: Date;
+}
+
+type RoleChangedEventData = MemberRoleUpdatedEventData;
+
+interface AvatarUpdatedEventData {
+  groupId: string;
+  updatedBy: string;
+  avatarUrl?: string; // Backend sử dụng avatarUrl thay vì newAvatarUrl
+  timestamp: Date;
+}
+
+interface MemberAddedEventData {
+  groupId: string;
+  userId: string;
+  addedById: string;
+  timestamp: Date;
+}
+
+interface MemberRemovedEventData {
+  groupId: string;
+  userId: string;
+  removedById: string;
+  timestamp: Date;
+}
+
+interface MemberRoleUpdatedEventData {
+  groupId: string;
+  userId: string;
+  updatedById: string;
+  newRole: GroupRole;
+  timestamp: Date;
+}
+
+export default function GroupSocketHandler() {
+  // Get the group socket
+  const groupSocket = useGroupSocket();
+
+  // Get current user
+  const currentUser = useAuthStore((state) => state.user);
+
+  // Get selected group and refresh function
+  const { selectedGroup, refreshSelectedGroup } = useChatStore();
+
+  // Get conversations store methods
+  const { conversations, updateConversation } = useConversationsStore();
+
+  // Track if event listeners are set up
+  const eventListenersSetupRef = useRef(false);
+
+  // Helper function to update a group conversation with latest data
+  const updateConversationWithLatestGroupData = useCallback(
+    async (groupId: string) => {
+      try {
+        // Import here to avoid circular dependencies
+        const { getGroupById } = await import("@/actions/group.action");
+
+        // Fetch latest group data
+        const result = await getGroupById(groupId);
+
+        if (result.success && result.group) {
+          // Find the existing conversation
+          const existingConversation = conversations.find(
+            (conv) => conv.type === "GROUP" && conv.group?.id === groupId,
+          );
+
+          if (existingConversation && existingConversation.group) {
+            // Update the conversation with new group data
+            updateConversation(groupId, {
+              group: {
+                ...existingConversation.group,
+                name: result.group.name,
+                avatarUrl: result.group.avatarUrl,
+                memberUsers: result.group.memberUsers,
+              },
+            });
+          }
+        }
+      } catch (error) {
+        console.error(
+          `[GroupSocketHandler] Error updating group ${groupId}:`,
+          error,
+        );
+      }
+    },
+    [conversations, updateConversation],
+  );
+
+  // Set up event listeners
+  useEffect(() => {
+    // Only set up listeners if socket exists and listeners aren't already set up
+    if (!groupSocket || eventListenersSetupRef.current) return;
+
+    console.log("[GroupSocketHandler] Setting up group socket event listeners");
+
+    // Set up event listeners
+    const handleGroupUpdated = (data: GroupUpdatedEventData) => {
+      console.log("[GroupSocketHandler] Group updated event received:", data);
+
+      // Check if this is the currently selected group
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        // Refresh the selected group data
+        refreshSelectedGroup();
+
+        // Show toast notification
+        if (data.updatedBy !== currentUser?.id) {
+          toast.info("Thông tin nhóm đã được cập nhật");
+        }
+      } else {
+        // Find the group in conversations
+        const groupConversation = conversations.find(
+          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+        );
+
+        if (groupConversation) {
+          // Refresh this group's data in the conversations store
+          updateConversationWithLatestGroupData(data.groupId);
+        }
+      }
+    };
+
+    const handleMemberAdded = (data: MemberAddedEventData) => {
+      console.log("[GroupSocketHandler] Member added event received:", data);
+
+      // Check if the current user was added to the group
+      if (data.userId === currentUser?.id) {
+        console.log(
+          "[GroupSocketHandler] Current user was added to group",
+          data.groupId,
+        );
+
+        // Show toast notification
+        toast.info("Bạn đã được thêm vào một nhóm mới");
+
+        // Load the group data and add it to conversations
+        import("@/actions/group.action").then(async ({ getGroupById }) => {
+          try {
+            const result = await getGroupById(data.groupId);
+            if (result.success && result.group) {
+              // Check if the group already exists in conversations
+              const existingConversation = conversations.find(
+                (conv) =>
+                  conv.type === "GROUP" && conv.group?.id === data.groupId,
+              );
+
+              if (!existingConversation) {
+                console.log(
+                  "[GroupSocketHandler] Adding new group to conversations",
+                );
+                // Reload conversations to get the new group
+                useConversationsStore
+                  .getState()
+                  .loadConversations(currentUser.id);
+              }
+            }
+          } catch (error) {
+            console.error(
+              `[GroupSocketHandler] Error loading group ${data.groupId}:`,
+              error,
+            );
+          }
+        });
+
+        return;
+      }
+
+      // Check if this is the currently selected group
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        // Refresh the selected group data
+        refreshSelectedGroup();
+
+        // Show toast notification
+        if (data.addedById !== currentUser?.id) {
+          toast.info("Thành viên mới đã được thêm vào nhóm");
+        }
+      } else {
+        // Find the group in conversations
+        const groupConversation = conversations.find(
+          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+        );
+
+        if (groupConversation) {
+          // Refresh this group's data in the conversations store
+          updateConversationWithLatestGroupData(data.groupId);
+        }
+      }
+    };
+
+    const handleMemberRemoved = (data: MemberRemovedEventData) => {
+      console.log("[GroupSocketHandler] Member removed event received:", data);
+
+      // Check if the current user was removed
+      if (data.userId === currentUser?.id) {
+        // Find the group in conversations
+        const groupConversation = conversations.find(
+          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+        );
+
+        if (groupConversation) {
+          // Show toast notification
+          toast.info(
+            `Bạn đã bị xóa khỏi nhóm ${groupConversation.group?.name || "chat"}`,
+          );
+
+          // If this is the currently selected group, navigate away
+          if (selectedGroup && selectedGroup.id === data.groupId) {
+            // Clear selected group
+            useChatStore.getState().setSelectedGroup(null);
+          }
+
+          // Remove this group from conversations
+          useConversationsStore.getState().removeConversation(data.groupId);
+        }
+      } else {
+        // Check if this is the currently selected group
+        if (selectedGroup && selectedGroup.id === data.groupId) {
+          // Refresh the selected group data
+          refreshSelectedGroup();
+
+          // Show toast notification
+          if (data.removedById !== currentUser?.id) {
+            toast.info("Một thành viên đã bị xóa khỏi nhóm");
+          }
+        } else {
+          // Find the group in conversations
+          const groupConversation = conversations.find(
+            (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+          );
+
+          if (groupConversation) {
+            // Refresh this group's data in the conversations store
+            updateConversationWithLatestGroupData(data.groupId);
+          }
+        }
+      }
+    };
+
+    const handleMemberRoleUpdated = (data: MemberRoleUpdatedEventData) => {
+      console.log(
+        "[GroupSocketHandler] Member role updated event received:",
+        data,
+      );
+
+      // Check if this is the currently selected group
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        // Refresh the selected group data
+        refreshSelectedGroup();
+
+        // Show toast notification for role changes
+        if (data.userId === currentUser?.id) {
+          // Current user's role was changed
+          const roleText =
+            data.newRole === GroupRole.LEADER
+              ? "trưởng nhóm"
+              : data.newRole === GroupRole.CO_LEADER
+                ? "phó nhóm"
+                : "thành viên";
+
+          toast.info(`Vai trò của bạn đã được thay đổi thành ${roleText}`);
+        } else if (data.updatedById !== currentUser?.id) {
+          // Someone else's role was changed by someone else
+          toast.info("Vai trò thành viên trong nhóm đã được thay đổi");
+        }
+      } else {
+        // Find the group in conversations
+        const groupConversation = conversations.find(
+          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+        );
+
+        if (groupConversation) {
+          // Refresh this group's data in the conversations store
+          updateConversationWithLatestGroupData(data.groupId);
+        }
+      }
+    };
+
+    const handleGroupDeleted = (data: GroupDeletedEventData) => {
+      console.log("[GroupSocketHandler] Group deleted event received:", data);
+      console.log("[GroupSocketHandler] Group deleted data type:", typeof data);
+      console.log(
+        "[GroupSocketHandler] Group deleted data keys:",
+        Object.keys(data),
+      );
+
+      // Find the group in conversations
+      const groupConversation = conversations.find(
+        (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+      );
+
+      console.log(
+        `[GroupSocketHandler] Group ${data.groupId} exists in conversations: ${!!groupConversation}`,
+      );
+      console.log(
+        `[GroupSocketHandler] Current conversations:`,
+        conversations.map((c) => ({
+          id: c.type === "GROUP" ? c.group?.id : c.contact.id,
+          type: c.type,
+        })),
+      );
+
+      if (groupConversation) {
+        // Show toast notification
+        const groupName = groupConversation.group?.name || "chat";
+        toast.info(`Nhóm ${groupName} đã bị giải tán`);
+
+        // If this is the currently selected group, navigate away
+        if (selectedGroup && selectedGroup.id === data.groupId) {
+          console.log(
+            `[GroupSocketHandler] Currently selected group was deleted, clearing selection`,
+          );
+          // Clear selected group
+          useChatStore.getState().setSelectedGroup(null);
+        }
+
+        // Remove this group from conversations
+        console.log(
+          `[GroupSocketHandler] Removing deleted group ${data.groupId} from conversations`,
+        );
+        useConversationsStore.getState().removeConversation(data.groupId);
+        console.log(
+          `[GroupSocketHandler] Group ${data.groupId} removed from conversations`,
+        );
+
+        // Force reload conversations to ensure UI is updated
+        if (currentUser?.id) {
+          console.log(
+            `[GroupSocketHandler] Forcing reload of conversations after group deletion`,
+          );
+          setTimeout(() => {
+            useConversationsStore.getState().loadConversations(currentUser.id);
+          }, 500);
+        }
+      } else {
+        // Nếu không tìm thấy nhóm trong danh sách cuộc trò chuyện, vẫn hiển thị thông báo
+        toast.info(`Một nhóm đã bị xóa`);
+
+        // Force reload conversations to ensure UI is updated
+        if (currentUser?.id) {
+          console.log(
+            `[GroupSocketHandler] Forcing reload of conversations after group deletion (group not found in local state)`,
+          );
+          setTimeout(() => {
+            useConversationsStore.getState().loadConversations(currentUser.id);
+          }, 500);
+        }
+      }
+    };
+
+    // Handler for backend's groupDissolved event
+    const handleGroupDissolved = (data: GroupDissolvedEventData) => {
+      console.log("[GroupSocketHandler] Group dissolved event received:", data);
+      console.log(
+        "[GroupSocketHandler] Group dissolved data type:",
+        typeof data,
+      );
+      console.log(
+        "[GroupSocketHandler] Group dissolved data keys:",
+        Object.keys(data),
+      );
+
+      // Backend có thể gửi trực tiếp đến người dùng cụ thể hoặc qua phòng nhóm
+      // Nếu có userId và không phải là người dùng hiện tại, bỏ qua
+      if (data.userId && data.userId !== currentUser?.id) {
+        console.log(
+          "[GroupSocketHandler] Ignoring groupDissolved event for another user",
+        );
+        return;
+      }
+
+      // Find the group in conversations
+      const groupConversation = conversations.find(
+        (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+      );
+
+      console.log(
+        `[GroupSocketHandler] Group ${data.groupId} exists in conversations: ${!!groupConversation}`,
+      );
+      console.log(
+        `[GroupSocketHandler] Current conversations:`,
+        conversations.map((c) => ({
+          id: c.type === "GROUP" ? c.group?.id : c.contact.id,
+          type: c.type,
+        })),
+      );
+
+      if (groupConversation) {
+        // Show toast notification with group name from event or from local data
+        const groupName =
+          data.groupName || groupConversation.group?.name || "chat";
+        toast.info(`Nhóm ${groupName} đã bị giải tán`);
+
+        // If this is the currently selected group, navigate away
+        if (selectedGroup && selectedGroup.id === data.groupId) {
+          console.log(
+            `[GroupSocketHandler] Currently selected group was dissolved, clearing selection`,
+          );
+          // Clear selected group
+          useChatStore.getState().setSelectedGroup(null);
+        }
+
+        // Remove this group from conversations
+        console.log(
+          `[GroupSocketHandler] Removing dissolved group ${data.groupId} from conversations`,
+        );
+        useConversationsStore.getState().removeConversation(data.groupId);
+        console.log(
+          `[GroupSocketHandler] Group ${data.groupId} removed from conversations`,
+        );
+
+        // Force reload conversations to ensure UI is updated
+        if (currentUser?.id) {
+          console.log(
+            `[GroupSocketHandler] Forcing reload of conversations after group dissolution`,
+          );
+          setTimeout(() => {
+            useConversationsStore.getState().loadConversations(currentUser.id);
+          }, 500);
+        }
+      } else {
+        // Nếu không tìm thấy nhóm trong danh sách cuộc trò chuyện, vẫn hiển thị thông báo
+        const groupName = data.groupName || "chat";
+        toast.info(`Nhóm ${groupName} đã bị giải tán`);
+
+        // Force reload conversations to ensure UI is updated
+        if (currentUser?.id) {
+          console.log(
+            `[GroupSocketHandler] Forcing reload of conversations after group dissolution (group not found in local state)`,
+          );
+          setTimeout(() => {
+            useConversationsStore.getState().loadConversations(currentUser.id);
+          }, 500);
+        }
+      }
+    };
+
+    // Handler for backend's roleChanged event (same logic as memberRoleUpdated)
+    const handleRoleChanged = (data: RoleChangedEventData) => {
+      console.log("[GroupSocketHandler] Role changed event received:", data);
+
+      // Use the same logic as memberRoleUpdated
+      // Check if this is the currently selected group
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        // Refresh the selected group data
+        refreshSelectedGroup();
+
+        // Show toast notification for role changes
+        if (data.userId === currentUser?.id) {
+          // Current user's role was changed
+          const roleText =
+            data.newRole === GroupRole.LEADER
+              ? "trưởng nhóm"
+              : data.newRole === GroupRole.CO_LEADER
+                ? "phó nhóm"
+                : "thành viên";
+
+          toast.info(`Vai trò của bạn đã được thay đổi thành ${roleText}`);
+        } else if (data.updatedById !== currentUser?.id) {
+          // Someone else's role was changed by someone else
+          toast.info("Vai trò thành viên trong nhóm đã được thay đổi");
+        }
+      } else {
+        // Find the group in conversations
+        const groupConversation = conversations.find(
+          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+        );
+
+        if (groupConversation) {
+          // Refresh this group's data in the conversations store
+          updateConversationWithLatestGroupData(data.groupId);
+        }
+      }
+    };
+
+    // Handler for backend's avatarUpdated event
+    const handleAvatarUpdated = (data: AvatarUpdatedEventData) => {
+      console.log("[GroupSocketHandler] Avatar updated event received:", data);
+
+      // Check if this is the currently selected group
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        // Refresh the selected group data
+        refreshSelectedGroup();
+
+        // Show toast notification
+        if (data.updatedBy !== currentUser?.id) {
+          toast.info("Avatar nhóm đã được cập nhật");
+        }
+
+        // Nếu có avatarUrl, cập nhật trực tiếp để tránh phải tải lại
+        if (data.avatarUrl && selectedGroup) {
+          // Cập nhật trực tiếp vào store bằng cách gọi setSelectedGroup
+          useChatStore.getState().setSelectedGroup({
+            ...selectedGroup,
+            avatarUrl: data.avatarUrl,
+          });
+        }
+      } else {
+        // Find the group in conversations
+        const groupConversation = conversations.find(
+          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+        );
+
+        if (groupConversation) {
+          // Nếu có avatarUrl, cập nhật trực tiếp để tránh phải tải lại
+          if (data.avatarUrl && groupConversation.group) {
+            // Cập nhật trực tiếp vào store
+            updateConversation(data.groupId, {
+              group: {
+                ...groupConversation.group,
+                avatarUrl: data.avatarUrl,
+              },
+            });
+          } else {
+            // Refresh this group's data in the conversations store
+            updateConversationWithLatestGroupData(data.groupId);
+          }
+        }
+      }
+    };
+
+    // Handler for addedToGroup event
+    const handleAddedToGroup = (data: AddedToGroupEventData) => {
+      console.log("[GroupSocketHandler] Added to group event received:", data);
+
+      // This event is sent directly to the user when they are added to a group
+      if (currentUser?.id) {
+        console.log(
+          "[GroupSocketHandler] Current user was added to a group, updating conversations",
+        );
+
+        // Reload conversations to get the new group
+        useConversationsStore.getState().loadConversations(currentUser.id);
+      }
+    };
+
+    // Handler for groupCreated event
+    const handleGroupCreated = (data: GroupCreatedEventData) => {
+      console.log("[GroupSocketHandler] Group created event received:", data);
+
+      // If the current user created the group, we don't need to do anything
+      // as the group will be added to their conversation list by the CreateGroupDialog
+      if (data.createdBy === currentUser?.id) {
+        console.log(
+          "[GroupSocketHandler] Current user created the group, skipping",
+        );
+        return;
+      }
+
+      // If the current user didn't create the group, we need to check if they're a member
+      // and add the group to their conversation list if they are
+      if (currentUser?.id) {
+        console.log(
+          "[GroupSocketHandler] Checking if current user is a member of the new group",
+        );
+        // Import here to avoid circular dependencies
+        import("@/actions/group.action").then(async ({ getGroupById }) => {
+          try {
+            const result = await getGroupById(data.groupId);
+            if (result.success && result.group) {
+              // Check if current user is a member of this group
+              const isMember = result.group.members?.some(
+                (member: { userId: string }) =>
+                  member.userId === currentUser.id,
+              );
+
+              if (isMember) {
+                console.log(
+                  "[GroupSocketHandler] Current user is a member of the new group, adding to conversations",
+                );
+                // Reload conversations to get the new group
+                useConversationsStore
+                  .getState()
+                  .loadConversations(currentUser.id);
+              }
+            }
+          } catch (error) {
+            console.error(
+              `[GroupSocketHandler] Error checking group membership for ${data.groupId}:`,
+              error,
+            );
+          }
+        });
+      }
+    };
+
+    // Register event handlers - both our custom events and backend events
+    groupSocket.on("addedToGroup", handleAddedToGroup);
+    groupSocket.on("groupCreated", handleGroupCreated);
+    groupSocket.on("groupUpdated", handleGroupUpdated);
+    groupSocket.on("memberAdded", handleMemberAdded);
+    groupSocket.on("memberRemoved", handleMemberRemoved);
+    groupSocket.on("memberRoleUpdated", handleMemberRoleUpdated);
+    groupSocket.on("groupDeleted", handleGroupDeleted);
+
+    // Backend event names
+    groupSocket.on("groupDissolved", handleGroupDissolved);
+    groupSocket.on("roleChanged", handleRoleChanged);
+    groupSocket.on("avatarUpdated", handleAvatarUpdated);
+
+    // Mark event listeners as set up
+    eventListenersSetupRef.current = true;
+
+    // Cleanup function
+    return () => {
+      if (groupSocket) {
+        console.log(
+          "[GroupSocketHandler] Cleaning up group socket event listeners",
+        );
+
+        // Remove event listeners
+        groupSocket.off("addedToGroup", handleAddedToGroup);
+        groupSocket.off("groupCreated", handleGroupCreated);
+        groupSocket.off("groupUpdated", handleGroupUpdated);
+        groupSocket.off("memberAdded", handleMemberAdded);
+        groupSocket.off("memberRemoved", handleMemberRemoved);
+        groupSocket.off("memberRoleUpdated", handleMemberRoleUpdated);
+        groupSocket.off("groupDeleted", handleGroupDeleted);
+
+        // Backend event names
+        groupSocket.off("groupDissolved", handleGroupDissolved);
+        groupSocket.off("roleChanged", handleRoleChanged);
+        groupSocket.off("avatarUpdated", handleAvatarUpdated);
+
+        // Reset ref
+        eventListenersSetupRef.current = false;
+      }
+    };
+  }, [
+    groupSocket,
+    currentUser,
+    selectedGroup,
+    conversations,
+    refreshSelectedGroup,
+    updateConversation,
+    updateConversationWithLatestGroupData,
+  ]);
+
+  // This component doesn't render anything
+  return null;
+}

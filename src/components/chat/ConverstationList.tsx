@@ -8,6 +8,9 @@ import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
 import SearchHeader from "../SearchHeader";
 import { Media } from "@/types/base";
+import { RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 interface ContactListProps {
   onSelectContact: (contactId: string | null) => void;
@@ -76,7 +79,23 @@ export default function ContactList({
     isLoading,
     // searchQuery, setSearchQuery,
     getFilteredConversations,
+    loadConversations,
   } = useConversationsStore();
+
+  // Function to refresh conversations
+  const refreshConversations = () => {
+    if (currentUser?.id) {
+      toast.info("Đang làm mới danh sách cuộc trò chuyện...");
+      loadConversations(currentUser.id)
+        .then(() => {
+          toast.success("Đã làm mới danh sách cuộc trò chuyện");
+        })
+        .catch((error) => {
+          console.error("Failed to refresh conversations:", error);
+          toast.error("Không thể làm mới danh sách cuộc trò chuyện");
+        });
+    }
+  };
 
   // Get filtered conversations based on search query
   const filteredConversations = getFilteredConversations();
@@ -96,7 +115,18 @@ export default function ContactList({
 
   return (
     <div className="flex flex-col h-full w-full">
-      <SearchHeader className="w-full border-r-0 border-b h-[69px]" />
+      <div className="flex items-center justify-between w-full border-r-0 border-b h-[69px]">
+        <SearchHeader className="flex-1 border-none" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="mr-2"
+          onClick={refreshConversations}
+          title="Làm mới danh sách cuộc trò chuyện"
+        >
+          <RefreshCw className="h-5 w-5" />
+        </Button>
+      </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {isLoading ? (

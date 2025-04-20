@@ -1,6 +1,47 @@
 import { GroupRole } from "@/types/base";
 import axiosInstance from "@/lib/axios";
 import { AxiosError } from "axios";
+import { Socket } from "socket.io-client";
+
+// Helper function to get the socket instance if available
+const getGroupSocket = (): Socket | null => {
+  if (typeof window === "undefined") return null;
+
+  // Try to find the socket in the window object
+  const socketRef = window.groupSocket;
+  return socketRef || null;
+};
+
+// Helper function to emit group events
+const emitGroupEvent = (event: string, data: Record<string, unknown>) => {
+  const socket = getGroupSocket();
+  if (socket && socket.connected) {
+    console.log(`[group.action] Emitting ${event} event:`, data);
+    socket.emit(event, data);
+
+    // Trigger a manual reload after a short delay to ensure all clients get updated
+    setTimeout(() => {
+      if (typeof window !== "undefined" && window.triggerGroupsReload) {
+        console.log(
+          `[group.action] Triggering manual reload after ${event} event`,
+        );
+        window.triggerGroupsReload();
+      }
+    }, 500);
+  } else {
+    console.log(
+      `[group.action] Socket not available or not connected, skipping ${event} event`,
+    );
+  }
+};
+
+// Declare the window interface to include our socket and helper functions
+declare global {
+  interface Window {
+    groupSocket: Socket | null;
+    triggerGroupsReload?: () => void;
+  }
+}
 
 // Interface for creating a group
 interface GroupMemberDto {
@@ -89,8 +130,14 @@ export async function createGroup(createGroupDto: CreateGroupDto) {
     const response = await axiosInstance.post("/groups", payload);
     console.log("API response:", response.data);
 
-    // Trả về dữ liệu nhóm đã tạo để client có thể cập nhật store
+    // Emit group created event
+    emitGroupEvent("groupCreated", {
+      groupId: response.data.id,
+      createdBy: createGroupDto.creatorId,
+      timestamp: new Date(),
+    });
 
+    // Trả về dữ liệu nhóm đã tạo để client có thể cập nhật store
     return { success: true, group: response.data };
   } catch (error) {
     console.error("Create group failed:", error);
@@ -183,8 +230,24 @@ export async function updateGroup(
       updateGroupDto,
     );
 
-    // Trả về dữ liệu nhóm đã cập nhật để client có thể cập nhật store
+    // Emit group updated event
+    if (updateGroupDto.name) {
+      emitGroupEvent("groupNameUpdated", {
+        groupId,
+        updatedBy: response.data.updatedBy || "unknown",
+        newName: updateGroupDto.name,
+        timestamp: new Date(),
+      });
+    }
 
+    // Emit generic group updated event
+    emitGroupEvent("groupUpdated", {
+      groupId,
+      updatedBy: response.data.updatedBy || "unknown",
+      timestamp: new Date(),
+    });
+
+    // Trả về dữ liệu nhóm đã cập nhật để client có thể cập nhật store
     return { success: true, group: response.data };
   } catch (error) {
     console.error(`Update group ${groupId} failed:`, error);
@@ -200,9 +263,24 @@ export async function updateGroup(
  * @param groupId Group ID
  * @returns Success status
  */
-export async function deleteGroup(groupId: string) {
+export async function deleteGroup(groupId: string, deletedById?: string) {
   try {
     await axiosInstance.delete(`/groups/${groupId}`);
+
+    // Emit group deleted event - use both our custom event name and backend event name
+    emitGroupEvent("groupDeleted", {
+      groupId,
+      deletedById: deletedById || "unknown",
+      timestamp: new Date(),
+    });
+
+    // Also emit the backend event name with đúng cấu trúc dữ liệu
+    emitGroupEvent("groupDissolved", {
+      groupId,
+      dissolvedBy: deletedById || "unknown", // Backend sử dụng dissolvedBy thay vì deletedById
+      timestamp: new Date(),
+    });
+
     return { success: true };
   } catch (error) {
     console.error(`Delete group ${groupId} failed:`, error);
@@ -241,6 +319,16 @@ export async function addGroupMember(
       addedById,
       role,
     });
+
+    // Emit member added event
+    emitGroupEvent("memberAdded", {
+      groupId,
+      userId,
+      addedById,
+      role,
+      timestamp: new Date(),
+    });
+
     return { success: true, member: response.data };
   } catch (error) {
     console.error(`Add member to group ${groupId} failed:`, error);
@@ -257,9 +345,22 @@ export async function addGroupMember(
  * @param userId User ID to remove
  * @returns Success status
  */
-export async function removeGroupMember(groupId: string, userId: string) {
+export async function removeGroupMember(
+  groupId: string,
+  userId: string,
+  removedById?: string,
+) {
   try {
     await axiosInstance.delete(`/groups/${groupId}/members/${userId}`);
+
+    // Emit member removed event
+    emitGroupEvent("memberRemoved", {
+      groupId,
+      userId,
+      removedById: removedById || "unknown",
+      timestamp: new Date(),
+    });
+
     return { success: true };
   } catch (error) {
     console.error(`Remove member from group ${groupId} failed:`, error);
@@ -281,6 +382,7 @@ export async function updateMemberRole(
   groupId: string,
   userId: string,
   role: GroupRole,
+  updatedById?: string,
 ) {
   try {
     console.log(`Updating member role in group ${groupId}:`, {
@@ -293,6 +395,25 @@ export async function updateMemberRole(
       `/groups/${groupId}/members/${userId}/role`,
       { role },
     );
+
+    // Emit member role updated event - use both our custom event name and backend event name
+    emitGroupEvent("memberRoleUpdated", {
+      groupId,
+      userId,
+      updatedById: updatedById || "unknown",
+      newRole: role,
+      timestamp: new Date(),
+    });
+
+    // Also emit the backend event name
+    emitGroupEvent("roleChanged", {
+      groupId,
+      userId,
+      updatedById: updatedById || "unknown",
+      newRole: role,
+      timestamp: new Date(),
+    });
+
     return { success: true, member: response.data };
   } catch (error) {
     console.error(`Update member role in group ${groupId} failed:`, error);
@@ -308,9 +429,20 @@ export async function updateMemberRole(
  * @param groupId Group ID
  * @returns Success status
  */
-export async function leaveGroup(groupId: string) {
+export async function leaveGroup(groupId: string, userId?: string) {
   try {
     await axiosInstance.post(`/groups/${groupId}/leave`);
+
+    // Emit member removed event (self-removal)
+    if (userId) {
+      emitGroupEvent("memberRemoved", {
+        groupId,
+        userId,
+        removedById: userId, // Self-removal
+        timestamp: new Date(),
+      });
+    }
+
     return { success: true };
   } catch (error) {
     console.error(`Leave group ${groupId} failed:`, error);
@@ -375,8 +507,30 @@ export async function updateGroupAvatar(groupId: string, formData: FormData) {
       },
     );
 
-    // Trả về dữ liệu nhóm đã cập nhật để client có thể cập nhật store
+    // Emit group avatar updated event - use both our custom event name and backend event name
+    emitGroupEvent("groupAvatarUpdated", {
+      groupId,
+      updatedBy: response.data.updatedBy || "unknown",
+      newAvatarUrl: response.data.avatarUrl,
+      timestamp: new Date(),
+    });
 
+    // Also emit the backend event name
+    emitGroupEvent("avatarUpdated", {
+      groupId,
+      updatedBy: response.data.updatedBy || "unknown",
+      newAvatarUrl: response.data.avatarUrl,
+      timestamp: new Date(),
+    });
+
+    // Emit generic group updated event
+    emitGroupEvent("groupUpdated", {
+      groupId,
+      updatedBy: response.data.updatedBy || "unknown",
+      timestamp: new Date(),
+    });
+
+    // Trả về dữ liệu nhóm đã cập nhật để client có thể cập nhật store
     return { success: true, group: response.data };
   } catch (error) {
     console.error(`Update group avatar for ${groupId} failed:`, error);
