@@ -61,14 +61,21 @@ export function SocketChatProvider({ children }: SocketProviderProps) {
     const socketUrl = `${process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"}/message`;
     console.log(`Connecting to message socket at ${socketUrl}`);
 
+    // Thêm token vào auth để đảm bảo xác thực đúng
+    const accessToken = useAuthStore.getState().accessToken;
+
     const socket = io(socketUrl, {
-      auth: { userId: currentUser.id },
+      auth: {
+        userId: currentUser.id,
+        token: accessToken, // Thêm token vào auth để server có thể xác thực
+      },
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10, // Tăng số lần thử kết nối lại
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 10000,
-      transports: ["websocket"],
+      timeout: 20000, // Tăng timeout
+      transports: ["websocket", "polling"], // Hỗ trợ cả polling để tăng độ tin cậy
+      forceNew: true, // Đảm bảo tạo kết nối mới
     });
 
     // Lưu socket vào state
@@ -115,11 +122,69 @@ export function SocketChatProvider({ children }: SocketProviderProps) {
         reason,
       );
       setIsConnected(false);
+
+      // Xử lý các lý do ngắt kết nối khác nhau
+      if (reason === "io server disconnect") {
+        // Server đã ngắt kết nối, cần kết nối lại thủ công
+        console.log(
+          "[SocketProvider] Server disconnected us, attempting to reconnect manually...",
+        );
+        setTimeout(() => {
+          socket.connect();
+        }, 1000);
+      } else if (reason === "transport close" || reason === "ping timeout") {
+        // Vấn đề mạng, socket.io sẽ tự động kết nối lại
+        console.log(
+          "[SocketProvider] Network issue, socket.io will automatically try to reconnect",
+        );
+      } else if (reason === "transport error") {
+        // Lỗi giao thức, thử chuyển sang polling nếu đang dùng websocket
+        console.log(
+          "[SocketProvider] Transport error, will try to reconnect with polling if needed",
+        );
+      }
     });
 
     socket.on("connect_error", (error) => {
       console.error("[SocketProvider] Socket connection error:", error);
       setIsConnected(false);
+
+      // Kiểm tra xem lỗi có phải là do xác thực không
+      if (
+        error.message.includes("Authentication") ||
+        error.message.includes("jwt") ||
+        error.message.includes("token")
+      ) {
+        console.error(
+          "[SocketProvider] Authentication error, will try to refresh token",
+        );
+
+        // Thử refresh token sau 1 giây
+        setTimeout(async () => {
+          try {
+            // Thử refresh token
+            const { refreshToken } = await import("@/actions/auth.action");
+            const result = await refreshToken();
+
+            if (result.success) {
+              console.log(
+                "[SocketProvider] Token refreshed successfully, reconnecting...",
+              );
+              // Socket sẽ tự động kết nối lại với token mới
+            } else {
+              console.error(
+                "[SocketProvider] Failed to refresh token:",
+                result.error,
+              );
+            }
+          } catch (refreshError) {
+            console.error(
+              "[SocketProvider] Error refreshing token:",
+              refreshError,
+            );
+          }
+        }, 1000);
+      }
     });
 
     // Cleanup khi component unmount hoặc khi token/user thay đổi

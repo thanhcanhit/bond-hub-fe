@@ -230,14 +230,29 @@ export const useAuthStore = create<AuthState>()(
         // Ghi log trạng thái trước khi lưu vào localStorage
         console.log("Persisting auth state to localStorage:", {
           hasAccessToken: !!state.accessToken,
-          hasRefreshToken: !!state.refreshToken, // Chỉ để debug, không lưu refreshToken
+          hasRefreshToken: !!state.refreshToken,
           hasDeviceId: !!state.deviceId,
           isAuthenticated: state.isAuthenticated,
         });
 
+        // Lưu refreshToken vào localStorage nhưng được mã hóa đơn giản
+        // Lưu ý: Đây không phải là mã hóa an toàn, chỉ là giải pháp tạm thời
+        // Trong môi trường sản xuất, nên sử dụng cookie httpOnly hoặc các giải pháp bảo mật hơn
+        let encodedRefreshToken = null;
+        if (state.refreshToken) {
+          try {
+            // Mã hóa đơn giản bằng cách đảo ngược và base64
+            encodedRefreshToken = btoa(
+              state.refreshToken.split("").reverse().join(""),
+            );
+          } catch (error) {
+            console.error("Error encoding refresh token:", error);
+          }
+        }
+
         return {
           accessToken: state.accessToken,
-          // Không lưu refreshToken vào localStorage vì lý do bảo mật
+          refreshToken: encodedRefreshToken, // Lưu refreshToken đã được mã hóa
           isAuthenticated: state.isAuthenticated,
           user: state.user,
           deviceId: state.deviceId, // Đảm bảo deviceId được lưu
@@ -245,7 +260,39 @@ export const useAuthStore = create<AuthState>()(
       },
       onRehydrateStorage: () => (state) => {
         if (state) {
+          // Giải mã refreshToken nếu có
+          if (state.refreshToken) {
+            try {
+              // Giải mã bằng cách đảo ngược quá trình mã hóa
+              const decodedRefreshToken = atob(state.refreshToken)
+                .split("")
+                .reverse()
+                .join("");
+              state.refreshToken = decodedRefreshToken;
+
+              console.log("Successfully decoded refresh token from storage", {
+                hasRefreshToken: true,
+                refreshTokenPrefix:
+                  decodedRefreshToken.substring(0, 10) + "...",
+              });
+            } catch (error) {
+              console.error("Error decoding refresh token:", error);
+              // Nếu không thể giải mã, xóa refreshToken để tránh lỗi
+              state.refreshToken = null;
+            }
+          } else {
+            console.log("No refresh token found in storage");
+          }
+
           state.setHasHydrated(true);
+
+          // Kiểm tra tính hợp lệ của trạng thái sau khi khôi phục
+          console.log("Auth state after rehydration:", {
+            hasAccessToken: !!state.accessToken,
+            hasRefreshToken: !!state.refreshToken,
+            hasDeviceId: !!state.deviceId,
+            isAuthenticated: state.isAuthenticated,
+          });
         }
       },
     },

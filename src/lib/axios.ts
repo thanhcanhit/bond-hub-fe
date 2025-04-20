@@ -121,56 +121,91 @@ const refreshAuthToken = async (): Promise<string> => {
     const deviceId = authState.deviceId;
 
     console.log("Starting token refresh process");
-    console.log("Current refresh token:", refreshToken);
-    console.log("Current device ID:", deviceId);
+    console.log(
+      "Current refresh token:",
+      refreshToken ? `${refreshToken.substring(0, 10)}...` : "none",
+    );
+    console.log("Current device ID:", deviceId || "none");
 
-    if (!refreshToken) {
+    // Kiểm tra kỹ lưỡng refreshToken và deviceId
+    if (!refreshToken || refreshToken.trim() === "") {
+      console.error("Cannot refresh token: No refresh token available");
       throw new Error("No refresh token available");
     }
 
-    if (!deviceId) {
+    if (!deviceId || deviceId.trim() === "") {
+      console.error("Cannot refresh token: No device ID available");
       throw new Error("No device ID available");
     }
 
-    const response = await refreshTokenAxios.post<RefreshTokenResponse>(
-      "/auth/refresh",
-      {
-        refreshToken,
-        deviceId,
-      },
-    );
-    console.log("Refresh token response:", response.data);
+    // Thêm timeout để tránh chờ quá lâu
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 seconds timeout
 
-    if (!response.data || !response.data.accessToken) {
-      throw new Error("Invalid response from refresh token API");
+    try {
+      const response = await refreshTokenAxios.post<RefreshTokenResponse>(
+        "/auth/refresh",
+        {
+          refreshToken,
+          deviceId,
+        },
+        {
+          signal: controller.signal,
+        },
+      );
+
+      clearTimeout(timeoutId);
+      console.log("Refresh token response:", response.data);
+
+      if (!response.data || !response.data.accessToken) {
+        console.error("Invalid response from refresh token API");
+        throw new Error("Invalid response from refresh token API");
+      }
+
+      const { accessToken } = response.data;
+
+      // Keep the same refreshToken since backend doesn't return a new one
+      useAuthStore.getState().setTokens(accessToken, refreshToken);
+
+      console.log(
+        `Token refresh completed successfully. New token: ${accessToken.substring(0, 10)}...`,
+      );
+
+      return accessToken;
+    } catch (requestError) {
+      clearTimeout(timeoutId);
+      throw requestError;
     }
-
-    const { accessToken } = response.data;
-
-    // Keep the same refreshToken since backend doesn't return a new one
-    useAuthStore.getState().setTokens(accessToken, refreshToken);
-
-    console.log(
-      `Token refresh completed successfully. New token: ${accessToken.substring(0, 10)}...`,
-    );
-
-    return accessToken;
   } catch (error) {
     console.error(
       "Error during token refresh:",
       error instanceof Error ? error.message : "Unknown error",
     );
 
-    // Only logout immediately for critical errors
-    // For most errors, we'll let the interceptor handle it with a delay
-    if (
-      axios.isAxiosError(error) &&
-      error.response?.status === 403 // Forbidden - e.g., refresh token blacklisted
+    // Xử lý các loại lỗi khác nhau
+    if (axios.isAxiosError(error)) {
+      if (error.response?.status === 403) {
+        // Forbidden - e.g., refresh token blacklisted
+        console.log(
+          "Logging out immediately due to forbidden error during token refresh",
+        );
+        await useAuthStore.getState().logout();
+      } else if (error.response?.status === 401) {
+        // Unauthorized
+        console.log(
+          "Logging out due to unauthorized error during token refresh",
+        );
+        await useAuthStore.getState().logout();
+      } else if (error.code === "ERR_CANCELED") {
+        console.log("Token refresh request was aborted due to timeout");
+      }
+    } else if (
+      error instanceof Error &&
+      (error.message.includes("refresh token") ||
+        error.message.includes("device ID"))
     ) {
-      console.log(
-        "Logging out immediately due to forbidden error during token refresh",
-      );
-      // Clear auth state on critical refresh token failure
+      // Lỗi liên quan đến refresh token hoặc device ID
+      console.log("Logging out due to missing refresh token or device ID");
       await useAuthStore.getState().logout();
     }
 
@@ -214,12 +249,29 @@ axiosInstance.interceptors.response.use(
       const refreshToken = authState.refreshToken;
       const deviceId = authState.deviceId;
 
+      console.log("Checking refresh token data:", {
+        hasRefreshToken: !!refreshToken,
+        refreshTokenPrefix: refreshToken
+          ? refreshToken.substring(0, 10) + "..."
+          : "none",
+        hasDeviceId: !!deviceId,
+        deviceId: deviceId || "none",
+      });
+
       if (!refreshToken || !deviceId) {
         console.error(
           "Cannot refresh token: Missing refresh token or device ID",
         );
-        // Log the error but don't logout immediately - let the error propagate
-        // This allows the UI to handle the error gracefully
+
+        // Automatically logout the user when refresh token is missing
+        console.log("Logging out due to missing refresh token or device ID");
+        setTimeout(() => {
+          useAuthStore
+            .getState()
+            .logout()
+            .catch((e) => console.error("Error during auto logout:", e));
+        }, 500);
+
         return Promise.reject(
           new Error("Session expired. Please login again."),
         );
