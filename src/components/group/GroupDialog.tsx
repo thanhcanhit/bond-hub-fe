@@ -28,7 +28,7 @@ import {
   Trash,
   Pencil,
 } from "lucide-react";
-import { Group, Media, User } from "@/types/base";
+import { Group, Media, User, GroupRole } from "@/types/base";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useState, useEffect } from "react";
 import { useChatStore } from "@/stores/chatStore";
@@ -39,6 +39,7 @@ import {
   deleteGroup,
   leaveGroup,
   updateGroupAvatar,
+  updateMemberRole,
 } from "@/actions/group.action";
 import ProfileDialog from "@/components/profile/ProfileDialog";
 import GroupMemberList from "./GroupMemberList";
@@ -60,6 +61,11 @@ export default function GroupDialog({
   mediaFiles = [],
 }: GroupDialogProps) {
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [showTransferLeadershipDialog, setShowTransferLeadershipDialog] =
+    useState(false);
+  const [showConfirmTransferDialog, setShowConfirmTransferDialog] =
+    useState(false);
+  const [newLeaderId, setNewLeaderId] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedMember, setSelectedMember] = useState<User | null>(null);
@@ -154,6 +160,45 @@ export default function GroupDialog({
     const groupLink = `https://zalo.me/g/${group.id}`;
     navigator.clipboard.writeText(groupLink);
     toast.success("Đã sao chép liên kết nhóm");
+  };
+
+  // Hàm xử lý khi chọn thành viên để chuyển quyền trưởng nhóm
+  const handleSelectNewLeader = (memberId: string) => {
+    setNewLeaderId(memberId);
+    setShowConfirmTransferDialog(true);
+  };
+
+  // Hàm xử lý chuyển quyền trưởng nhóm
+  const executeTransferLeadership = async () => {
+    if (!group?.id || !newLeaderId) return;
+    setIsProcessing(true);
+    try {
+      // Chuyển quyền trưởng nhóm cho thành viên được chọn
+      const result = await updateMemberRole(
+        group.id,
+        newLeaderId,
+        GroupRole.LEADER,
+      );
+
+      if (result.success) {
+        // Đóng các dialog
+        setShowConfirmTransferDialog(false);
+        setShowTransferLeadershipDialog(false);
+
+        // Thông báo cho người dùng
+        toast.success("Đã chuyển quyền trưởng nhóm thành công");
+
+        // Tiếp tục rời nhóm
+        setShowLeaveDialog(true);
+      } else {
+        toast.error(`Lỗi: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error transferring leadership:", error);
+      toast.error("Đã xảy ra lỗi khi chuyển quyền trưởng nhóm");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Handle leave group
@@ -477,14 +522,25 @@ export default function GroupDialog({
                 </div>
               )}
 
-              {/* Leave group option - for everyone */}
-              <div
-                className="flex items-center p-2 cursor-pointer text-red-500"
-                onClick={() => setShowLeaveDialog(true)}
-              >
-                <LogOut className="h-5 w-5 mr-3" />
-                <span className="text-sm">Rời nhóm</span>
-              </div>
+              {/* Nút rời nhóm hiển thị cho tất cả thành viên, trừ khi trưởng nhóm là thành viên duy nhất */}
+              {!(
+                currentUserRole === "LEADER" && group?.members?.length === 1
+              ) && (
+                <div
+                  className="flex items-center p-2 cursor-pointer text-red-500"
+                  onClick={() => {
+                    // Nếu là trưởng nhóm, hiển thị dialog chuyển quyền trưởng nhóm
+                    if (currentUserRole === "LEADER") {
+                      setShowTransferLeadershipDialog(true);
+                    } else {
+                      setShowLeaveDialog(true);
+                    }
+                  }}
+                >
+                  <LogOut className="h-5 w-5 mr-3" />
+                  <span className="text-sm">Rời nhóm</span>
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>
@@ -543,6 +599,122 @@ export default function GroupDialog({
                 </>
               ) : (
                 "Rời nhóm"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog chuyển quyền trưởng nhóm */}
+      <AlertDialog
+        open={showTransferLeadershipDialog}
+        onOpenChange={setShowTransferLeadershipDialog}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Chuyển quyền trưởng nhóm</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn cần chuyển quyền trưởng nhóm cho một thành viên khác trước khi
+              rời nhóm. Vui lòng chọn một thành viên để trở thành trưởng nhóm
+              mới.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-[200px] overflow-y-auto my-4 border rounded-md">
+            {group?.members
+              ?.filter((member) => member.userId !== currentUser?.id) // Lọc ra các thành viên khác
+              .map((member) => {
+                const memberData = memberDetails[member.userId];
+                const initials = memberData?.userInfo?.fullName
+                  ? memberData.userInfo.fullName.slice(0, 2).toUpperCase()
+                  : "??";
+
+                return (
+                  <div
+                    key={member.userId}
+                    className="flex items-center p-3 hover:bg-gray-100 cursor-pointer"
+                    onClick={() => handleSelectNewLeader(member.userId)}
+                  >
+                    <Avatar className="h-8 w-8 mr-3">
+                      <AvatarImage
+                        src={
+                          memberData?.userInfo?.profilePictureUrl || undefined
+                        }
+                        className="object-cover"
+                      />
+                      <AvatarFallback className="bg-gray-200 text-gray-600">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium">
+                        {memberData?.userInfo?.fullName || "Thành viên"}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {member.role === "CO_LEADER"
+                          ? "Phó nhóm"
+                          : "Thành viên"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>Hủy</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog xác nhận chuyển quyền trưởng nhóm */}
+      <AlertDialog
+        open={showConfirmTransferDialog}
+        onOpenChange={setShowConfirmTransferDialog}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Xác nhận chuyển quyền trưởng nhóm
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {newLeaderId && memberDetails[newLeaderId] ? (
+                <>
+                  Bạn có chắc chắn muốn chuyển quyền trưởng nhóm cho{" "}
+                  <strong>
+                    {memberDetails[newLeaderId]?.userInfo?.fullName ||
+                      "Thành viên này"}
+                  </strong>
+                  ?
+                  <br />
+                  Sau khi chuyển quyền, bạn sẽ trở thành thành viên thường trong
+                  nhóm.
+                </>
+              ) : (
+                "Bạn có chắc chắn muốn chuyển quyền trưởng nhóm cho thành viên này?"
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={isProcessing}
+              onClick={() => {
+                setShowConfirmTransferDialog(false);
+                setNewLeaderId(null);
+              }}
+            >
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeTransferLeadership}
+              disabled={isProcessing}
+              className="bg-blue-500 hover:bg-blue-600"
+            >
+              {isProcessing ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                  Đang xử lý...
+                </>
+              ) : (
+                "Xác nhận"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

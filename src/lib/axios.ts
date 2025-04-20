@@ -50,7 +50,7 @@ refreshTokenAxios.interceptors.response.use(
   },
 );
 
-// Create an axios instance with an optional token
+// Create an axios instance with an optional token and token refresh capability
 export const createAxiosInstance = (token?: string): AxiosInstance => {
   const instance = createBaseAxiosInstance();
 
@@ -59,10 +59,11 @@ export const createAxiosInstance = (token?: string): AxiosInstance => {
     instance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
   }
 
-  // Add network error handling
+  // Add response interceptor with token refresh capability
   instance.interceptors.response.use(
     (response) => response,
-    (error: AxiosError) => {
+    async (error: AxiosError) => {
+      // Handle network errors
       if (error.code === "ECONNABORTED") {
         return Promise.reject(new Error("Request timeout. Please try again."));
       }
@@ -71,6 +72,118 @@ export const createAxiosInstance = (token?: string): AxiosInstance => {
         return Promise.reject(
           new Error("Network error. Please check your connection."),
         );
+      }
+
+      const originalRequest = error.config as AxiosRequestConfig & {
+        _retry?: boolean;
+      };
+
+      // Handle 401 Unauthorized errors by refreshing the token
+      if (error.response?.status === 401 && !originalRequest._retry) {
+        console.log(
+          `[createAxiosInstance] Received 401 error for request to ${originalRequest.url}, attempting to refresh token...`,
+        );
+
+        // Mark this request as retried to prevent infinite loops
+        originalRequest._retry = true;
+
+        // Check if we have the necessary data to refresh the token
+        const authState = useAuthStore.getState();
+        const refreshToken = authState.refreshToken;
+        const deviceId = authState.deviceId;
+
+        console.log("[createAxiosInstance] Checking refresh token data:", {
+          hasRefreshToken: !!refreshToken,
+          refreshTokenPrefix: refreshToken
+            ? refreshToken.substring(0, 10) + "..."
+            : "none",
+          hasDeviceId: !!deviceId,
+          deviceId: deviceId || "none",
+        });
+
+        if (!refreshToken || !deviceId) {
+          console.error(
+            "[createAxiosInstance] Cannot refresh token: Missing refresh token or device ID",
+          );
+
+          // Automatically logout the user when refresh token is missing
+          console.log(
+            "[createAxiosInstance] Logging out due to missing refresh token or device ID",
+          );
+          setTimeout(() => {
+            useAuthStore
+              .getState()
+              .logout()
+              .catch((e) =>
+                console.error(
+                  "[createAxiosInstance] Error during auto logout:",
+                  e,
+                ),
+              );
+          }, 500);
+
+          return Promise.reject(
+            new Error("Session expired. Please login again."),
+          );
+        }
+
+        // If a token refresh is already in progress, queue this request
+        if (isRefreshing) {
+          console.log(
+            `[createAxiosInstance] Token refresh already in progress, queuing request to ${originalRequest.url}`,
+          );
+          return new Promise((resolve, reject) => {
+            subscribeTokenRefresh((token) => {
+              console.log(
+                `[createAxiosInstance] Processing queued request to ${originalRequest.url} with refreshed token`,
+              );
+              if (token) {
+                if (originalRequest.headers) {
+                  originalRequest.headers["Authorization"] = `Bearer ${token}`;
+                } else {
+                  originalRequest.headers = {
+                    Authorization: `Bearer ${token}`,
+                  };
+                }
+                resolve(axios(originalRequest));
+              } else {
+                reject(new Error("Token refresh failed"));
+              }
+            });
+
+            // Add timeout to avoid waiting indefinitely
+            setTimeout(() => {
+              reject(new Error("Token refresh timeout"));
+            }, 15000); // 15 seconds timeout
+          });
+        }
+
+        try {
+          // Get a new token using the main refresh mechanism
+          console.log("[createAxiosInstance] Starting token refresh process");
+          const newToken = await refreshAuthToken();
+
+          // Update the authorization header and retry the original request
+          console.log(
+            `[createAxiosInstance] Retrying original request to ${originalRequest.url} with new token`,
+          );
+          if (originalRequest.headers) {
+            originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
+          } else {
+            originalRequest.headers = { Authorization: `Bearer ${newToken}` };
+          }
+
+          // Create a new instance to execute the retry
+          return axios(originalRequest);
+        } catch (refreshError) {
+          console.error(
+            "[createAxiosInstance] Token refresh failed:",
+            refreshError instanceof Error
+              ? refreshError.message
+              : "Unknown error",
+          );
+          return Promise.reject(error);
+        }
       }
 
       return Promise.reject(error);
@@ -140,10 +253,17 @@ const refreshAuthToken = async (): Promise<string> => {
 
     // Thêm timeout để tránh chờ quá lâu
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 seconds timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
 
     try {
-      const response = await refreshTokenAxios.post<RefreshTokenResponse>(
+      // Tạo một instance axios mới cho việc refresh token để tránh vòng lặp vô hạn
+      const refreshInstance = axios.create({
+        baseURL: NEXT_PUBLIC_BACKEND_URL,
+        headers: { "Content-Type": "application/json" },
+        timeout: 15000, // 15 seconds timeout
+      });
+
+      const response = await refreshInstance.post<RefreshTokenResponse>(
         "/auth/refresh",
         {
           refreshToken,
