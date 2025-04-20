@@ -1,10 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
 import { formatMessageTime } from "@/utils/dateUtils";
-import { Message, Media, ReactionType, UserInfo } from "@/types/base";
+import {
+  Message,
+  Media,
+  ReactionType,
+  UserInfo,
+  MessageType,
+  User,
+} from "@/types/base";
 import MediaGrid from "./MediaGrid";
 import ForwardMessageDialog from "./ForwardMessageDialog";
 import ReactionPicker from "./ReactionPicker";
@@ -190,6 +197,7 @@ interface MessageItemProps {
   onMessageClick?: (message: Message) => void;
   highlight?: string;
   userInfo?: UserInfo; // Thêm userInfo cho người gửi
+  isGroupMessage?: boolean; // Thêm flag để xác định tin nhắn nhóm
 }
 
 export default function MessageItem({
@@ -200,7 +208,13 @@ export default function MessageItem({
   onMessageClick,
   highlight,
   userInfo,
+  isGroupMessage,
 }: MessageItemProps) {
+  // Auto-detect if this is a group message if not explicitly provided
+  const isGroup =
+    isGroupMessage ||
+    message.messageType === MessageType.GROUP ||
+    !!message.groupId;
   const [isHovered, setIsHovered] = useState(false);
   const [isForwardDialogOpen, setIsForwardDialogOpen] = useState(false);
   const formattedTime = formatMessageTime(message.createdAt);
@@ -209,16 +223,29 @@ export default function MessageItem({
   const chatStore = useChatStore();
 
   // Biến để tái sử dụng về sau
-  const isRead = message.readBy.includes(message.receiverId || "");
+  const currentUserId = currentUser?.id || "";
+  const isRead =
+    Array.isArray(message.readBy) && message.readBy.includes(currentUserId);
   const isSent = message.id && !message.id.startsWith("temp-");
 
   // Đánh dấu tin nhắn đã đọc khi hiển thị (nếu chưa đọc và không phải tin nhắn của người dùng hiện tại)
   useEffect(() => {
-    if (!isCurrentUser && !isRead && isSent && message.id) {
+    if (!isCurrentUser && !isRead && isSent && message.id && currentUserId) {
       // Chỉ đánh dấu đã đọc nếu tin nhắn không phải của người dùng hiện tại và chưa được đọc
-      chatStore.markMessageAsReadById(message.id);
+      // Kiểm tra lại một lần nữa để tránh trường hợp đã được đánh dấu đọc nhiều lần
+      if (!message.readBy.includes(currentUserId)) {
+        chatStore.markMessageAsReadById(message.id);
+      }
     }
-  }, [isCurrentUser, isRead, isSent, message.id, chatStore]);
+  }, [
+    isCurrentUser,
+    isRead,
+    isSent,
+    message.id,
+    chatStore,
+    currentUserId,
+    message.readBy,
+  ]);
 
   // Get current user's reaction
   const getUserReaction = () => {
@@ -294,6 +321,16 @@ export default function MessageItem({
     setIsForwardDialogOpen(true);
   };
 
+  // Function to process tabs in text
+  const processTabsInText = (text: string): React.ReactNode => {
+    return text.split("\t").map((segment, i) => (
+      <React.Fragment key={i}>
+        {i > 0 && <span className="inline-block w-8"></span>}
+        {segment}
+      </React.Fragment>
+    ));
+  };
+
   // Function to highlight search text in message content
   const renderHighlightedText = (text: string, searchText: string) => {
     if (!searchText || !text) return text;
@@ -305,23 +342,59 @@ export default function MessageItem({
         "gi",
       );
 
-      // Split the text by matches
-      const parts = text.split(regex);
+      // First handle line breaks by splitting the text into lines
+      const lines = text.split("\n");
 
-      return parts.map((part, i) => {
-        // Check if this part matches the search term
-        if (part.toLowerCase() === searchText.toLowerCase()) {
+      return lines.map((line, lineIndex) => {
+        // Process tabs in the line
+        const lineWithTabs = line.includes("\t")
+          ? processTabsInText(line)
+          : line;
+
+        // If we've processed tabs, we can't apply regex highlighting
+        if (line.includes("\t")) {
           return (
-            <span key={i} className="bg-yellow-200 px-0.5 rounded">
-              {part}
+            <span key={lineIndex}>
+              {lineWithTabs}
+              {lineIndex < lines.length - 1 && <br />}
             </span>
           );
         }
-        return part;
+
+        // For lines without tabs, apply the highlighting
+        const parts = line.split(regex);
+
+        const highlightedLine = parts.map((part, i) => {
+          // Check if this part matches the search term
+          if (part.toLowerCase() === searchText.toLowerCase()) {
+            return (
+              <span
+                key={`${lineIndex}-${i}`}
+                className="bg-yellow-200 px-0.5 rounded"
+              >
+                {part}
+              </span>
+            );
+          }
+          return part;
+        });
+
+        // Return the line with a line break if it's not the last line
+        return (
+          <span key={lineIndex}>
+            {highlightedLine}
+            {lineIndex < lines.length - 1 && <br />}
+          </span>
+        );
       });
     } catch {
-      // If any error in regex, return plain text
-      return text;
+      // If any error in regex, return plain text with line breaks and tabs preserved
+      return text.split("\n").map((line, index) => (
+        <span key={index}>
+          {line.includes("\t") ? processTabsInText(line) : line}
+          {index < text.split("\n").length - 1 && <br />}
+        </span>
+      ));
     }
   };
 
@@ -345,14 +418,23 @@ export default function MessageItem({
           <div className="mr-2 flex-shrink-0">
             <Avatar className="h-8 w-8">
               <AvatarImage
-                className="select-none relative"
+                className="select-none relative object-cover"
                 src={
                   userInfo?.profilePictureUrl ||
                   message.sender?.userInfo?.profilePictureUrl ||
                   undefined
                 }
               />
-              <AvatarFallback>{getUserInitials(message.sender)}</AvatarFallback>
+              <AvatarFallback>
+                {getUserInitials({
+                  userInfo:
+                    userInfo ||
+                    message.sender?.userInfo ||
+                    ({
+                      fullName: isGroup ? "Thành viên" : "Người dùng",
+                    } as UserInfo),
+                } as User)}
+              </AvatarFallback>
             </Avatar>
           </div>
         )}
@@ -468,6 +550,15 @@ export default function MessageItem({
             </div>
           )}
 
+          {/* Display sender name for group messages */}
+          {isGroup && !isCurrentUser && (
+            <div className="text-xs font-medium text-blue-600 mb-1">
+              {message.sender?.userInfo?.fullName ||
+                userInfo?.fullName ||
+                "Thành viên nhóm"}
+            </div>
+          )}
+
           {/* If message is a reply to another message */}
           {message.repliedTo && (
             <div
@@ -528,7 +619,15 @@ export default function MessageItem({
                         message.content.text || "",
                         highlight || "",
                       )
-                    : message.content.text}
+                    : message.content.text?.split("\n").map((line, index) => (
+                        <span key={index}>
+                          {line.includes("\t") ? processTabsInText(line) : line}
+                          {index <
+                            message.content.text!.split("\n").length - 1 && (
+                            <br />
+                          )}
+                        </span>
+                      ))}
                 </div>
               )}
             </div>
@@ -711,7 +810,16 @@ export default function MessageItem({
                 }
                 className="object-cover"
               />
-              <AvatarFallback>{getUserInitials(currentUser)}</AvatarFallback>
+              <AvatarFallback>
+                {getUserInitials(
+                  currentUser ||
+                    ({
+                      userInfo: {
+                        fullName: "Bạn",
+                      },
+                    } as User),
+                )}
+              </AvatarFallback>
             </Avatar>
           </div>
         )}

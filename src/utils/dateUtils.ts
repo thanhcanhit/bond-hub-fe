@@ -64,3 +64,47 @@ export const formatMessageDate = (dateInput: Date | string): string => {
     });
   }
 };
+
+// Format last activity time in a user-friendly way
+export const formatLastActivity = (
+  dateInput: Date | string | undefined,
+): string => {
+  // If no date provided, return appropriate message
+  if (!dateInput) return "Không có thông tin";
+
+  // Ensure we have a proper Date object
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+
+  // Check if date is valid
+  if (isNaN(date.getTime())) {
+    console.error("Invalid date:", dateInput);
+    return "Không có thông tin";
+  }
+
+  const now = new Date();
+  const diffInMs = now.getTime() - date.getTime();
+  const diffInSeconds = Math.floor(diffInMs / 1000);
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  const diffInDays = Math.floor(diffInHours / 24);
+
+  // Format based on how long ago the activity was
+  if (diffInSeconds < 60) {
+    return "Vừa mới truy cập";
+  } else if (diffInMinutes < 60) {
+    return `${diffInMinutes} phút trước`;
+  } else if (diffInHours < 24) {
+    return `${diffInHours} giờ trước`;
+  } else if (diffInDays < 7) {
+    return `${diffInDays} ngày trước`;
+  } else {
+    // For older dates, show the full date
+    return date.toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+};

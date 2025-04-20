@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { Socket } from "socket.io-client";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
@@ -89,6 +89,29 @@ export default function ChatSocketHandler() {
             userInfo: selectedContact.userInfo,
           };
         }
+        // For group messages, try to find sender info from the group members
+        else if (
+          currentChatType === "GROUP" &&
+          selectedGroup &&
+          message.groupId === selectedGroup.id
+        ) {
+          const senderMember = selectedGroup.memberUsers?.find(
+            (member) => member.id === message.senderId,
+          );
+          if (senderMember) {
+            // If we found the sender in the group members, use that info
+            message.sender.userInfo = {
+              ...(message.sender.userInfo || {}),
+              id: message.senderId,
+              fullName: senderMember.fullName,
+              profilePictureUrl: senderMember.profilePictureUrl,
+              createdAt: message.sender.userInfo?.createdAt || new Date(),
+              updatedAt: message.sender.userInfo?.updatedAt || new Date(),
+              blockStrangers: message.sender.userInfo?.blockStrangers || false,
+              userAuth: message.sender,
+            };
+          }
+        }
         // If sender doesn't have userInfo or has incomplete userInfo
         else if (
           !message.sender.userInfo ||
@@ -115,7 +138,7 @@ export default function ChatSocketHandler() {
       }
       return message;
     },
-    [currentUser, selectedContact],
+    [currentUser, selectedContact, selectedGroup, currentChatType],
   );
 
   // Handle new message event
@@ -232,6 +255,30 @@ export default function ChatSocketHandler() {
           selectedGroup &&
           message.groupId === selectedGroup.id);
 
+      // Nếu tin nhắn thuộc nhóm hiện tại, đảm bảo thông tin người gửi được cập nhật từ danh sách thành viên
+      if (
+        currentChatType === "GROUP" &&
+        selectedGroup &&
+        message.groupId === selectedGroup.id
+      ) {
+        const senderMember = selectedGroup.memberUsers?.find(
+          (member) => member.id === message.senderId,
+        );
+        if (senderMember && message.sender) {
+          // Cập nhật thông tin người gửi từ danh sách thành viên nhóm
+          message.sender.userInfo = {
+            ...(message.sender.userInfo || {}),
+            id: message.senderId,
+            fullName: senderMember.fullName,
+            profilePictureUrl: senderMember.profilePictureUrl,
+            createdAt: message.sender.userInfo?.createdAt || new Date(),
+            updatedAt: message.sender.userInfo?.updatedAt || new Date(),
+            blockStrangers: false,
+            userAuth: message.sender,
+          };
+        }
+      }
+
       // Nếu tin nhắn thuộc cuộc trò chuyện đang mở, thêm vào danh sách tin nhắn
       if (isFromCurrentChat) {
         // Kiểm tra xem tin nhắn đã tồn tại trong danh sách chưa
@@ -266,6 +313,33 @@ export default function ChatSocketHandler() {
         message.senderId !== currentUser?.id && !isFromCurrentChat,
       );
 
+      // Tìm thông tin người gửi trong danh sách cuộc trò chuyện nếu là tin nhắn nhóm
+      if (message.groupId && message.messageType === "GROUP") {
+        const groupConversation = conversationsStore.conversations.find(
+          (conv) => conv.type === "GROUP" && conv.group?.id === message.groupId,
+        );
+
+        if (groupConversation && groupConversation.group?.memberUsers) {
+          const senderMember = groupConversation.group.memberUsers.find(
+            (member) => member.id === message.senderId,
+          );
+
+          if (senderMember && message.sender) {
+            // Cập nhật thông tin người gửi từ danh sách thành viên nhóm
+            message.sender.userInfo = {
+              ...(message.sender.userInfo || {}),
+              id: message.senderId,
+              fullName: senderMember.fullName,
+              profilePictureUrl: senderMember.profilePictureUrl,
+              createdAt: message.sender.userInfo?.createdAt || new Date(),
+              updatedAt: message.sender.userInfo?.updatedAt || new Date(),
+              blockStrangers: false,
+              userAuth: message.sender,
+            };
+          }
+        }
+      }
+
       conversationsStore.processNewMessage(message, {
         // Tăng số lượng tin nhắn chưa đọc nếu tin nhắn từ người khác và không phải cuộc trò chuyện đang mở
         incrementUnreadCount: shouldIncrementUnread,
@@ -296,10 +370,15 @@ export default function ChatSocketHandler() {
       // Update the message in the current chat
       const messageToUpdate = messages.find((msg) => msg.id === data.messageId);
       if (messageToUpdate) {
-        // Create updated message with new readBy array
+        // Create a Set from the readBy array to remove duplicates
+        const uniqueReadBy = Array.isArray(data.readBy)
+          ? [...new Set(data.readBy)]
+          : [];
+
+        // Create updated message with deduplicated readBy array
         const updatedMessage = {
           ...messageToUpdate,
-          readBy: data.readBy,
+          readBy: uniqueReadBy,
         };
 
         // Update in chat store using the utility function
@@ -425,14 +504,21 @@ export default function ChatSocketHandler() {
 
         // Update in conversations store using the utility function
         const conversationsStore = useConversationsStore.getState();
+
+        // Determine if this is a reaction from the current user to someone else's message
+        const isCurrentUserReactingToOthersMessage =
+          data.userId === currentUser?.id &&
+          messageToUpdate.senderId !== currentUser?.id;
+
         conversationsStore.processNewMessage(updatedMessage, {
-          incrementUnreadCount: false,
-          markAsRead: false,
+          incrementUnreadCount: false, // Never increment unread count for reactions
+          markAsRead: isCurrentUserReactingToOthersMessage, // Mark as read if current user is reacting to someone else's message
           updateLastActivity: false, // Don't update lastActivity for reaction events
         });
 
         // Phát âm thanh thông báo nếu cảm xúc đến từ người khác và không phải cuộc trò chuyện hiện tại
-        if (!isCurrentUser) {
+        // Chỉ phát âm thanh khi người khác thả cảm xúc cho tin nhắn của mình
+        if (!isCurrentUser && messageToUpdate.senderId === currentUser?.id) {
           // Kiểm tra xem tin nhắn có thuộc cuộc trò chuyện hiện tại không
           const isFromCurrentChat =
             (currentChatType === "USER" &&
@@ -449,7 +535,8 @@ export default function ChatSocketHandler() {
               `[ChatSocketHandler] Playing notification sound for reaction from ${data.userId}`,
             );
             playNotificationSound();
-            incrementGlobalUnread();
+            // Không tăng số lượng tin nhắn chưa đọc khi có người thả cảm xúc
+            // incrementGlobalUnread();
           }
         }
       }
@@ -461,7 +548,6 @@ export default function ChatSocketHandler() {
       selectedContact,
       selectedGroup,
       playNotificationSound,
-      incrementGlobalUnread,
     ],
   );
 
@@ -481,7 +567,21 @@ export default function ChatSocketHandler() {
         console.log(
           `[ChatSocketHandler] Setting typing status for ${typingId} to true`,
         );
-        conversationsStore.setTypingStatus(data.userId, true);
+
+        // Xác định loại cuộc trò chuyện (nhóm hoặc cá nhân)
+        const isGroupChat = Boolean(data.groupId);
+
+        if (isGroupChat) {
+          // Đối với nhóm, cập nhật trạng thái typing cho nhóm với thông tin người đang nhập
+          conversationsStore.setGroupTypingStatus(
+            data.groupId!,
+            data.userId,
+            true,
+          );
+        } else {
+          // Đối với chat cá nhân, cập nhật trạng thái typing cho người dùng
+          conversationsStore.setTypingStatus(data.userId, true);
+        }
       }
     },
     [currentUser],
@@ -503,7 +603,21 @@ export default function ChatSocketHandler() {
         console.log(
           `[ChatSocketHandler] Setting typing status for ${typingId} to false`,
         );
-        conversationsStore.setTypingStatus(data.userId, false);
+
+        // Xác định loại cuộc trò chuyện (nhóm hoặc cá nhân)
+        const isGroupChat = Boolean(data.groupId);
+
+        if (isGroupChat) {
+          // Đối với nhóm, cập nhật trạng thái typing cho nhóm với thông tin người đang nhập
+          conversationsStore.setGroupTypingStatus(
+            data.groupId!,
+            data.userId,
+            false,
+          );
+        } else {
+          // Đối với chat cá nhân, cập nhật trạng thái typing cho người dùng
+          conversationsStore.setTypingStatus(data.userId, false);
+        }
       }
     },
     [currentUser],
@@ -538,20 +652,40 @@ export default function ChatSocketHandler() {
   // Send typing indicator
   const sendTypingIndicator = useCallback(
     (isTyping: boolean) => {
-      if (!messageSocket || !currentUser) return;
-
-      const event = isTyping ? "typing" : "stopTyping";
-      const data: { receiverId?: string; groupId?: string } = {};
-
-      if (currentChatType === "USER" && selectedContact) {
-        data.receiverId = selectedContact.id;
-      } else if (currentChatType === "GROUP" && selectedGroup) {
-        data.groupId = selectedGroup.id;
-      } else {
-        return; // No valid recipient
+      // Safety check - if socket or user is not available, we can't send typing indicator
+      if (!messageSocket || !currentUser) {
+        console.log(
+          "[ChatSocketHandler] Cannot send typing indicator: socket or user not available",
+        );
+        return;
       }
 
-      messageSocket.emit(event, data);
+      try {
+        const event = isTyping ? "typing" : "stopTyping";
+        const data: { receiverId?: string; groupId?: string } = {};
+
+        if (currentChatType === "USER" && selectedContact) {
+          data.receiverId = selectedContact.id;
+        } else if (currentChatType === "GROUP" && selectedGroup) {
+          data.groupId = selectedGroup.id;
+        } else {
+          return; // No valid recipient
+        }
+
+        // Check if socket is connected before emitting event
+        if (messageSocket.connected) {
+          messageSocket.emit(event, data);
+        } else {
+          console.log(
+            "[ChatSocketHandler] Cannot send typing indicator: socket not connected",
+          );
+        }
+      } catch (error) {
+        console.error(
+          "[ChatSocketHandler] Error sending typing indicator:",
+          error,
+        );
+      }
     },
     [
       messageSocket,
@@ -565,8 +699,15 @@ export default function ChatSocketHandler() {
   // Không cần sendHeartbeat nữa vì đã được xử lý trong SocketProvider
 
   // Thiết lập các event listener cho socket
+  // Use a ref to track if event listeners are already set up
+  const eventListenersSetupRef = useRef(false);
+
   useEffect(() => {
-    if (!messageSocket || !currentUser) return;
+    // Early return if no socket or user
+    if (!messageSocket || !currentUser) {
+      console.log("[ChatSocketHandler] No socket or user, skipping setup");
+      return;
+    }
 
     // Get initial user statuses for all contacts
     const userIds = conversations
@@ -577,61 +718,93 @@ export default function ChatSocketHandler() {
       messageSocket.emit("getUserStatus", { userIds });
     }
 
-    console.log("[ChatSocketHandler] Setting up socket event listeners");
+    // Only set up event listeners if they haven't been set up yet
+    if (!eventListenersSetupRef.current) {
+      console.log("[ChatSocketHandler] Setting up socket event listeners");
 
-    // Register message event handlers
-    messageSocket.on("newMessage", handleNewMessage);
-    messageSocket.on("messageRead", handleMessageRead);
-    messageSocket.on("messageRecalled", handleMessageRecalled);
-    messageSocket.on("messageReactionUpdated", handleMessageReactionUpdated);
-    messageSocket.on("userTyping", handleUserTyping);
-    messageSocket.on("userTypingStopped", handleUserTypingStopped);
-    messageSocket.on("userStatus", handleUserStatus);
+      // Register message event handlers
+      messageSocket.on("newMessage", handleNewMessage);
+      messageSocket.on("messageRead", handleMessageRead);
+      messageSocket.on("messageRecalled", handleMessageRecalled);
+      messageSocket.on("messageReactionUpdated", handleMessageReactionUpdated);
+      messageSocket.on("userTyping", handleUserTyping);
+      messageSocket.on("userTypingStopped", handleUserTypingStopped);
+      messageSocket.on("userStatus", handleUserStatus);
 
-    // Log all registered listeners for debugging
-    console.log(
-      "[ChatSocketHandler] Current listeners:",
-      messageSocket.listeners("newMessage").length,
-    );
+      // Log all registered listeners for debugging
+      console.log(
+        "[ChatSocketHandler] Current listeners:",
+        messageSocket.listeners("newMessage").length,
+      );
 
-    // Clean up on unmount
+      // Mark event listeners as set up
+      eventListenersSetupRef.current = true;
+    }
+
+    // Clean up on unmount only, not when dependencies change
     return () => {
+      // Only clean up if the component is unmounting
+      if (!messageSocket) {
+        console.log("[ChatSocketHandler] No socket, skipping cleanup");
+        return;
+      }
+
       console.log("[ChatSocketHandler] Removing message socket event handlers");
 
-      // Log current listeners before cleanup
-      console.log("[ChatSocketHandler] Listeners before cleanup:", {
-        newMessage: messageSocket.listeners("newMessage").length,
-        messageRead: messageSocket.listeners("messageRead").length,
-        messageRecalled: messageSocket.listeners("messageRecalled").length,
-        messageReactionUpdated: messageSocket.listeners(
-          "messageReactionUpdated",
-        ).length,
-        userTyping: messageSocket.listeners("userTyping").length,
-        userTypingStopped: messageSocket.listeners("userTypingStopped").length,
-        userStatus: messageSocket.listeners("userStatus").length,
-      });
+      // Safety check - if socket is no longer available, we can't remove listeners
+      if (!messageSocket.connected) {
+        console.log(
+          "[ChatSocketHandler] Socket no longer available, skipping cleanup",
+        );
+        return;
+      }
 
-      // Remove specific event handlers
-      messageSocket.off("newMessage", handleNewMessage);
-      messageSocket.off("messageRead", handleMessageRead);
-      messageSocket.off("messageRecalled", handleMessageRecalled);
-      messageSocket.off("messageReactionUpdated", handleMessageReactionUpdated);
-      messageSocket.off("userTyping", handleUserTyping);
-      messageSocket.off("userTypingStopped", handleUserTypingStopped);
-      messageSocket.off("userStatus", handleUserStatus);
+      try {
+        // Log current listeners before cleanup
+        console.log("[ChatSocketHandler] Listeners before cleanup:", {
+          newMessage: messageSocket.listeners("newMessage").length,
+          messageRead: messageSocket.listeners("messageRead").length,
+          messageRecalled: messageSocket.listeners("messageRecalled").length,
+          messageReactionUpdated: messageSocket.listeners(
+            "messageReactionUpdated",
+          ).length,
+          userTyping: messageSocket.listeners("userTyping").length,
+          userTypingStopped:
+            messageSocket.listeners("userTypingStopped").length,
+          userStatus: messageSocket.listeners("userStatus").length,
+        });
 
-      // Log listeners after cleanup
-      console.log("[ChatSocketHandler] Listeners after cleanup:", {
-        newMessage: messageSocket.listeners("newMessage").length,
-        messageRead: messageSocket.listeners("messageRead").length,
-        messageRecalled: messageSocket.listeners("messageRecalled").length,
-        messageReactionUpdated: messageSocket.listeners(
+        // Remove specific event handlers
+        messageSocket.off("newMessage", handleNewMessage);
+        messageSocket.off("messageRead", handleMessageRead);
+        messageSocket.off("messageRecalled", handleMessageRecalled);
+        messageSocket.off(
           "messageReactionUpdated",
-        ).length,
-        userTyping: messageSocket.listeners("userTyping").length,
-        userTypingStopped: messageSocket.listeners("userTypingStopped").length,
-        userStatus: messageSocket.listeners("userStatus").length,
-      });
+          handleMessageReactionUpdated,
+        );
+        messageSocket.off("userTyping", handleUserTyping);
+        messageSocket.off("userTypingStopped", handleUserTypingStopped);
+        messageSocket.off("userStatus", handleUserStatus);
+
+        // Reset the ref
+        eventListenersSetupRef.current = false;
+
+        // Log listeners after cleanup
+        console.log("[ChatSocketHandler] Listeners after cleanup:", {
+          newMessage: messageSocket.listeners("newMessage").length,
+          messageRead: messageSocket.listeners("messageRead").length,
+          messageRecalled: messageSocket.listeners("messageRecalled").length,
+          messageReactionUpdated: messageSocket.listeners(
+            "messageReactionUpdated",
+          ).length,
+          userTyping: messageSocket.listeners("userTyping").length,
+          userTypingStopped:
+            messageSocket.listeners("userTypingStopped").length,
+          userStatus: messageSocket.listeners("userStatus").length,
+        });
+      } catch (error) {
+        console.error("[ChatSocketHandler] Error during cleanup:", error);
+      }
     };
   }, [
     messageSocket,
@@ -648,10 +821,18 @@ export default function ChatSocketHandler() {
 
   // Export typing indicator function to chat store
   useEffect(() => {
-    if (useChatStore.getState().sendTypingIndicator !== sendTypingIndicator) {
-      useChatStore.setState({ sendTypingIndicator });
+    // Only update the store if the user is logged in
+    if (
+      currentUser &&
+      useChatStore.getState().sendTypingIndicator !== sendTypingIndicator
+    ) {
+      try {
+        useChatStore.setState({ sendTypingIndicator });
+      } catch (error) {
+        console.error("[ChatSocketHandler] Error updating chat store:", error);
+      }
     }
-  }, [sendTypingIndicator]);
+  }, [sendTypingIndicator, currentUser]);
 
   // This component doesn't render anything
   return null;

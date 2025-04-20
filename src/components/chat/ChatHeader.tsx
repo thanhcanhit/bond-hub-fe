@@ -1,33 +1,58 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { User, UserInfo } from "@/types/base";
-import { Info, Search, X, ChevronLeft } from "lucide-react";
+import { Info, Search, X, ChevronLeft, Users } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
+import { formatLastActivity } from "@/utils/dateUtils";
 
 import { Input } from "@/components/ui/input";
 
 import ProfileDialog from "@/components/profile/ProfileDialog";
 
 interface ChatHeaderProps {
-  contact:
+  contact?:
     | (User & { userInfo: UserInfo; online?: boolean; lastSeen?: Date })
     | null;
+  group?: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+    createdAt?: Date;
+    memberIds?: string[];
+    memberUsers?: Array<{
+      id: string;
+      fullName: string;
+      profilePictureUrl?: string | null;
+      role: GroupRole;
+    }>;
+  } | null;
   onToggleInfo: () => void;
   onBackToList?: () => void;
 }
 
 export default function ChatHeader({
   contact,
+  group,
   onToggleInfo,
   onBackToList,
 }: ChatHeaderProps) {
   const [isSearching, setIsSearching] = useState(false);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
-  const { searchText, setSearchText, searchMessages, clearSearch } =
-    useChatStore();
+  const {
+    searchText,
+    setSearchText,
+    searchMessages,
+    clearSearch,
+    currentChatType,
+  } = useChatStore();
+
+  // Calculate member count at the top level to avoid conditional hooks
+  const memberCount = useMemo(() => {
+    return group?.memberUsers?.length || 0;
+  }, [group?.memberUsers]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +68,8 @@ export default function ChatHeader({
     setIsSearching(!isSearching);
   };
 
-  if (!contact) {
+  // If neither contact nor group is provided, show default header
+  if (!contact && !group) {
     return (
       <div className="border-b bg-white p-3 h-[69px] flex items-center justify-between">
         <h2 className="font-semibold">Chọn một cuộc trò chuyện</h2>
@@ -65,39 +91,65 @@ export default function ChatHeader({
               <ChevronLeft className="h-5 w-5" />
             </Button>
           )}
-          <div
-            className="flex items-center cursor-pointer hover:bg-gray-100 p-1 rounded-md transition-colors"
-            onClick={() => setShowProfileDialog(true)}
-          >
-            <div className="relative">
-              <Avatar className="h-10 w-10 mr-3">
-                <AvatarImage
-                  src={contact.userInfo?.profilePictureUrl || undefined}
-                  className="object-cover"
-                />
-                <AvatarFallback>
-                  {contact.userInfo?.fullName?.slice(0, 2).toUpperCase() ||
-                    "??"}
-                </AvatarFallback>
-              </Avatar>
-              {/* Online status indicator */}
-              {contact.online && (
-                <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white"></span>
-              )}
+          {contact ? (
+            <div
+              className="flex items-center cursor-pointer hover:bg-gray-100 p-1 rounded-md transition-colors"
+              onClick={() => setShowProfileDialog(true)}
+            >
+              <div className="relative">
+                <Avatar className="h-10 w-10 mr-3">
+                  <AvatarImage
+                    src={contact.userInfo?.profilePictureUrl || undefined}
+                    className="object-cover"
+                  />
+                  <AvatarFallback>
+                    {contact.userInfo?.fullName?.slice(0, 2).toUpperCase() ||
+                      "??"}
+                  </AvatarFallback>
+                </Avatar>
+                {/* Online status indicator */}
+                {contact.online && (
+                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white"></span>
+                )}
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold">
+                  {contact.userInfo?.fullName || "Người dùng"}
+                </h2>
+                <p className="text-xs text-gray-500">
+                  {contact.online
+                    ? "Đang hoạt động"
+                    : contact.lastSeen
+                      ? `Hoạt động ${new Date(contact.lastSeen).toLocaleString()}`
+                      : contact.userInfo?.statusMessage ||
+                        "Không có trạng thái"}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-sm font-semibold">
-                {contact.userInfo?.fullName || "Người dùng"}
-              </h2>
-              <p className="text-xs text-gray-500">
-                {contact.online
-                  ? "Đang hoạt động"
-                  : contact.lastSeen
-                    ? `Hoạt động ${new Date(contact.lastSeen).toLocaleString()}`
-                    : contact.userInfo?.statusMessage || "Không có trạng thái"}
-              </p>
+          ) : group ? (
+            <div className="flex items-center hover:bg-gray-100 p-1 rounded-md transition-colors">
+              <div className="relative">
+                <Avatar className="h-10 w-10 mr-3">
+                  <AvatarImage
+                    src={group.avatarUrl || undefined}
+                    className="object-cover"
+                  />
+                  <AvatarFallback>
+                    {group.name?.slice(0, 2).toUpperCase() || "GP"}
+                  </AvatarFallback>
+                </Avatar>
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold">
+                  {group.name || "Nhóm chat"}
+                </h2>
+                <p className="text-xs text-gray-500 flex items-center">
+                  <Users className="h-3 w-3 mr-1" />
+                  {memberCount} thành viên
+                </p>
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           {isSearching ? (
@@ -151,15 +203,17 @@ export default function ChatHeader({
         </div>
       </div>
 
-      {/* Profile Dialog */}
-      {contact && (
+      {/* Profile Dialog - only show for user chats */}
+      {currentChatType === "USER" && contact && showProfileDialog && (
         <ProfileDialog
           user={contact}
-          isOpen={showProfileDialog}
+          isOpen={true}
           onOpenChange={setShowProfileDialog}
           isOwnProfile={false}
         />
       )}
+
+      {/* For group chats, we could add a GroupProfileDialog component here in the future */}
     </>
   );
 }

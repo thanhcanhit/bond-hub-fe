@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useEffect, useState, useRef } from "react";
 import ContactList from "@/components/chat/ConverstationList";
 import ChatArea from "@/components/chat/ChatArea";
 import ContactInfo from "@/components/chat/ConverstationInfo";
@@ -23,6 +23,7 @@ export default function ChatPage() {
   const {
     selectedContact,
     selectedGroup,
+    setSelectedGroup,
     currentChatType,
     setSelectedContact,
   } = useChatStore();
@@ -33,11 +34,18 @@ export default function ChatPage() {
   const groupIdParam = searchParams.get("groupId");
   const userIdParam = searchParams.get("userId");
 
+  // Use a ref to track if conversations have been loaded
+  const conversationsLoadedRef = useRef(false);
+
   // Load conversations when component mounts
   useEffect(() => {
-    if (currentUser?.id) {
+    if (currentUser?.id && !conversationsLoadedRef.current) {
+      console.log(
+        `[ChatPage] Loading conversations for user ${currentUser.id}`,
+      );
       loadConversations(currentUser.id);
       // The API now returns both user and group conversations
+      conversationsLoadedRef.current = true;
     }
   }, [currentUser?.id, loadConversations]);
 
@@ -108,16 +116,29 @@ export default function ChatPage() {
     const conversationsStore = useConversationsStore.getState();
 
     if (type === "USER") {
-      // Handle user conversation
+      // Clear any selected group when selecting a contact
+      setSelectedGroup(null);
+
+      // Check if this contact is already selected to prevent infinite loops
+      const currentSelectedContact = useChatStore.getState().selectedContact;
+      if (currentSelectedContact?.id === id) {
+        console.log(`[ChatPage] Contact ${id} is already selected, skipping`);
+        return;
+      }
+
       // First, check if we already have this contact in our conversations store
       const existingConversation = conversationsStore.conversations.find(
         (conv) => conv.type === "USER" && conv.contact.id === id,
       );
 
+      // Set a flag to track if we've already set the contact
+      let contactSet = false;
+
       if (existingConversation) {
         // Use the contact from the conversations store immediately
         // This will clear the current messages and set loading state
         setSelectedContact(existingConversation.contact);
+        contactSet = true;
 
         // Reload messages for this conversation
         setTimeout(() => {
@@ -125,40 +146,45 @@ export default function ChatPage() {
         }, 0);
       }
 
-      try {
-        // Always fetch the latest user data to ensure we have the most up-to-date info
-        const result = await getUserDataById(id);
-        if (result.success && result.user) {
-          // Ensure userInfo exists
-          const user = result.user;
-          if (!user.userInfo) {
-            user.userInfo = {
-              id: user.id,
-              fullName: user.email || user.phoneNumber || "Unknown",
-              profilePictureUrl: null,
-              statusMessage: "No status",
-              blockStrangers: false,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              userAuth: user,
-            };
-          }
+      // Only fetch additional user data if we don't have it in the conversation store
+      // or if we want to update with the latest data
+      if (!contactSet) {
+        try {
+          // Only fetch user data for user conversations, not for groups
+          // This avoids unnecessary API calls when selecting a group
+          const result = await getUserDataById(id);
+          if (result.success && result.user) {
+            // Ensure userInfo exists
+            const user = result.user;
+            if (!user.userInfo) {
+              user.userInfo = {
+                id: user.id,
+                fullName: user.email || user.phoneNumber || "Unknown",
+                profilePictureUrl: null,
+                statusMessage: "No status",
+                blockStrangers: false,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                userAuth: user,
+              };
+            }
 
-          // Only update the contact if it's still the selected one
-          const currentSelectedContact = chatStore.selectedContact;
-          if (currentSelectedContact?.id === id) {
-            setSelectedContact(user as User & { userInfo: UserInfo });
+            // Only update the contact if it's still the selected one
+            const currentSelectedContact =
+              useChatStore.getState().selectedContact;
+            if (currentSelectedContact?.id === id) {
+              setSelectedContact(user as User & { userInfo: UserInfo });
+              contactSet = true;
+            }
           }
-        } else if (!existingConversation) {
-          // Only set to null if we don't have an existing conversation
-          setSelectedContact(null);
+        } catch (error) {
+          console.error("Error fetching user data:", error);
         }
-      } catch (error) {
-        console.error("Error fetching user data:", error);
-        // If we already set a contact from the conversation store, don't reset to null
-        if (!existingConversation) {
-          setSelectedContact(null);
-        }
+      }
+
+      // If we couldn't set the contact from either source, set it to null
+      if (!contactSet) {
+        setSelectedContact(null);
       }
     } else if (type === "GROUP") {
       // Handle group conversation
@@ -170,6 +196,8 @@ export default function ChatPage() {
       }
     }
   };
+
+  // Note: Group selection is handled by handleSelectContact with type="GROUP"
 
   // Toggle contact info sidebar
   const toggleContactInfo = () => {
@@ -188,8 +216,15 @@ export default function ChatPage() {
         className={`w-full md:w-[340px] bg-white border-r flex flex-col overflow-hidden ${isTabContentVisible ? "flex" : "hidden"}`}
       >
         <ContactList
-          onSelectConversation={(id, type) => {
-            handleSelectContact(id, type);
+          onSelectContact={(contactId) => {
+            handleSelectContact(contactId, "USER");
+            // Hide conversation list on mobile when selecting a chat
+            if (isMobile) {
+              setIsTabContentVisible(false);
+            }
+          }}
+          onSelectGroup={(groupId) => {
+            handleSelectContact(groupId, "GROUP");
             // Hide conversation list on mobile when selecting a chat
             if (isMobile) {
               setIsTabContentVisible(false);

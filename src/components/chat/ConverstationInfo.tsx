@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { User, UserInfo, Media } from "@/types/base";
+import { User, UserInfo, Media, GroupRole } from "@/types/base";
 import { getLinkIcon, getLinkTitle } from "@/utils/link-utils";
 import MediaViewer from "@/components/media/MediaViewer";
 import {
@@ -31,9 +31,22 @@ import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 
 interface ContactInfoProps {
-  contact:
+  contact?:
     | (User & { userInfo: UserInfo; online?: boolean; lastSeen?: Date })
     | null;
+  group?: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+    createdAt?: Date;
+    memberIds?: string[];
+    memberUsers?: Array<{
+      id: string;
+      fullName: string;
+      profilePictureUrl?: string | null;
+      role: GroupRole;
+    }>;
+  } | null;
   onClose: () => void;
   isOverlay?: boolean;
 }
