@@ -196,28 +196,27 @@ export default function MediaViewer({
               {/* Main content area */}
               <div className="flex flex-1 items-center justify-between flex-1 relative py-5">
                 {isVideo ? (
-                  <video
-                    src={currentMedia.url}
-                    controls
-                    autoPlay
-                    className="max-h-[calc(70vh-20px)] max-w-[calc(70vw-80px)]"
-                    onLoadStart={() => setIsLoading(true)}
-                    onLoadedData={() => setIsLoading(false)}
-                  />
+                  <div className="flex items-center justify-center w-full">
+                    <div className="flex items-center justify-center w-full">
+                      <video
+                        src={currentMedia.url}
+                        controls
+                        autoPlay
+                        className="max-h-[calc(70vh-20px)] max-w-[calc(100vw-120px)] object-contain"
+                        onLoadStart={() => setIsLoading(true)}
+                        onLoadedData={() => setIsLoading(false)}
+                      />
+                    </div>
+                  </div>
                 ) : (
-                  <div className="flex items-center justify-center">
-                    {/* {isLoading && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-8 h-8 border-4 border-t-transparent border-white rounded-full animate-spin"></div>
-                      </div>
-                    )} */}
-                    <div className="flex items-center justify-center">
+                  <div className="flex items-center justify-center w-full">
+                    <div className="flex items-center justify-center w-full">
                       <Image
                         src={currentMedia.url}
                         alt={currentMedia.fileName || "Media"}
                         width={1200}
                         height={800}
-                        className={`object-contain max-h-[70vh] max-w-[100vw] ${
+                        className={`object-contain max-h-[70vh] max-w-[calc(100vw-120px)] ${
                           isLoading ? "opacity-0" : "opacity-100"
                         }`}
                         onLoad={() => setIsLoading(false)}

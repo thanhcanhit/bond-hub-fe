@@ -876,14 +876,23 @@ export default function GroupInfo({
                         }}
                         title={media.fileName || "Xem ảnh/video"}
                       >
-                        <div
-                          className="w-full h-full bg-cover bg-center"
-                          style={{ backgroundImage: `url(${media.url})` }}
-                        ></div>
-                        {media.metadata?.extension?.match(/mp4|webm|mov/i) && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                            <Video className="h-5 w-5 text-white" />
+                        {media.metadata?.extension?.match(/mp4|webm|mov/i) ? (
+                          <div className="w-full h-full relative">
+                            <video
+                              className="w-full h-full object-cover"
+                              src={media.url}
+                              muted
+                              preload="metadata"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                              <Video className="h-5 w-5 text-white" />
+                            </div>
                           </div>
+                        ) : (
+                          <div
+                            className="w-full h-full bg-cover bg-center"
+                            style={{ backgroundImage: `url(${media.url})` }}
+                          ></div>
                         )}
                       </div>
                     ))}
