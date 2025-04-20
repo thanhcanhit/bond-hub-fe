@@ -540,89 +540,117 @@ export default function ChatArea({
 
   // Group messages by sender (to avoid showing avatar for consecutive messages)
   const processMessagesForDisplay = (messages: Message[]) => {
-    return messages.map((message, index, array) => {
-      const isCurrentUser = message.senderId === currentUser.id;
-      const prevMessage = index > 0 ? array[index - 1] : null;
-      const showAvatar =
-        !prevMessage || prevMessage.senderId !== message.senderId;
+    if (!messages || !Array.isArray(messages)) {
+      console.error(
+        "Invalid messages array in processMessagesForDisplay",
+        messages,
+      );
+      return [];
+    }
 
-      // Ensure we have userInfo for the sender
-      let userInfo = message.sender?.userInfo;
+    return messages
+      .map((message, index, array) => {
+        // Ensure message is valid
+        if (!message) {
+          console.error("Invalid message in processMessagesForDisplay");
+          return {
+            message: {} as Message,
+            isCurrentUser: false,
+            showAvatar: false,
+            userInfo: undefined,
+          };
+        }
 
-      // For group messages, try to find sender info from the group members
-      if (currentChatType === "GROUP" && !isCurrentUser) {
-        // Ưu tiên sử dụng thông tin từ message.sender nếu đã có
-        if (!userInfo || !userInfo.fullName) {
-          // Tìm thông tin nhóm từ conversationsStore
-          const groupConversation = conversations.find(
-            (conv) =>
-              conv.type === "GROUP" &&
-              (conv.group?.id === message.groupId ||
-                (selectedGroup && conv.group?.id === selectedGroup.id)),
-          );
+        // Safely check if current user exists
+        const isCurrentUser = currentUser?.id
+          ? message.senderId === currentUser.id
+          : false;
+        const prevMessage = index > 0 ? array[index - 1] : null;
+        const showAvatar =
+          !prevMessage || prevMessage.senderId !== message.senderId;
 
-          // Tìm thông tin người gửi từ danh sách thành viên nhóm
-          const senderMember = groupConversation?.group?.memberUsers?.find(
-            (member: {
-              id: string;
-              fullName: string;
-              profilePictureUrl?: string | null;
-              role: GroupRole;
-            }) => member.id === message.senderId,
-          );
+        // Ensure we have userInfo for the sender
+        let userInfo = message.sender?.userInfo;
 
-          // Nếu không tìm thấy trong conversationsStore, thử tìm trong selectedGroup
-          const fallbackSenderMember =
-            !senderMember && selectedGroup
-              ? selectedGroup.memberUsers?.find(
-                  (member: {
-                    id: string;
-                    fullName: string;
-                    profilePictureUrl?: string | null;
-                    role: GroupRole;
-                  }) => member.id === message.senderId,
-                )
-              : null;
+        // For group messages, try to find sender info from the group members
+        if (currentChatType === "GROUP" && !isCurrentUser) {
+          // Ưu tiên sử dụng thông tin từ message.sender nếu đã có
+          if (!userInfo || !userInfo.fullName) {
+            // Tìm thông tin nhóm từ conversationsStore
+            const groupConversation = conversations?.find(
+              (conv) =>
+                conv?.type === "GROUP" &&
+                (conv?.group?.id === message.groupId ||
+                  (selectedGroup && conv?.group?.id === selectedGroup.id)),
+            );
 
-          // Sử dụng thông tin người gửi từ conversationsStore hoặc selectedGroup
-          const memberInfo = senderMember || fallbackSenderMember;
+            // Tìm thông tin người gửi từ danh sách thành viên nhóm
+            const senderMember = groupConversation?.group?.memberUsers?.find(
+              (member: {
+                id: string;
+                fullName: string;
+                profilePictureUrl?: string | null;
+                role: GroupRole;
+              }) => member?.id === message.senderId,
+            );
 
-          if (memberInfo) {
-            userInfo = {
-              id: memberInfo.id,
-              fullName: memberInfo.fullName,
-              profilePictureUrl: memberInfo.profilePictureUrl,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              blockStrangers: false,
-              userAuth: { id: memberInfo.id } as User,
-            };
+            // Nếu không tìm thấy trong conversationsStore, thử tìm trong selectedGroup
+            const fallbackSenderMember =
+              !senderMember && selectedGroup && selectedGroup.memberUsers
+                ? selectedGroup.memberUsers.find(
+                    (member: {
+                      id: string;
+                      fullName: string;
+                      profilePictureUrl?: string | null;
+                      role: GroupRole;
+                    }) => member?.id === message.senderId,
+                  )
+                : null;
 
-            // Cập nhật thông tin người gửi vào message để đảm bảo tính nhất quán
-            if (message.sender) {
-              message.sender.userInfo = userInfo;
-            } else {
-              message.sender = {
+            // Sử dụng thông tin người gửi từ conversationsStore hoặc selectedGroup
+            const memberInfo = senderMember || fallbackSenderMember;
+
+            if (memberInfo && memberInfo.id) {
+              userInfo = {
                 id: memberInfo.id,
-                userInfo: userInfo,
-              } as User;
+                fullName: memberInfo.fullName || "Unknown",
+                profilePictureUrl: memberInfo.profilePictureUrl,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                blockStrangers: false,
+                userAuth: { id: memberInfo.id } as User,
+              };
+
+              // Cập nhật thông tin người gửi vào message để đảm bảo tính nhất quán
+              if (message.sender) {
+                message.sender.userInfo = userInfo;
+              } else {
+                message.sender = {
+                  id: memberInfo.id,
+                  userInfo: userInfo,
+                } as User;
+              }
             }
           }
         }
-      }
 
-      // Fallback to selected contact info for direct messages
-      if (!userInfo && currentChatType === "USER") {
-        userInfo = selectedContact?.userInfo;
-      }
+        // Fallback to selected contact info for direct messages
+        if (
+          !userInfo &&
+          currentChatType === "USER" &&
+          selectedContact?.userInfo
+        ) {
+          userInfo = selectedContact.userInfo;
+        }
 
-      // Ensure userInfo is never null (only undefined is allowed by the type)
-      if (userInfo === null) {
-        userInfo = undefined;
-      }
+        // Ensure userInfo is never null (only undefined is allowed by the type)
+        if (userInfo === null) {
+          userInfo = undefined;
+        }
 
-      return { message, isCurrentUser, showAvatar, userInfo };
-    });
+        return { message, isCurrentUser, showAvatar, userInfo };
+      })
+      .filter((item) => item.message && item.message.id); // Filter out invalid messages
   };
 
   const messageGroups = groupMessagesByDate();
@@ -750,6 +778,23 @@ export default function ChatArea({
       </>
     );
   };
+
+  // Check if current user is valid - this helps prevent errors when auth state changes
+  const isUserValid = !!currentUser?.id;
+
+  // If user is not valid, show a message instead of the chat
+  if (!isUserValid) {
+    return (
+      <div className="flex flex-col h-full w-full items-center justify-center bg-gray-50">
+        <div className="text-center p-4">
+          <p className="text-gray-500 mb-2">
+            Phiên đăng nhập của bạn đã hết hạn.
+          </p>
+          <p className="text-gray-500">Vui lòng đăng nhập lại để tiếp tục.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full w-full">

@@ -88,8 +88,9 @@ export default function AudioVisualizer({
       }
     };
 
-    const handleError = (e: ErrorEvent) => {
-      console.error("Audio loading error:", e);
+    const handleError = () => {
+      // Access error information from the audio element itself
+      console.error("Audio loading error:", audio.error);
       if (loadAttempts < maxAttempts) {
         loadAttempts++;
         // Try loading again with a slight delay

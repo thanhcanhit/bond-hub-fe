@@ -1,78 +1,73 @@
-import axios, { InternalAxiosRequestConfig } from "axios";
+import axios, {
+  AxiosError,
+  AxiosInstance,
+  AxiosRequestConfig,
+  InternalAxiosRequestConfig,
+} from "axios";
 import { useAuthStore } from "@/stores/authStore";
 
 const NEXT_PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-
-// Log the backend URL for debugging
-console.log("Backend URL:", NEXT_PUBLIC_BACKEND_URL || "Not set");
 
 // Token refresh state management
 let isRefreshing = false;
 let refreshSubscribers: ((token: string) => void)[] = [];
 
-// Tạo một instance axios riêng cho việc refresh token để tránh phụ thuộc vòng tròn
-export const refreshTokenAxios = axios.create({
-  baseURL: NEXT_PUBLIC_BACKEND_URL,
-  headers: { "Content-Type": "application/json" },
-  timeout: 15000, // 15 seconds timeout
-});
+// Define response types for better type safety
+interface RefreshTokenResponse {
+  accessToken: string;
+  device?: {
+    id: string;
+    name: string;
+    type: string;
+  };
+}
 
-// Thêm interceptor để xử lý lỗi mạng cho refreshTokenAxios
-refreshTokenAxios.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // Xử lý lỗi timeout
-    if (error.code === "ECONNABORTED") {
-      console.error("Refresh token request timeout:", error);
-      return Promise.reject(new Error("Request timeout during token refresh"));
-    }
-
-    // Xử lý lỗi mạng
-    if (!error.response) {
-      console.error("Network error during token refresh:", error);
-      return Promise.reject(new Error("Network error during token refresh"));
-    }
-
-    // Xử lý các lỗi khác
-    console.error(
-      "Error during token refresh:",
-      error.response?.status,
-      error.response?.data,
-    );
-    return Promise.reject(error);
-  },
-);
-
-// Tạo một instance axios cơ bản với token được truyền vào
-export const createAxiosInstance = (token?: string) => {
-  const instance = axios.create({
+// Create a base axios instance with common configuration
+const createBaseAxiosInstance = (): AxiosInstance => {
+  return axios.create({
     baseURL: NEXT_PUBLIC_BACKEND_URL,
     headers: { "Content-Type": "application/json" },
     timeout: 15000, // 15 seconds timeout
   });
+};
 
-  // Nếu có token được truyền vào và không rỗng, sử dụng nó
+// Create an axios instance specifically for refresh token operations
+export const refreshTokenAxios = createBaseAxiosInstance();
+
+// Add network error handling for the refresh token axios instance
+refreshTokenAxios.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (error.code === "ECONNABORTED") {
+      return Promise.reject(new Error("Request timeout during token refresh"));
+    }
+
+    if (!error.response) {
+      return Promise.reject(new Error("Network error during token refresh"));
+    }
+
+    return Promise.reject(error);
+  },
+);
+
+// Create an axios instance with an optional token
+export const createAxiosInstance = (token?: string): AxiosInstance => {
+  const instance = createBaseAxiosInstance();
+
+  // Add token to headers if provided
   if (token && token.trim() !== "") {
     instance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-    console.log(
-      `Setting Authorization header with token: ${token.substring(0, 10)}...`,
-    );
-  } else {
-    console.log("No valid token provided");
   }
 
-  // Xử lý lỗi mạng
+  // Add network error handling
   instance.interceptors.response.use(
     (response) => response,
-    (error) => {
-      // Handle network errors
+    (error: AxiosError) => {
       if (error.code === "ECONNABORTED") {
-        console.error("Request timeout:", error);
         return Promise.reject(new Error("Request timeout. Please try again."));
       }
 
       if (!error.response) {
-        console.error("Network error:", error);
         return Promise.reject(
           new Error("Network error. Please check your connection."),
         );
@@ -85,30 +80,22 @@ export const createAxiosInstance = (token?: string) => {
   return instance;
 };
 
-const axiosInstance = axios.create({
-  baseURL: NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000",
-  headers: { "Content-Type": "application/json" },
-  timeout: 15000, // 15 seconds timeout
-});
+// Main axios instance with full authentication handling
+const axiosInstance = createBaseAxiosInstance();
 
+// Add token to all requests
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     try {
       const accessToken = useAuthStore.getState().accessToken;
-      console.log(`Axios request to ${config.url}`, {
-        hasToken: !!accessToken,
-        baseURL: config.baseURL,
-      });
 
       if (accessToken) {
         config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${accessToken}`;
-      } else {
-        console.warn("No access token available for request");
       }
       return config;
     } catch (error) {
-      console.error("Error in axios interceptor:", error);
+      console.error("Error in axios request interceptor:", error);
       return config;
     }
   },
@@ -126,75 +113,65 @@ const onTokenRefreshed = (token: string) => {
   refreshSubscribers = [];
 };
 
-// Function to refresh the token
-const refreshAuthToken = async () => {
+// Function to refresh the authentication token
+const refreshAuthToken = async (): Promise<string> => {
   try {
-    console.log("Starting token refresh process...");
     const authState = useAuthStore.getState();
     const refreshToken = authState.refreshToken;
     const deviceId = authState.deviceId;
 
-    console.log("Auth state during refresh:", {
-      hasRefreshToken: !!refreshToken,
-      hasDeviceId: !!deviceId,
-      isAuthenticated: authState.isAuthenticated,
-    });
+    console.log("Starting token refresh process");
+    console.log("Current refresh token:", refreshToken);
+    console.log("Current device ID:", deviceId);
 
     if (!refreshToken) {
-      console.error("Refresh token is missing");
       throw new Error("No refresh token available");
     }
 
     if (!deviceId) {
-      console.error("Device ID is missing");
       throw new Error("No device ID available");
     }
 
-    // Sử dụng instance axios dành riêng cho refresh token
-    console.log(
-      "Sending refresh token request with refreshToken:",
-      refreshToken.substring(0, 10) + "...",
+    const response = await refreshTokenAxios.post<RefreshTokenResponse>(
+      "/auth/refresh",
+      {
+        refreshToken,
+        deviceId,
+      },
     );
-    console.log("Sending refresh token request with deviceId:", deviceId);
-
-    const response = await refreshTokenAxios.post("/auth/refresh", {
-      refreshToken,
-      deviceId,
-    });
-
-    console.log(
-      "Refresh token response:",
-      response.status,
-      response.statusText,
-    );
+    console.log("Refresh token response:", response.data);
 
     if (!response.data || !response.data.accessToken) {
-      console.error("Invalid response from refresh token API:", response.data);
       throw new Error("Invalid response from refresh token API");
     }
 
     const { accessToken } = response.data;
 
     // Keep the same refreshToken since backend doesn't return a new one
-    console.log("Setting new tokens in auth store...");
     useAuthStore.getState().setTokens(accessToken, refreshToken);
 
     console.log(
-      "Token refresh successful:",
-      accessToken.substring(0, 10) + "...",
+      `Token refresh completed successfully. New token: ${accessToken.substring(0, 10)}...`,
     );
+
     return accessToken;
   } catch (error) {
-    console.error("Token refresh failed with error:", error);
+    console.error(
+      "Error during token refresh:",
+      error instanceof Error ? error.message : "Unknown error",
+    );
 
-    // Chỉ logout nếu lỗi không phải là lỗi mạng
+    // Only logout immediately for critical errors
+    // For most errors, we'll let the interceptor handle it with a delay
     if (
       axios.isAxiosError(error) &&
-      (!error.response || error.response.status === 401)
+      error.response?.status === 403 // Forbidden - e.g., refresh token blacklisted
     ) {
-      console.log("Logging out due to refresh token failure");
-      // Clear auth state on refresh token failure
-      useAuthStore.getState().logout();
+      console.log(
+        "Logging out immediately due to forbidden error during token refresh",
+      );
+      // Clear auth state on critical refresh token failure
+      await useAuthStore.getState().logout();
     }
 
     throw error;
@@ -204,96 +181,125 @@ const refreshAuthToken = async () => {
   }
 };
 
+// Handle response errors, including 401 Unauthorized with token refresh
 axiosInstance.interceptors.response.use(
   (response) => response,
-  async (error) => {
+  async (error: AxiosError) => {
     // Handle network errors
     if (error.code === "ECONNABORTED") {
-      console.error("Request timeout:", error);
       return Promise.reject(new Error("Request timeout. Please try again."));
     }
 
     if (!error.response) {
-      console.error("Network error:", error);
       return Promise.reject(
         new Error("Network error. Please check your connection."),
       );
     }
 
-    const originalRequest = error.config;
-    console.log(
-      `Received error ${error.response.status} for ${originalRequest.url}`,
-    );
+    const originalRequest = error.config as AxiosRequestConfig & {
+      _retry?: boolean;
+    };
 
-    // Xử lý lỗi 401 Unauthorized
+    // Handle 401 Unauthorized errors by refreshing the token
     if (error.response?.status === 401 && !originalRequest._retry) {
-      console.log("Received 401 error, attempting to refresh token...");
+      console.log(
+        `Received 401 error for request to ${originalRequest.url}, attempting to refresh token...`,
+      );
 
-      // Đánh dấu request này đã được thử lại để tránh vòng lặp vô hạn
+      // Mark this request as retried to prevent infinite loops
       originalRequest._retry = true;
 
-      // Kiểm tra xem chúng ta có dữ liệu cần thiết để làm mới token hay không
+      // Check if we have the necessary data to refresh the token
       const authState = useAuthStore.getState();
       const refreshToken = authState.refreshToken;
       const deviceId = authState.deviceId;
-
-      console.log("Auth state for 401 handler:", {
-        hasRefreshToken: !!refreshToken,
-        hasDeviceId: !!deviceId,
-        isAuthenticated: authState.isAuthenticated,
-      });
 
       if (!refreshToken || !deviceId) {
         console.error(
           "Cannot refresh token: Missing refresh token or device ID",
         );
-        await useAuthStore.getState().logout();
+        // Log the error but don't logout immediately - let the error propagate
+        // This allows the UI to handle the error gracefully
         return Promise.reject(
           new Error("Session expired. Please login again."),
         );
       }
 
-      // Nếu đang có quá trình làm mới token, chờ nó hoàn thành
+      // If a token refresh is already in progress, queue this request
       if (isRefreshing) {
-        console.log("Token refresh already in progress, queuing request");
+        console.log(
+          `Token refresh already in progress, queuing request to ${originalRequest.url}`,
+        );
         return new Promise((resolve, reject) => {
           subscribeTokenRefresh((token) => {
-            console.log("Received refreshed token for queued request");
-            originalRequest.headers["Authorization"] = `Bearer ${token}`;
+            console.log(
+              `Processing queued request to ${originalRequest.url} with refreshed token`,
+            );
+            if (originalRequest.headers) {
+              originalRequest.headers["Authorization"] = `Bearer ${token}`;
+            } else {
+              originalRequest.headers = { Authorization: `Bearer ${token}` };
+            }
             resolve(axiosInstance(originalRequest));
           });
 
-          // Thêm timeout để tránh chờ vô hạn
+          // Add timeout to avoid waiting indefinitely
           setTimeout(() => {
             reject(new Error("Token refresh timeout"));
           }, 15000); // 15 seconds timeout
         });
       }
 
-      // Bắt đầu quá trình làm mới token mới
+      // Start a new token refresh process
       console.log("Starting new token refresh process");
       isRefreshing = true;
 
       try {
         const newToken = await refreshAuthToken();
-        console.log("Token refresh successful, updating original request");
 
-        // Thông báo cho tất cả các subscriber rằng token đã được làm mới
+        // Notify all subscribers that the token has been refreshed
+        console.log(
+          `Notifying ${refreshSubscribers.length} queued requests about token refresh`,
+        );
         onTokenRefreshed(newToken);
 
-        // Cập nhật header authorization và thử lại request ban đầu
-        originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
-        return axiosInstance(originalRequest);
-      } catch (refreshError) {
-        // Nếu làm mới token thất bại, từ chối với lỗi ban đầu
-        console.error(
-          "Token refresh failed, rejecting original request",
-          refreshError,
+        // Update the authorization header and retry the original request
+        console.log(
+          `Retrying original request to ${originalRequest.url} with new token`,
         );
-
-        // Thông báo cho tất cả các subscriber rằng token refresh đã thất bại
-        // Để tránh các request bị treo vô hạn
+        if (originalRequest.headers) {
+          originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
+        } else {
+          originalRequest.headers = { Authorization: `Bearer ${newToken}` };
+        }
+        return axiosInstance(originalRequest);
+      } catch (error) {
+        // If token refresh fails, notify all subscribers to prevent hanging requests
+        console.error(
+          "Token refresh failed:",
+          error instanceof Error ? error.message : "Unknown error",
+        );
+        console.log(
+          `Notifying ${refreshSubscribers.length} queued requests about token refresh failure`,
+        );
         onTokenRefreshed(""); // Empty token will cause subscribers to fail properly
+
+        // Only logout if the error is a 401 or network error
+        if (
+          axios.isAxiosError(error) &&
+          (error.response?.status === 401 || !error.response)
+        ) {
+          console.log(
+            "Logging out due to authentication error during token refresh",
+          );
+          // We'll logout after a short delay to allow current operations to complete
+          setTimeout(() => {
+            useAuthStore
+              .getState()
+              .logout()
+              .catch((e) => console.error("Error during delayed logout:", e));
+          }, 500);
+        }
 
         return Promise.reject(
           new Error("Session expired. Please login again."),
@@ -301,7 +307,7 @@ axiosInstance.interceptors.response.use(
       }
     }
 
-    // Đối với tất cả các lỗi khác, chỉ từ chối với lỗi ban đầu
+    // For all other errors, just reject with the original error
     return Promise.reject(error);
   },
 );
