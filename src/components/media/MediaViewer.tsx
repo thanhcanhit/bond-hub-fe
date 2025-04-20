@@ -282,15 +282,43 @@ export default function MediaViewer({
                               mediaIndex >= 0 && setCurrentIndex(mediaIndex)
                             }
                           >
-                            <div className="aspect-square w-[90px] h-[90px] ">
-                              <Image
-                                src={item.url}
-                                alt={item.fileName || "Thumbnail"}
-                                width={50}
-                                height={50}
-                                className="w-full h-full object-cover"
-                                unoptimized
-                              />
+                            <div className="aspect-square w-[90px] h-[90px] relative">
+                              {item.metadata?.extension?.match(
+                                /mp4|webm|mov/i,
+                              ) ? (
+                                <>
+                                  <video
+                                    src={item.url}
+                                    className="w-full h-full object-cover"
+                                    muted
+                                    preload="metadata"
+                                  />
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      width="20"
+                                      height="20"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="white"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    >
+                                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                    </svg>
+                                  </div>
+                                </>
+                              ) : (
+                                <Image
+                                  src={item.url}
+                                  alt={item.fileName || "Thumbnail"}
+                                  width={50}
+                                  height={50}
+                                  className="w-full h-full object-cover"
+                                  unoptimized
+                                />
+                              )}
                             </div>
                           </div>
                         );
