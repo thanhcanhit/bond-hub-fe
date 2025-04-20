@@ -134,7 +134,7 @@ export interface Group {
   createdAt: Date;
   members: GroupMember[];
   messages: Message[];
-  // Add memberUsers for simplified UI display
+  // Thêm trường memberUsers để lưu trữ thông tin thành viên đã được xử lý
   memberUsers?: Array<{
     id: string;
     fullName: string;

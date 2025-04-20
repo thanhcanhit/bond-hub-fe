@@ -112,6 +112,46 @@ export default function ChatSocketHandler() {
             };
           }
         }
+        // If message is from a group but we're not currently viewing that group
+        else if (message.groupId && message.messageType === "GROUP") {
+          // Try to find the group in conversations
+          const groupConversation = conversations.find(
+            (conv) =>
+              conv.type === "GROUP" && conv.group?.id === message.groupId,
+          );
+
+          if (groupConversation && groupConversation.group?.memberUsers) {
+            const senderMember = groupConversation.group.memberUsers.find(
+              (member) => member.id === message.senderId,
+            );
+
+            if (senderMember && message.sender) {
+              // Update sender info from group members
+              message.sender.userInfo = {
+                ...(message.sender.userInfo || {}),
+                id: message.senderId,
+                fullName: senderMember.fullName,
+                profilePictureUrl: senderMember.profilePictureUrl,
+                createdAt: message.sender.userInfo?.createdAt || new Date(),
+                updatedAt: message.sender.userInfo?.updatedAt || new Date(),
+                blockStrangers: false,
+                userAuth: message.sender,
+              };
+
+              console.log(
+                `[ChatSocketHandler] Updated sender info for group message from ${senderMember.fullName}`,
+              );
+            } else {
+              console.log(
+                `[ChatSocketHandler] Could not find sender ${message.senderId} in group members`,
+              );
+            }
+          } else {
+            console.log(
+              `[ChatSocketHandler] Could not find group conversation for ${message.groupId}`,
+            );
+          }
+        }
         // If sender doesn't have userInfo or has incomplete userInfo
         else if (
           !message.sender.userInfo ||
@@ -138,7 +178,13 @@ export default function ChatSocketHandler() {
       }
       return message;
     },
-    [currentUser, selectedContact, selectedGroup, currentChatType],
+    [
+      currentUser,
+      selectedContact,
+      selectedGroup,
+      currentChatType,
+      conversations,
+    ],
   );
 
   // Handle new message event
@@ -255,29 +301,7 @@ export default function ChatSocketHandler() {
           selectedGroup &&
           message.groupId === selectedGroup.id);
 
-      // Nếu tin nhắn thuộc nhóm hiện tại, đảm bảo thông tin người gửi được cập nhật từ danh sách thành viên
-      if (
-        currentChatType === "GROUP" &&
-        selectedGroup &&
-        message.groupId === selectedGroup.id
-      ) {
-        const senderMember = selectedGroup.memberUsers?.find(
-          (member) => member.id === message.senderId,
-        );
-        if (senderMember && message.sender) {
-          // Cập nhật thông tin người gửi từ danh sách thành viên nhóm
-          message.sender.userInfo = {
-            ...(message.sender.userInfo || {}),
-            id: message.senderId,
-            fullName: senderMember.fullName,
-            profilePictureUrl: senderMember.profilePictureUrl,
-            createdAt: message.sender.userInfo?.createdAt || new Date(),
-            updatedAt: message.sender.userInfo?.updatedAt || new Date(),
-            blockStrangers: false,
-            userAuth: message.sender,
-          };
-        }
-      }
+      // Thông tin người gửi đã được cập nhật trong ensureMessageHasUserInfo
 
       // Nếu tin nhắn thuộc cuộc trò chuyện đang mở, thêm vào danh sách tin nhắn
       if (isFromCurrentChat) {
@@ -313,32 +337,7 @@ export default function ChatSocketHandler() {
         message.senderId !== currentUser?.id && !isFromCurrentChat,
       );
 
-      // Tìm thông tin người gửi trong danh sách cuộc trò chuyện nếu là tin nhắn nhóm
-      if (message.groupId && message.messageType === "GROUP") {
-        const groupConversation = conversationsStore.conversations.find(
-          (conv) => conv.type === "GROUP" && conv.group?.id === message.groupId,
-        );
-
-        if (groupConversation && groupConversation.group?.memberUsers) {
-          const senderMember = groupConversation.group.memberUsers.find(
-            (member) => member.id === message.senderId,
-          );
-
-          if (senderMember && message.sender) {
-            // Cập nhật thông tin người gửi từ danh sách thành viên nhóm
-            message.sender.userInfo = {
-              ...(message.sender.userInfo || {}),
-              id: message.senderId,
-              fullName: senderMember.fullName,
-              profilePictureUrl: senderMember.profilePictureUrl,
-              createdAt: message.sender.userInfo?.createdAt || new Date(),
-              updatedAt: message.sender.userInfo?.updatedAt || new Date(),
-              blockStrangers: false,
-              userAuth: message.sender,
-            };
-          }
-        }
-      }
+      // Thông tin người gửi đã được cập nhật trong ensureMessageHasUserInfo
 
       conversationsStore.processNewMessage(message, {
         // Tăng số lượng tin nhắn chưa đọc nếu tin nhắn từ người khác và không phải cuộc trò chuyện đang mở

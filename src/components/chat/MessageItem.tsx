@@ -17,7 +17,7 @@ import ForwardMessageDialog from "./ForwardMessageDialog";
 import ReactionPicker from "./ReactionPicker";
 import ReactionSummary from "./ReactionSummary";
 import AudioVisualizer from "./AudioVisualizer";
-import { getUserDisplayName } from "@/utils/userUtils";
+// import { getUserDisplayName } from "@/utils/userUtils";
 
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/authStore";
@@ -420,16 +420,20 @@ export default function MessageItem({
               <AvatarImage
                 className="select-none relative object-cover"
                 src={
-                  userInfo?.profilePictureUrl ||
+                  // Ưu tiên thông tin từ sender trong message
                   message.sender?.userInfo?.profilePictureUrl ||
+                  // Sau đó đến userInfo được truyền vào từ props
+                  userInfo?.profilePictureUrl ||
                   undefined
                 }
               />
               <AvatarFallback>
                 {getUserInitials({
                   userInfo:
-                    userInfo ||
+                    // Ưu tiên thông tin từ sender trong message
                     message.sender?.userInfo ||
+                    // Sau đó đến userInfo được truyền vào từ props
+                    userInfo ||
                     ({
                       fullName: isGroup ? "Thành viên" : "Người dùng",
                     } as UserInfo),
@@ -551,7 +555,7 @@ export default function MessageItem({
           )}
 
           {/* Display sender name for group messages */}
-          {isGroup && !isCurrentUser && (
+          {isGroup && !isCurrentUser && !message.recalled && (
             <div className="text-xs font-medium text-blue-600 mb-1">
               {message.sender?.userInfo?.fullName ||
                 userInfo?.fullName ||
@@ -569,15 +573,6 @@ export default function MessageItem({
                 <span className="font-medium">Trả lời</span>
               </div>
               <p className="truncate">Tin nhắn gốc đã bị xóa hoặc thu hồi</p>
-            </div>
-          )}
-
-          {/* Sender name for group messages */}
-          {!isCurrentUser && message.groupId && !message.recalled && (
-            <div className="text-xs text-gray-600 mb-1 ml-1">
-              {message.sender?.userInfo?.fullName ||
-                getUserDisplayName(message.sender) ||
-                "Unknown"}
             </div>
           )}
 

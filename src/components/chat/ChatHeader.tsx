@@ -3,10 +3,10 @@
 import { useState, useMemo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { User, UserInfo } from "@/types/base";
+import { GroupRole, User, UserInfo } from "@/types/base";
 import { Info, Search, X, ChevronLeft, Users } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
-import { formatLastActivity } from "@/utils/dateUtils";
+import { useConversationsStore } from "@/stores/conversationsStore";
 
 import { Input } from "@/components/ui/input";
 
@@ -49,10 +49,26 @@ export default function ChatHeader({
     currentChatType,
   } = useChatStore();
 
-  // Calculate member count at the top level to avoid conditional hooks
+  // Lấy danh sách cuộc trò chuyện từ conversationsStore
+  const conversations = useConversationsStore((state) => state.conversations);
+
+  // Tìm thông tin nhóm từ conversationsStore
+  const groupConversation = useMemo(() => {
+    if (!group) return null;
+    return conversations.find(
+      (conv) => conv.type === "GROUP" && conv.group?.id === group.id,
+    );
+  }, [conversations, group]);
+
+  // Tính toán số lượng thành viên
   const memberCount = useMemo(() => {
+    // Ưu tiên sử dụng thông tin từ conversationsStore
+    if (groupConversation?.group?.memberUsers) {
+      return groupConversation.group.memberUsers.length;
+    }
+    // Nếu không có, sử dụng thông tin từ group prop
     return group?.memberUsers?.length || 0;
-  }, [group?.memberUsers]);
+  }, [groupConversation, group]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,17 +147,24 @@ export default function ChatHeader({
               <div className="relative">
                 <Avatar className="h-10 w-10 mr-3">
                   <AvatarImage
-                    src={group.avatarUrl || undefined}
+                    src={
+                      // Ưu tiên sử dụng thông tin từ conversationsStore
+                      groupConversation?.group?.avatarUrl ||
+                      group.avatarUrl ||
+                      undefined
+                    }
                     className="object-cover"
                   />
                   <AvatarFallback>
-                    {group.name?.slice(0, 2).toUpperCase() || "GP"}
+                    {(groupConversation?.group?.name || group.name)
+                      ?.slice(0, 2)
+                      .toUpperCase() || "GP"}
                   </AvatarFallback>
                 </Avatar>
               </div>
               <div>
                 <h2 className="text-sm font-semibold">
-                  {group.name || "Nhóm chat"}
+                  {groupConversation?.group?.name || group.name || "Nhóm chat"}
                 </h2>
                 <p className="text-xs text-gray-500 flex items-center">
                   <Users className="h-3 w-3 mr-1" />

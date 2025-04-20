@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Group } from "@/types/base";
 import { Info, Search, X, Users, ChevronLeft } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
+import { useConversationsStore } from "@/stores/conversationsStore";
 import { Input } from "@/components/ui/input";
 
 interface GroupChatHeaderProps {
@@ -22,6 +23,27 @@ export default function GroupChatHeader({
   const [isSearching, setIsSearching] = useState(false);
   const { searchText, setSearchText, searchMessages, clearSearch } =
     useChatStore();
+
+  // Lấy danh sách cuộc trò chuyện từ conversationsStore
+  const conversations = useConversationsStore((state) => state.conversations);
+
+  // Tìm thông tin nhóm từ conversationsStore
+  const groupConversation = useMemo(() => {
+    if (!group) return null;
+    return conversations.find(
+      (conv) => conv.type === "GROUP" && conv.group?.id === group.id,
+    );
+  }, [conversations, group]);
+
+  // Tính toán số lượng thành viên
+  const memberCount = useMemo(() => {
+    // Ưu tiên sử dụng thông tin từ conversationsStore
+    if (groupConversation?.group?.memberUsers) {
+      return groupConversation.group.memberUsers.length;
+    }
+    // Nếu không có, sử dụng thông tin từ group prop
+    return group?.members?.length || 0;
+  }, [groupConversation, group]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,25 +81,35 @@ export default function GroupChatHeader({
               <ChevronLeft className="h-5 w-5" />
             </Button>
           )}
-          <div className="flex items-center cursor-pointer hover:bg-gray-100 p-1 rounded-md transition-colors">
+          <div
+            className="flex items-center cursor-pointer hover:bg-gray-100 p-1 rounded-md transition-colors"
+            onClick={onToggleInfo}
+          >
             <div className="relative">
               <Avatar className="h-10 w-10 mr-3">
                 <AvatarImage
-                  src={group.avatarUrl || undefined}
+                  src={
+                    // Ưu tiên sử dụng thông tin từ conversationsStore
+                    groupConversation?.group?.avatarUrl ||
+                    group.avatarUrl ||
+                    undefined
+                  }
                   className="object-cover"
                 />
                 <AvatarFallback>
-                  {group.name?.slice(0, 2).toUpperCase() || "GR"}
+                  {(groupConversation?.group?.name || group.name)
+                    ?.slice(0, 2)
+                    .toUpperCase() || "GR"}
                 </AvatarFallback>
               </Avatar>
             </div>
             <div>
               <h2 className="text-sm font-semibold">
-                {group.name || "Nhóm chat"}
+                {groupConversation?.group?.name || group.name || "Nhóm chat"}
               </h2>
               <p className="text-xs text-gray-500 flex items-center">
                 <Users className="h-3 w-3 mr-1" />
-                {group.members?.length || 0} thành viên
+                {memberCount} thành viên
               </p>
             </div>
           </div>

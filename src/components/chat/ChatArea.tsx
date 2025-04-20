@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Message, User, UserInfo, Group } from "@/types/base";
+import { Message, User, UserInfo, GroupRole } from "@/types/base";
 import ChatHeader from "./ChatHeader";
 import GroupChatHeader from "./GroupChatHeader";
 import MessageItem from "./MessageItem";
@@ -146,7 +146,7 @@ export default function ChatArea({
   // Function to scroll to bottom - extracted to avoid creating in render
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "auto" });
+      messagesEndRef.current.scrollIntoView();
     }
   }, []);
 
@@ -550,25 +550,64 @@ export default function ChatArea({
       let userInfo = message.sender?.userInfo;
 
       // For group messages, try to find sender info from the group members
-      if (
-        currentChatType === "GROUP" &&
-        selectedGroup &&
-        !isCurrentUser &&
-        !userInfo
-      ) {
-        const senderMember = selectedGroup.memberUsers?.find(
-          (member) => member.id === message.senderId,
-        );
-        if (senderMember) {
-          userInfo = {
-            id: senderMember.id,
-            fullName: senderMember.fullName,
-            profilePictureUrl: senderMember.profilePictureUrl,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            blockStrangers: false,
-            userAuth: { id: senderMember.id } as User,
-          };
+      if (currentChatType === "GROUP" && !isCurrentUser) {
+        // Ưu tiên sử dụng thông tin từ message.sender nếu đã có
+        if (!userInfo || !userInfo.fullName) {
+          // Tìm thông tin nhóm từ conversationsStore
+          const groupConversation = conversations.find(
+            (conv) =>
+              conv.type === "GROUP" &&
+              (conv.group?.id === message.groupId ||
+                (selectedGroup && conv.group?.id === selectedGroup.id)),
+          );
+
+          // Tìm thông tin người gửi từ danh sách thành viên nhóm
+          const senderMember = groupConversation?.group?.memberUsers?.find(
+            (member: {
+              id: string;
+              fullName: string;
+              profilePictureUrl?: string | null;
+              role: GroupRole;
+            }) => member.id === message.senderId,
+          );
+
+          // Nếu không tìm thấy trong conversationsStore, thử tìm trong selectedGroup
+          const fallbackSenderMember =
+            !senderMember && selectedGroup
+              ? selectedGroup.memberUsers?.find(
+                  (member: {
+                    id: string;
+                    fullName: string;
+                    profilePictureUrl?: string | null;
+                    role: GroupRole;
+                  }) => member.id === message.senderId,
+                )
+              : null;
+
+          // Sử dụng thông tin người gửi từ conversationsStore hoặc selectedGroup
+          const memberInfo = senderMember || fallbackSenderMember;
+
+          if (memberInfo) {
+            userInfo = {
+              id: memberInfo.id,
+              fullName: memberInfo.fullName,
+              profilePictureUrl: memberInfo.profilePictureUrl,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              blockStrangers: false,
+              userAuth: { id: memberInfo.id } as User,
+            };
+
+            // Cập nhật thông tin người gửi vào message để đảm bảo tính nhất quán
+            if (message.sender) {
+              message.sender.userInfo = userInfo;
+            } else {
+              message.sender = {
+                id: memberInfo.id,
+                userInfo: userInfo,
+              } as User;
+            }
+          }
         }
       }
 
@@ -714,12 +753,19 @@ export default function ChatArea({
 
   return (
     <div className="flex flex-col h-full w-full">
-      <ChatHeader
-        contact={currentChatType === "USER" ? selectedContact : undefined}
-        group={currentChatType === "GROUP" ? selectedGroup : undefined}
-        onToggleInfo={onToggleInfo}
-        onBackToList={onBackToList}
-      />
+      {currentChatType === "USER" ? (
+        <ChatHeader
+          contact={selectedContact}
+          onToggleInfo={onToggleInfo}
+          onBackToList={onBackToList}
+        />
+      ) : (
+        <GroupChatHeader
+          group={selectedGroup}
+          onToggleInfo={onToggleInfo}
+          onBackToList={onBackToList}
+        />
+      )}
 
       <ChatMessagesDropZone
         onFileDrop={(files) => handleSendMessage("", files)}
