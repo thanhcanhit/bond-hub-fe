@@ -91,6 +91,12 @@ export default function GroupInfo({
     { url: string; title: string; timestamp: Date }[]
   >([]);
   const [isLoadingMedia, setIsLoadingMedia] = useState(true);
+
+  // Reset media gallery and viewer when group changes
+  useEffect(() => {
+    setShowMediaGallery(false);
+    setShowMediaViewer(false);
+  }, [group?.id]);
   const [showMembersList, setShowMembersList] = useState(false);
   const [memberDetails, setMemberDetails] = useState<{
     [key: string]: User & { userInfo: UserInfo };

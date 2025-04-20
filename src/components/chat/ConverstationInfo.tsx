@@ -75,6 +75,13 @@ export default function ContactInfo({
   >("media");
   const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
 
+  // Reset media gallery, viewer, and create group dialog when contact changes
+  useEffect(() => {
+    setShowMediaGallery(false);
+    setShowMediaViewer(false);
+    setShowCreateGroupDialog(false);
+  }, [contact?.id]);
+
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
 

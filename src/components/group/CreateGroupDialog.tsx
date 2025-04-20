@@ -166,20 +166,20 @@ export default function CreateGroupDialog({
   // State for search query
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Pre-select friend if provided
+  // Pre-select friend if provided and reset when dialog opens/closes
   useEffect(() => {
+    // Reset selected friends when dialog opens/closes
+    setSelectedFriends([]);
+
+    // Only add preSelectedFriendId if dialog is open
     if (
+      isOpen &&
       preSelectedFriendId &&
       friends.some((friend) => friend.id === preSelectedFriendId)
     ) {
-      setSelectedFriends((prev) => {
-        if (!prev.includes(preSelectedFriendId)) {
-          return [...prev, preSelectedFriendId];
-        }
-        return prev;
-      });
+      setSelectedFriends([preSelectedFriendId]);
     }
-  }, [preSelectedFriendId, friends]);
+  }, [isOpen, preSelectedFriendId, friends]);
 
   // Use useMemo for filtered friends to avoid recalculating on every render
   const filteredFriends = useMemo(() => {
