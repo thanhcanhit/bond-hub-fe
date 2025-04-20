@@ -1,76 +1,32 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
-import { Users, UserPlus, UsersRound, UserRoundPlus } from "lucide-react";
+import { Users, UserPlus, UsersRound } from "lucide-react";
 import ContactSidebar from "@/components/contact/ContactSidebar";
 import ContactList from "@/components/contact/ContactList";
 import GroupList from "@/components/contact/GroupList";
 import FriendRequests from "@/components/contact/FriendRequests";
-import GroupInvitations from "@/components/contact/GroupInvitations";
 import SearchHeader from "@/components/SearchHeader";
 import { useFriendStore } from "@/stores/friendStore";
+import { getUserGroups } from "@/actions/group.action";
+import { toast } from "sonner";
+import { Group, GroupMember } from "@/types/base";
 
 // Define types for UI components
-type Group = {
+type GroupItem = {
   id: string;
   name: string;
   memberCount: number;
   imageUrl: string;
-};
-
-type GroupInvitation = {
-  id: string;
-  groupName: string;
-  groupImageUrl: string;
-  inviterName: string;
-  inviterImageUrl: string;
-  memberCount: number;
+  avatarUrl?: string | null;
+  members?: GroupMember[];
 };
 
 // Export the component directly
 export default function ContactPage() {
   const [activeTab, setActiveTab] = useState<string>("friends");
 
-  // Mock data for groups - will be replaced with real API data later
-  const [mockGroups] = useState<Group[]>([
-    {
-      id: "1",
-      name: "Nhóm 03: KHÁCH VIP KHỐ GÀ 2AE",
-      memberCount: 452,
-      imageUrl: "https://i.pravatar.cc/150?img=50",
-    },
-    {
-      id: "2",
-      name: "Vodka",
-      memberCount: 4,
-      imageUrl: "https://i.pravatar.cc/150?img=51",
-    },
-    {
-      id: "3",
-      name: "TTHCM T4/TIẾT 1-3/HK2/2024-2025",
-      memberCount: 63,
-      imageUrl: "https://i.pravatar.cc/150?img=52",
-    },
-    {
-      id: "4",
-      name: "SinhVien_Nganh_SE_Khoa 17",
-      memberCount: 345,
-      imageUrl: "https://i.pravatar.cc/150?img=53",
-    },
-    {
-      id: "5",
-      name: "Hủy diệt thầy Thắng",
-      memberCount: 5,
-      imageUrl: "https://i.pravatar.cc/150?img=54",
-    },
-    {
-      id: "6",
-      name: "Săn Sale Bí Mật Cùng Tiệm Giày Boot 2",
-      memberCount: 977,
-      imageUrl: "https://i.pravatar.cc/150?img=55",
-    },
-  ]);
-
-  const [mockGroupInvitations] = useState<GroupInvitation[]>([]);
+  // State for storing real group data from API
+  const [userGroups, setUserGroups] = useState<GroupItem[]>([]);
 
   // Get friend data from store
   const {
@@ -83,11 +39,37 @@ export default function ContactPage() {
     markFriendRequestsAsRead,
   } = useFriendStore();
 
+  // Fetch user groups from API
+  const fetchUserGroups = async () => {
+    try {
+      const result = await getUserGroups();
+      if (result.success && result.groups) {
+        // Transform the data to match the GroupItem type
+        const formattedGroups = result.groups.map((group: Group) => ({
+          id: group.id,
+          name: group.name,
+          memberCount: group.members?.length || 0,
+          imageUrl: group.avatarUrl || "",
+          avatarUrl: group.avatarUrl,
+          members: group.members,
+        }));
+        setUserGroups(formattedGroups);
+      } else {
+        console.error("Failed to fetch groups:", result.error);
+        toast.error("Không thể tải danh sách nhóm");
+      }
+    } catch (error) {
+      console.error("Error fetching groups:", error);
+      toast.error("Đã xảy ra lỗi khi tải danh sách nhóm");
+    }
+  };
+
   // Fetch data when component mounts
   useEffect(() => {
     fetchFriends();
     fetchReceivedRequests();
     fetchSentRequests();
+    fetchUserGroups();
 
     // Mark friend requests as read if we're on the requests tab
     if (activeTab === "requests") {
@@ -107,17 +89,13 @@ export default function ContactPage() {
       case "friends":
         return { title: "Bạn bè", count: friends.length };
       case "groups":
-        return { title: "Nhóm và cộng đồng", count: mockGroups.length };
+        return { title: "Nhóm và cộng đồng", count: userGroups.length };
       case "requests":
         return {
           title: "Lời mời kết bạn",
           count: receivedRequests.length + sentRequests.length,
         };
-      case "invitations":
-        return {
-          title: "Lời mời vào nhóm và cộng đồng",
-          count: mockGroupInvitations.length,
-        };
+
       default:
         return { title: "Danh bạ", count: 0 };
     }
@@ -126,8 +104,7 @@ export default function ContactPage() {
     friends.length,
     receivedRequests.length,
     sentRequests.length,
-    mockGroups.length,
-    mockGroupInvitations.length,
+    userGroups.length,
   ]);
 
   // Map tab IDs to their corresponding icons
@@ -136,7 +113,6 @@ export default function ContactPage() {
       friends: Users,
       groups: UsersRound,
       requests: UserPlus,
-      invitations: UserRoundPlus,
     }),
     [],
   );
@@ -147,7 +123,7 @@ export default function ContactPage() {
       case "friends":
         return <ContactList friends={friends} />;
       case "groups":
-        return <GroupList groups={mockGroups} />;
+        return <GroupList groups={userGroups} />;
       case "requests":
         return (
           <FriendRequests
@@ -155,8 +131,7 @@ export default function ContactPage() {
             sentRequests={sentRequests}
           />
         );
-      case "invitations":
-        return <GroupInvitations invitations={mockGroupInvitations} />;
+
       default:
         return null;
     }

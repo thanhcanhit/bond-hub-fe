@@ -1,6 +1,6 @@
 "use client";
 import { memo, useMemo, useEffect } from "react";
-import { Users, UserPlus, UsersRound, UserRoundPlus } from "lucide-react";
+import { Users, UserPlus, UsersRound } from "lucide-react";
 import { useFriendStore } from "@/stores/friendStore";
 
 type ContactSidebarProps = {
@@ -11,13 +11,8 @@ type ContactSidebarProps = {
 // Define tabs outside component to prevent recreation on each render
 const tabs = [
   { id: "friends", label: "Danh sách bạn bè", icon: Users },
-  { id: "groups", label: "Danh sách nhóm và cộng đồng", icon: UsersRound },
+  { id: "groups", label: "Danh sách nhóm", icon: UsersRound },
   { id: "requests", label: "Lời mời kết bạn", icon: UserPlus },
-  {
-    id: "invitations",
-    label: "Lời mời vào nhóm và cộng đồng",
-    icon: UserRoundPlus,
-  },
 ];
 
 // Use memo to prevent unnecessary re-renders
