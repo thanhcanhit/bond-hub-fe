@@ -38,11 +38,12 @@ export async function createGroup(createGroupDto: CreateGroupDto) {
     if (
       !createGroupDto.initialMembers ||
       !Array.isArray(createGroupDto.initialMembers) ||
-      createGroupDto.initialMembers.length === 0
+      createGroupDto.initialMembers.length < 2
     ) {
       return {
         success: false,
-        error: "At least one member is required",
+        error:
+          "Nhóm phải có tối thiểu 3 thành viên (bao gồm cả người tạo nhóm)",
       };
     }
 

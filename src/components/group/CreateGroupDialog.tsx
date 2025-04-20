@@ -71,8 +71,10 @@ export default function CreateGroupDialog({
       return;
     }
 
-    if (selectedFriends.length === 0) {
-      toast.error("Vui lòng chọn ít nhất một thành viên");
+    if (selectedFriends.length < 2) {
+      toast.error(
+        "Vui lòng chọn ít nhất 2 thành viên (nhóm phải có tối thiểu 3 người kể cả bạn)",
+      );
       return;
     }
 
@@ -275,7 +277,8 @@ export default function CreateGroupDialog({
               <div className="p-2 border-b flex items-center justify-between">
                 <span className="text-sm font-medium">Trò chuyện gần đây</span>
                 <span className="text-sm text-blue-500">
-                  Đã chọn: {selectedFriends.length}
+                  Đã chọn: {selectedFriends.length}{" "}
+                  <span className="text-xs text-gray-500">(tối thiểu 2)</span>
                 </span>
               </div>
 
@@ -334,7 +337,7 @@ export default function CreateGroupDialog({
           <Button
             onClick={handleCreateGroup}
             disabled={
-              isLoading || !groupName.trim() || selectedFriends.length === 0
+              isLoading || !groupName.trim() || selectedFriends.length < 2
             }
             className="bg-blue-500 hover:bg-blue-600"
           >
