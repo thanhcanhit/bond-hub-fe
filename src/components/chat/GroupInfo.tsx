@@ -864,7 +864,7 @@ export default function GroupInfo({
                   <p className="text-sm text-gray-500 mt-2">Đang tải...</p>
                 </div>
               ) : mediaFiles.length > 0 ? (
-                <div className="p-3">
+                <div className="px-3 pt-2 pb-1">
                   <div className="grid grid-cols-4 gap-1">
                     {mediaFiles.slice(0, 8).map((media, index) => (
                       <div
@@ -874,6 +874,7 @@ export default function GroupInfo({
                           setSelectedMediaIndex(index);
                           setShowMediaViewer(true);
                         }}
+                        title={media.fileName || "Xem ảnh/video"}
                       >
                         <div
                           className="w-full h-full bg-cover bg-center"
@@ -881,14 +882,14 @@ export default function GroupInfo({
                         ></div>
                         {media.metadata?.extension?.match(/mp4|webm|mov/i) && (
                           <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                            <Video className="h-6 w-6 text-white" />
+                            <Video className="h-5 w-5 text-white" />
                           </div>
                         )}
                       </div>
                     ))}
                   </div>
                   {mediaFiles.length > 8 && (
-                    <div className="mt-2 text-center">
+                    <div className="mt-2 px-2 text-center">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -932,22 +933,29 @@ export default function GroupInfo({
                   {documents.slice(0, 3).map((doc, index) => (
                     <div
                       key={index}
-                      className="flex items-center py-2 px-4 hover:bg-gray-200 cursor-pointer"
+                      className="flex items-center py-2 px-3 hover:bg-gray-200 cursor-pointer group"
                       onClick={() => window.open(doc.url, "_blank")}
+                      title={doc.fileName} // Add tooltip for full filename
                     >
-                      <div className="bg-blue-100 p-2 rounded-md mr-3">
-                        <FileImage className="h-5 w-5 text-blue-500" />
+                      <div className="bg-blue-100 p-2 rounded-md mr-2 flex-shrink-0">
+                        <FileImage className="h-4 w-4 text-blue-500" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {doc.fileName}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {doc.metadata?.sizeFormatted ||
-                            `${Math.round((doc.metadata?.size || 0) / 1024)} KB`}
-                        </p>
+                      <div className="flex-1 min-w-0 mr-1">
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium text-sm truncate max-w-[160px]">
+                            {doc.fileName}
+                          </p>
+                          <p className="text-xs text-gray-500 flex-shrink-0 ml-1">
+                            {doc.metadata?.sizeFormatted ||
+                              `${Math.round((doc.metadata?.size || 0) / 1024)} KB`}
+                          </p>
+                        </div>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
                         <ChevronRight className="h-4 w-4" />
                       </Button>
                     </div>
@@ -1004,29 +1012,32 @@ export default function GroupInfo({
                     return (
                       <div
                         key={index}
-                        className="flex items-center py-2 px-4 hover:bg-gray-200 cursor-pointer"
+                        className="flex items-center py-2 px-3 hover:bg-gray-200 cursor-pointer group"
                         onClick={() =>
                           window.open(link.url, "_blank", "noopener,noreferrer")
                         }
+                        title={link.title} // Add tooltip for full title
                       >
-                        <div className="w-10 h-10 rounded-md mr-3 flex items-center justify-center overflow-hidden">
+                        <div className="w-8 h-8 rounded-md mr-2 flex items-center justify-center overflow-hidden flex-shrink-0">
                           {getLinkIcon(domain)}
                         </div>
-                        <div className="flex-1 min-w-0 mr-2">
-                          <p className="font-medium text-sm truncate max-w-[180px]">
-                            {getLinkTitle(
-                              domain,
-                              link.title.length > 40
-                                ? link.title.substring(0, 40) + "..."
-                                : link.title,
-                            )}
-                          </p>
-                          <p className="text-xs text-blue-500 truncate">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium text-sm truncate max-w-[160px]">
+                              {getLinkTitle(
+                                domain,
+                                link.title.length > 30
+                                  ? link.title.substring(0, 30) + "..."
+                                  : link.title,
+                              )}
+                            </p>
+                            <p className="text-xs text-gray-500 flex-shrink-0 ml-1">
+                              {formattedDate}
+                            </p>
+                          </div>
+                          <p className="text-xs text-blue-500 truncate max-w-[180px]">
                             {domain}
                           </p>
-                        </div>
-                        <div className="text-xs text-gray-500 whitespace-nowrap">
-                          {formattedDate}
                         </div>
                       </div>
                     );
@@ -1074,18 +1085,20 @@ export default function GroupInfo({
                 onClick={() => setShowDeleteDialog(true)}
               >
                 <Trash className="h-5 w-5 mr-3" />
-                <span>Xóa nhóm</span>
+                <span>Giải tán nhóm</span>
               </Button>
             )}
 
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-red-500 pl-2"
-              onClick={() => setShowLeaveDialog(true)}
-            >
-              <LogOut className="h-5 w-5 mr-3" />
-              <span>Rời nhóm</span>
-            </Button>
+            {currentUserRole !== "LEADER" && (
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-red-500 pl-2"
+                onClick={() => setShowLeaveDialog(true)}
+              >
+                <LogOut className="h-5 w-5 mr-3" />
+                <span>Rời nhóm</span>
+              </Button>
+            )}
           </div>
         </div>
       </ScrollArea>
