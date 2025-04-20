@@ -59,6 +59,36 @@ export default function MediaGalleryView({
     return `Ngày ${day} Tháng ${month}`;
   };
 
+  // Helper function to determine if a media is a video
+  const isVideo = (media: Media): boolean => {
+    // Check if type is explicitly VIDEO
+    if (media.type === "VIDEO") {
+      return true;
+    }
+
+    // Check if extension is a video extension and type is not explicitly IMAGE
+    if (
+      media.metadata?.extension?.match(/mp4|webm|mov/i) &&
+      media.type !== "IMAGE"
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Helper function to ensure media type is correctly set
+  const ensureCorrectMediaType = (
+    media: Media & { createdAt: Date },
+  ): Media & { createdAt: Date } => {
+    // Create a new object with the correct type
+    return {
+      ...media,
+      // Ensure type is set correctly for videos
+      type: isVideo(media) ? "VIDEO" : "IMAGE",
+    };
+  };
+
   // Group media by date
   useEffect(() => {
     const groupMediaByDate = () => {
@@ -67,6 +97,17 @@ export default function MediaGalleryView({
       // Sort media files by date (newest first)
       const sortedMedia = [...mediaFiles].sort(
         (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+      );
+
+      // Log media files for debugging
+      console.log(
+        "Media files:",
+        sortedMedia.map((m) => ({
+          fileId: m.fileId,
+          fileName: m.fileName,
+          type: m.type,
+          extension: m.metadata?.extension,
+        })),
       );
 
       sortedMedia.forEach((media) => {
@@ -218,38 +259,63 @@ export default function MediaGalleryView({
                             const fullIndex = mediaFiles.findIndex(
                               (m) => m.fileId === media.fileId,
                             );
-                            setSelectedMediaIndex(
-                              fullIndex >= 0 ? fullIndex : index,
+                            const selectedIndex =
+                              fullIndex >= 0 ? fullIndex : index;
+                            console.log(
+                              "Opening MediaViewer with index:",
+                              selectedIndex,
                             );
+                            console.log("Selected media:", media);
+                            console.log("Is video:", isVideo(media));
+                            setSelectedMediaIndex(selectedIndex);
                             setShowMediaViewer(true);
                           }}
                         >
-                          <Image
-                            src={media.url}
-                            alt={media.fileName}
-                            className="object-cover w-full h-full"
-                            width={500}
-                            height={500}
-                            unoptimized
-                          />
-                          {media.metadata?.extension?.match(
-                            /mp4|webm|mov/i,
-                          ) && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                              <Video className="h-6 w-6 text-white" />
+                          {isVideo(media) ? (
+                            <div className="w-full h-full bg-black relative">
+                              <video
+                                key={`gallery-video-${media.fileId}`}
+                                src={media.url}
+                                className="object-cover w-full h-full"
+                                preload="metadata"
+                                muted
+                                onError={(e) => {
+                                  console.error(
+                                    "Gallery video error:",
+                                    e,
+                                    media,
+                                  );
+                                }}
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                <Video className="h-6 w-6 text-white" />
+                              </div>
                             </div>
+                          ) : (
+                            <Image
+                              src={media.url}
+                              alt={media.fileName}
+                              className="object-cover w-full h-full"
+                              width={500}
+                              height={500}
+                              unoptimized
+                            />
                           )}
                         </div>
                       ))}
                     </div>
                     <div className="text-xs text-gray-500 px-3 py-1">
-                      {group.media.length} ảnh trong {new Date().getFullYear()}
+                      {group.media.length}{" "}
+                      {group.media.some(isVideo) ? "ảnh/video" : "ảnh"} trong{" "}
+                      {new Date().getFullYear()}
                     </div>
                   </div>
                 ))
               ) : (
                 <div className="flex-1 flex items-center justify-center h-full">
-                  <p className="text-gray-500">Không có hình ảnh nào</p>
+                  <p className="text-gray-500">
+                    Không có hình ảnh hoặc video nào
+                  </p>
                 </div>
               )}
             </div>
@@ -563,8 +629,10 @@ export default function MediaGalleryView({
       {showMediaViewer && mediaFiles.length > 0 && (
         <MediaViewer
           isOpen={showMediaViewer}
-          onClose={() => setShowMediaViewer(false)}
-          media={mediaFiles}
+          onClose={() => {
+            setShowMediaViewer(false);
+          }}
+          media={mediaFiles.map(ensureCorrectMediaType)}
           initialIndex={selectedMediaIndex}
         />
       )}

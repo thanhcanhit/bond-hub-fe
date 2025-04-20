@@ -63,15 +63,87 @@ export default function MediaViewer({
   // Reset current index when media array changes
   useEffect(() => {
     setCurrentIndex(initialIndex);
+
+    // Log media for debugging
+    console.log(
+      "MediaViewer media:",
+      media.map((m) => ({
+        fileId: m.fileId,
+        fileName: m.fileName,
+        type: m.type,
+        extension: m.metadata?.extension,
+        isVideo: isVideoMedia(m),
+      })),
+    );
+    console.log("Initial index:", initialIndex);
   }, [media, initialIndex]);
 
   // Reset loading state when current index changes
   useEffect(() => {
     setIsLoading(true);
-  }, [currentIndex]);
+    console.log(`Current index changed to ${currentIndex}`);
+    if (media[currentIndex]) {
+      console.log("Media at current index:", {
+        fileId: media[currentIndex].fileId,
+        type: media[currentIndex].type,
+        extension: media[currentIndex].metadata?.extension,
+      });
+    }
+  }, [currentIndex, media]);
+
+  // Helper function to determine if a media is a video
+  const isVideoMedia = (mediaItem: Media | undefined): boolean => {
+    if (!mediaItem) return false;
+
+    // Log the media item for debugging
+    console.log("Checking if media is video:", {
+      fileId: mediaItem.fileId,
+      type: mediaItem.type,
+      extension: mediaItem.metadata?.extension,
+    });
+
+    // Check if type is explicitly VIDEO
+    if (mediaItem.type === "VIDEO") {
+      console.log("Media is video by type");
+      return true;
+    }
+
+    // Check if extension is a video extension and type is not explicitly IMAGE
+    if (
+      mediaItem.metadata?.extension?.match(/mp4|webm|mov/i) &&
+      mediaItem.type !== "IMAGE"
+    ) {
+      console.log("Media is video by extension");
+      return true;
+    }
+
+    console.log("Media is not a video");
+    return false;
+  };
 
   const currentMedia = media[currentIndex];
-  const isVideo = currentMedia?.metadata?.extension?.match(/mp4|webm|mov/i);
+  const isVideo = isVideoMedia(currentMedia);
+
+  // Log current media for debugging
+  useEffect(() => {
+    if (currentMedia) {
+      console.log("Current media in viewer:", {
+        fileId: currentMedia.fileId,
+        fileName: currentMedia.fileName,
+        type: currentMedia.type,
+        extension: currentMedia.metadata?.extension,
+        isVideo,
+      });
+
+      // Force update type if needed
+      if (isVideo && currentMedia.type !== "VIDEO") {
+        console.log("Forcing video type update");
+        // This is a hack to ensure the video is treated as a video
+        // We can't directly modify currentMedia because it's from props
+        // But we can log this for debugging
+      }
+    }
+  }, [currentMedia, isVideo]);
 
   // State để lưu thông tin người gửi
   const [senderInfo, setSenderInfo] = useState<User | null>(null);
@@ -116,22 +188,30 @@ export default function MediaViewer({
 
   // Define navigation functions
   const handlePrevious = useCallback(() => {
+    let newIndex;
     if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
+      newIndex = currentIndex - 1;
     } else {
       // Loop to the end if at the beginning
-      setCurrentIndex(media.length - 1);
+      newIndex = media.length - 1;
     }
-  }, [currentIndex, media.length]);
+    console.log(`Navigating to previous: ${currentIndex} -> ${newIndex}`);
+    console.log("Media at new index:", media[newIndex]);
+    setCurrentIndex(newIndex);
+  }, [currentIndex, media]);
 
   const handleNext = useCallback(() => {
+    let newIndex;
     if (currentIndex < media.length - 1) {
-      setCurrentIndex(currentIndex + 1);
+      newIndex = currentIndex + 1;
     } else {
       // Loop to the beginning if at the end
-      setCurrentIndex(0);
+      newIndex = 0;
     }
-  }, [currentIndex, media.length]);
+    console.log(`Navigating to next: ${currentIndex} -> ${newIndex}`);
+    console.log("Media at new index:", media[newIndex]);
+    setCurrentIndex(newIndex);
+  }, [currentIndex, media]);
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -199,12 +279,23 @@ export default function MediaViewer({
                   <div className="flex items-center justify-center w-full">
                     <div className="flex items-center justify-center w-full">
                       <video
+                        key={`main-video-${currentMedia.fileId}`}
                         src={currentMedia.url}
                         controls
                         autoPlay
                         className="max-h-[calc(70vh-20px)] max-w-[calc(100vw-120px)] object-contain"
-                        onLoadStart={() => setIsLoading(true)}
-                        onLoadedData={() => setIsLoading(false)}
+                        onLoadStart={() => {
+                          console.log("Video loading started");
+                          setIsLoading(true);
+                        }}
+                        onLoadedData={() => {
+                          console.log("Video loaded");
+                          setIsLoading(false);
+                        }}
+                        onError={(e) => {
+                          console.error("Video error:", e);
+                          setIsLoading(false);
+                        }}
                       />
                     </div>
                   </div>
@@ -283,15 +374,20 @@ export default function MediaViewer({
                             }
                           >
                             <div className="aspect-square w-[90px] h-[90px] relative">
-                              {item.metadata?.extension?.match(
-                                /mp4|webm|mov/i,
-                              ) ? (
+                              {isVideoMedia(item) ? (
                                 <>
                                   <video
+                                    key={`video-${item.fileId}`}
                                     src={item.url}
                                     className="w-full h-full object-cover"
                                     muted
                                     preload="metadata"
+                                    onError={(e) => {
+                                      console.error(
+                                        "Thumbnail video error:",
+                                        e,
+                                      );
+                                    }}
                                   />
                                   <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                                     <svg

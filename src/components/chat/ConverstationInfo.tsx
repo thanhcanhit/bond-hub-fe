@@ -302,33 +302,43 @@ export default function ContactInfo({
                           setShowMediaViewer(true);
                         }}
                       >
-                        <div
-                          className="w-full h-full bg-cover bg-center"
-                          style={{ backgroundImage: `url(${media.url})` }}
-                        ></div>
-                        {media.metadata?.extension?.match(/mp4|webm|mov/i) && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                            <Video className="h-6 w-6 text-white" />
-                          </div>
+                        {media.metadata?.extension?.match(/mp4|webm|mov/i) ||
+                        media.type === "VIDEO" ? (
+                          <>
+                            <div className="w-full h-full bg-black">
+                              <video
+                                src={media.url}
+                                className="object-cover w-full h-full"
+                                preload="metadata"
+                                muted
+                              />
+                            </div>
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                              <Video className="h-6 w-6 text-white" />
+                            </div>
+                          </>
+                        ) : (
+                          <div
+                            className="w-full h-full bg-cover bg-center"
+                            style={{ backgroundImage: `url(${media.url})` }}
+                          ></div>
                         )}
                       </div>
                     ))}
                   </div>
-                  {mediaFiles.length > 8 && (
-                    <div className="mt-2 text-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-sm font-semibold w-full bg-[#e5e7eb] hover:bg-gray-300"
-                        onClick={() => {
-                          setActiveGalleryTab("media");
-                          setShowMediaGallery(true);
-                        }}
-                      >
-                        Xem tất cả
-                      </Button>
-                    </div>
-                  )}
+                  <div className="mt-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-sm font-semibold w-full bg-[#e5e7eb] hover:bg-gray-300"
+                      onClick={() => {
+                        setActiveGalleryTab("media");
+                        setShowMediaGallery(true);
+                      }}
+                    >
+                      Xem tất cả
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="p-4 text-center">
@@ -519,7 +529,15 @@ export default function ContactInfo({
         <MediaViewer
           isOpen={showMediaViewer}
           onClose={() => setShowMediaViewer(false)}
-          media={mediaFiles}
+          media={mediaFiles.map((media) => ({
+            ...media,
+            // Ensure type is set correctly for videos
+            type:
+              media.metadata?.extension?.match(/mp4|webm|mov/i) ||
+              media.type === "VIDEO"
+                ? "VIDEO"
+                : "IMAGE",
+          }))}
           initialIndex={selectedMediaIndex}
           chatName={contact.userInfo?.fullName || "Hội thoại"}
         />
