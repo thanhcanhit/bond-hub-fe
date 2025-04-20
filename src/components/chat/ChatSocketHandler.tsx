@@ -17,6 +17,12 @@ declare global {
   }
 }
 
+// Helper function to safely get socket instance
+export function getMessageSocket(): Socket | null {
+  if (typeof window === "undefined") return null;
+  return window.messageSocket;
+}
+
 // Define types for socket events
 interface MessageEventData {
   type: "user" | "group";
@@ -708,36 +714,73 @@ export default function ChatSocketHandler() {
       return;
     }
 
-    // Get initial user statuses for all contacts
-    const userIds = conversations
-      .filter((conv) => conv.type === "USER")
-      .map((conv) => conv.contact.id);
-
-    if (userIds.length > 0) {
-      messageSocket.emit("getUserStatus", { userIds });
-    }
-
-    // Only set up event listeners if they haven't been set up yet
-    if (!eventListenersSetupRef.current) {
-      console.log("[ChatSocketHandler] Setting up socket event listeners");
-
-      // Register message event handlers
-      messageSocket.on("newMessage", handleNewMessage);
-      messageSocket.on("messageRead", handleMessageRead);
-      messageSocket.on("messageRecalled", handleMessageRecalled);
-      messageSocket.on("messageReactionUpdated", handleMessageReactionUpdated);
-      messageSocket.on("userTyping", handleUserTyping);
-      messageSocket.on("userTypingStopped", handleUserTypingStopped);
-      messageSocket.on("userStatus", handleUserStatus);
-
-      // Log all registered listeners for debugging
+    // Check if socket is connected
+    if (!messageSocket.connected) {
       console.log(
-        "[ChatSocketHandler] Current listeners:",
-        messageSocket.listeners("newMessage").length,
+        "[ChatSocketHandler] Socket not connected, waiting for connection...",
       );
 
-      // Mark event listeners as set up
-      eventListenersSetupRef.current = true;
+      // Add a one-time connect event handler
+      const handleConnect = () => {
+        console.log(
+          "[ChatSocketHandler] Socket connected, continuing setup...",
+        );
+        setupSocketListeners();
+      };
+
+      messageSocket.once("connect", handleConnect);
+
+      // Clean up the connect handler if the component unmounts before connection
+      return () => {
+        messageSocket?.off("connect", handleConnect);
+      };
+    } else {
+      // Socket is already connected, proceed with setup
+      setupSocketListeners();
+    }
+
+    function setupSocketListeners() {
+      // Get initial user statuses for all contacts
+      const userIds = conversations
+        .filter((conv) => conv.type === "USER")
+        .map((conv) => conv.contact.id);
+
+      if (userIds.length > 0 && messageSocket && messageSocket.connected) {
+        try {
+          messageSocket.emit("getUserStatus", { userIds });
+        } catch (error) {
+          console.error(
+            "[ChatSocketHandler] Error getting user statuses:",
+            error,
+          );
+        }
+      }
+
+      // Only set up event listeners if they haven't been set up yet
+      if (!eventListenersSetupRef.current && messageSocket) {
+        console.log("[ChatSocketHandler] Setting up socket event listeners");
+
+        // Register message event handlers
+        messageSocket.on("newMessage", handleNewMessage);
+        messageSocket.on("messageRead", handleMessageRead);
+        messageSocket.on("messageRecalled", handleMessageRecalled);
+        messageSocket.on(
+          "messageReactionUpdated",
+          handleMessageReactionUpdated,
+        );
+        messageSocket.on("userTyping", handleUserTyping);
+        messageSocket.on("userTypingStopped", handleUserTypingStopped);
+        messageSocket.on("userStatus", handleUserStatus);
+
+        // Log all registered listeners for debugging
+        console.log(
+          "[ChatSocketHandler] Current listeners:",
+          messageSocket.listeners("newMessage").length,
+        );
+
+        // Mark event listeners as set up
+        eventListenersSetupRef.current = true;
+      }
     }
 
     // Clean up on unmount only, not when dependencies change

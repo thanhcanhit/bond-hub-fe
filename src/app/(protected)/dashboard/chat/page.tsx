@@ -190,7 +190,40 @@ export default function ChatPage() {
       // Handle group conversation
       // Use openChat which will handle fetching group data and setting up the conversation
       try {
+        console.log(`[ChatPage] Opening group chat with ID: ${id}`);
+
+        // Check if socket is connected before opening group chat
+        const { messageSocket, isConnected } = window.messageSocket
+          ? {
+              messageSocket: window.messageSocket,
+              isConnected: window.messageSocket.connected,
+            }
+          : { messageSocket: null, isConnected: false };
+
+        if (messageSocket && !isConnected) {
+          console.log(
+            `[ChatPage] Socket not connected, attempting to reconnect before opening group chat`,
+          );
+          // Wait for socket to connect
+          messageSocket.connect();
+
+          // Wait a bit for connection to establish
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+
+        // Proceed with opening the chat
         await chatStore.openChat(id, "GROUP");
+
+        // If we still have issues, try to reload the conversation after a short delay
+        setTimeout(() => {
+          const currentSelectedGroup = useChatStore.getState().selectedGroup;
+          if (currentSelectedGroup?.id === id) {
+            console.log(
+              `[ChatPage] Reloading group conversation messages after delay`,
+            );
+            chatStore.reloadConversationMessages(id, "GROUP");
+          }
+        }, 2000);
       } catch (error) {
         console.error("Error opening group chat:", error);
       }
