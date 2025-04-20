@@ -134,6 +134,13 @@ export interface Group {
   createdAt: Date;
   members: GroupMember[];
   messages: Message[];
+  // Add memberUsers for simplified UI display
+  memberUsers?: Array<{
+    id: string;
+    fullName: string;
+    profilePictureUrl?: string | null;
+    role: GroupRole;
+  }>;
 }
 
 export interface GroupMember {

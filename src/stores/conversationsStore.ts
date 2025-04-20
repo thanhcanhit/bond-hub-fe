@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { User, UserInfo, Message, Media, MessageType } from "@/types/base";
+import {
+  User,
+  UserInfo,
+  Message,
+  Media,
+  MessageType,
+  GroupRole,
+} from "@/types/base";
 import { getAllUsers, getUserDataById } from "@/actions/user.action";
 import { getConversations } from "@/actions/message.action";
 import { useAuthStore } from "./authStore";
@@ -39,6 +46,13 @@ export interface Conversation {
     name: string;
     avatarUrl?: string | null;
     createdAt?: Date;
+    memberIds?: string[];
+    memberUsers?: Array<{
+      id: string;
+      fullName: string;
+      profilePictureUrl?: string | null;
+      role: GroupRole;
+    }>;
   };
   lastMessage?: Message;
   unreadCount: number;
@@ -46,6 +60,13 @@ export interface Conversation {
   type: "USER" | "GROUP";
   isTyping?: boolean;
   typingTimestamp?: Date;
+  // Thêm thông tin người đang nhập cho nhóm
+  typingUsers?: Array<{
+    userId: string;
+    fullName: string;
+    profilePictureUrl?: string | null;
+    timestamp: Date;
+  }>;
 }
 
 // Define the API conversation interface
@@ -64,6 +85,17 @@ interface ApiConversation {
     name: string;
     avatarUrl?: string | null;
     createdAt?: string;
+    members?: {
+      id: string;
+      userId: string;
+      role: string;
+      fullName: string;
+      profilePictureUrl?: string | null;
+      addedBy?: {
+        id: string;
+        fullName: string;
+      };
+    }[];
   };
   lastMessage?: {
     id: string;
@@ -109,6 +141,11 @@ interface ConversationsState {
   getFilteredConversations: () => Conversation[];
   clearConversations: () => void;
   setTypingStatus: (contactId: string, isTyping: boolean) => void;
+  setGroupTypingStatus: (
+    groupId: string,
+    userId: string,
+    isTyping: boolean,
+  ) => void;
 
   // New utility functions for better message handling
   processNewMessage: (
@@ -160,104 +197,196 @@ export const useConversationsStore = create<ConversationsState>()(
               .map((conv: ApiConversation) => {
                 const isUserConversation = conv.type === "USER";
 
-                if (isUserConversation && conv.user) {
+                // Create a message object from the API response
+                const createMessageFromApi = (
+                  apiMessage:
+                    | {
+                        id: string;
+                        content: {
+                          text?: string;
+                          media?: Media[];
+                        };
+                        senderId: string;
+                        senderName: string;
+                        createdAt: string;
+                        recalled: boolean;
+                        isRead: boolean;
+                      }
+                    | undefined,
+                ): Message | undefined => {
+                  if (!apiMessage) return undefined;
+
+                  // Tìm thông tin người gửi từ danh sách thành viên nhóm nếu là tin nhắn nhóm
+                  let senderInfo = null;
+                  if (!isUserConversation && conv.group?.members) {
+                    const memberInfo = conv.group.members.find(
+                      (m) => m.userId === apiMessage.senderId,
+                    );
+                    if (memberInfo) {
+                      senderInfo = {
+                        id: memberInfo.userId,
+                        fullName: memberInfo.fullName,
+                        profilePictureUrl: memberInfo.profilePictureUrl,
+                      };
+                    }
+                  }
+
                   return {
-                    contact: {
-                      id: conv.user.id,
+                    id: apiMessage.id,
+                    content: {
+                      text: apiMessage.content.text,
+                      media: apiMessage.content.media || [],
+                    },
+                    senderId: apiMessage.senderId,
+                    sender: {
+                      id: apiMessage.senderId,
                       userInfo: {
-                        id: conv.user.id,
-                        fullName: conv.user.fullName || "Unknown",
-                        profilePictureUrl: conv.user.profilePictureUrl || null,
-                        statusMessage: conv.user.statusMessage || null,
-                        lastSeen: conv.user.lastSeen
-                          ? new Date(conv.user.lastSeen)
-                          : null,
-                        blockStrangers: false,
+                        id: apiMessage.senderId,
+                        fullName: senderInfo?.fullName || apiMessage.senderName,
+                        profilePictureUrl:
+                          senderInfo?.profilePictureUrl || null,
                         createdAt: new Date(),
                         updatedAt: new Date(),
-                        userAuth: { id: conv.user.id },
+                        blockStrangers: false,
+                        userAuth: { id: apiMessage.senderId },
                       },
-                    } as User & { userInfo: UserInfo },
-                    // Convert the simplified lastMessage to our Message format
-                    lastMessage: conv.lastMessage
-                      ? ({
-                          id: conv.lastMessage.id,
-                          content: {
-                            text: conv.lastMessage.content.text,
-                            media: conv.lastMessage.content.media,
-                          },
-                          senderId: conv.lastMessage.senderId,
-                          sender: {
-                            id: conv.lastMessage.senderId,
-                            userInfo: {
-                              id: conv.lastMessage.senderId,
-                              fullName: conv.lastMessage.senderName,
-                              createdAt: new Date(),
-                              updatedAt: new Date(),
-                              blockStrangers: false,
-                              userAuth: { id: conv.lastMessage.senderId },
-                            },
-                          } as User,
-                          recalled: conv.lastMessage.recalled,
-                          readBy: conv.lastMessage.isRead
-                            ? [currentUserId]
-                            : [],
-                          deletedBy: [],
-                          reactions: [],
-                          createdAt: new Date(conv.lastMessage.createdAt),
-                          updatedAt: new Date(conv.lastMessage.createdAt),
-                        } as Message)
-                      : undefined,
+                    } as User,
+                    recalled: apiMessage.recalled,
+                    readBy: apiMessage.isRead ? [currentUserId] : [],
+                    deletedBy: [],
+                    reactions: [],
+                    createdAt: new Date(apiMessage.createdAt),
+                    updatedAt: new Date(apiMessage.createdAt),
+                    messageType: isUserConversation
+                      ? MessageType.USER
+                      : MessageType.GROUP,
+                    groupId: !isUserConversation ? conv.id : undefined,
+                  } as Message;
+                };
+
+                if (isUserConversation && conv.user) {
+                  // Handle user conversation
+                  // Determine online status based on lastSeen
+                  const isOnline = conv.user.lastSeen
+                    ? new Date().getTime() -
+                        new Date(conv.user.lastSeen).getTime() <
+                      5 * 60 * 1000
+                    : false;
+
+                  const userContact = {
+                    id: conv.user.id,
+                    userInfo: {
+                      id: conv.user.id,
+                      fullName: conv.user.fullName || "Unknown",
+                      profilePictureUrl: conv.user.profilePictureUrl || null,
+                      statusMessage: conv.user.statusMessage || null,
+                      lastSeen: conv.user.lastSeen
+                        ? new Date(conv.user.lastSeen)
+                        : null,
+                      blockStrangers: false,
+                      createdAt: new Date(),
+                      updatedAt: new Date(),
+                      userAuth: { id: conv.user.id },
+                    },
+                    // Add online status based on lastSeen (consider online if active in last 5 minutes)
+                    online: isOnline,
+                  } as User & { userInfo: UserInfo; online?: boolean };
+
+                  return {
+                    contact: userContact,
+                    user: userContact, // Store the user object in the new field
+                    lastMessage: createMessageFromApi(conv.lastMessage),
                     unreadCount: conv.unreadCount || 0,
                     lastActivity: new Date(conv.updatedAt),
                     type: conv.type,
                   };
                 } else if (!isUserConversation && conv.group) {
+                  // Handle group conversation
+                  // Create a proper Group object from the API response
+                  const groupMembers =
+                    conv.group?.members?.map((member) => ({
+                      id: member.id,
+                      groupId: conv.group?.id || "",
+                      userId: member.userId,
+                      role: member.role as GroupRole,
+                      joinedAt: new Date(),
+                      user: {
+                        id: member.userId,
+                        userInfo: {
+                          id: member.userId,
+                          fullName: member.fullName,
+                          profilePictureUrl: member.profilePictureUrl,
+                          createdAt: new Date(),
+                          updatedAt: new Date(),
+                          blockStrangers: false,
+                          userAuth: { id: member.userId },
+                        },
+                      } as User,
+                      addedBy: {
+                        id: member.addedBy?.id || "",
+                        userInfo: {
+                          id: member.addedBy?.id || "",
+                          fullName: member.addedBy?.fullName || "Unknown",
+                          createdAt: new Date(),
+                          updatedAt: new Date(),
+                          blockStrangers: false,
+                          userAuth: { id: member.addedBy?.id || "" },
+                        },
+                      } as User,
+                      addedById: member.addedBy?.id || "",
+                    })) || [];
+
+                  // Create a simplified Group object without circular references
+                  const group = {
+                    id: conv.group?.id || "",
+                    name: conv.group?.name || "Nhóm chat",
+                    creatorId:
+                      groupMembers?.find((m) => m.role === GroupRole.LEADER)
+                        ?.userId || "",
+                    avatarUrl: conv.group?.avatarUrl || null,
+                    createdAt: new Date(),
+                    // Store only member IDs to avoid circular references
+                    memberIds: groupMembers?.map((m) => m.id) || [],
+                    // Store member information directly from API response
+                    memberUsers:
+                      conv.group?.members?.map((member) => ({
+                        id: member.userId,
+                        fullName: member.fullName || "",
+                        profilePictureUrl: member.profilePictureUrl,
+                        role: member.role as GroupRole,
+                        // Add additional fields that might be useful
+                        addedById: member.addedBy?.id,
+                        addedByName: member.addedBy?.fullName,
+                      })) || [],
+                    messages: [],
+                  };
+
+                  // Create a contact representation for the group
+                  const groupContact = {
+                    id: conv.group?.id || "",
+                    userInfo: {
+                      id: conv.group?.id || "",
+                      fullName: conv.group?.name || "Nhóm chat",
+                      profilePictureUrl: conv.group?.avatarUrl,
+                      statusMessage: null,
+                      blockStrangers: false,
+                      createdAt: new Date(),
+                      updatedAt: new Date(),
+                      userAuth: { id: conv.group.id },
+                    },
+                  } as User & { userInfo: UserInfo };
+
                   return {
-                    contact: {
-                      id: conv.group.id,
-                      userInfo: {
-                        id: conv.group.id,
-                        fullName: conv.group.name,
-                        profilePictureUrl: conv.group.avatarUrl,
-                        statusMessage: null,
-                        blockStrangers: false,
-                        createdAt: conv.group.createdAt
-                          ? new Date(conv.group.createdAt)
-                          : new Date(),
-                        updatedAt: new Date(),
-                        userAuth: { id: conv.group.id },
-                      },
-                    } as User & { userInfo: UserInfo },
-                    lastMessage: conv.lastMessage
-                      ? ({
-                          id: conv.lastMessage.id,
-                          content: {
-                            text: conv.lastMessage.content.text,
-                            media: conv.lastMessage.content.media,
-                          },
-                          senderId: conv.lastMessage.senderId,
-                          sender: {
-                            id: conv.lastMessage.senderId,
-                            userInfo: {
-                              id: conv.lastMessage.senderId,
-                              fullName: conv.lastMessage.senderName,
-                              createdAt: new Date(),
-                              updatedAt: new Date(),
-                              blockStrangers: false,
-                              userAuth: { id: conv.lastMessage.senderId },
-                            },
-                          } as User,
-                          recalled: conv.lastMessage.recalled,
-                          readBy: conv.lastMessage.isRead
-                            ? [currentUserId]
-                            : [],
-                          deletedBy: [],
-                          reactions: [],
-                          createdAt: new Date(conv.lastMessage.createdAt),
-                          updatedAt: new Date(conv.lastMessage.createdAt),
-                        } as Message)
-                      : undefined,
+                    contact: groupContact,
+                    group: {
+                      id: group.id,
+                      name: group.name,
+                      avatarUrl: group.avatarUrl,
+                      createdAt: group.createdAt,
+                      memberIds: group.memberIds,
+                      memberUsers: group.memberUsers,
+                    },
+                    lastMessage: createMessageFromApi(conv.lastMessage),
                     unreadCount: conv.unreadCount || 0,
                     lastActivity: new Date(conv.updatedAt),
                     type: conv.type,
@@ -529,14 +658,36 @@ export const useConversationsStore = create<ConversationsState>()(
       },
 
       markAsRead: (contactId) => {
-        set((state) => {
-          const updatedConversations = state.conversations.map((conv) =>
-            conv.contact.id === contactId ? { ...conv, unreadCount: 0 } : conv,
+        // First check if there's anything to mark as read
+        const state = get();
+        const conversation = state.conversations.find(
+          (conv) =>
+            conv.contact.id === contactId ||
+            (conv.type === "GROUP" && conv.group?.id === contactId),
+        );
+
+        // Only update if the conversation exists and has unread messages
+        if (conversation && conversation.unreadCount > 0) {
+          console.log(
+            `[conversationsStore] Marking conversation with ${contactId} as read (unread: ${conversation.unreadCount})`,
           );
 
-          // Keep the same sorting order
-          return { conversations: updatedConversations };
-        });
+          set((state) => {
+            const updatedConversations = state.conversations.map((conv) =>
+              conv.contact.id === contactId ||
+              (conv.type === "GROUP" && conv.group?.id === contactId)
+                ? { ...conv, unreadCount: 0 }
+                : conv,
+            );
+
+            // Keep the same sorting order
+            return { conversations: updatedConversations };
+          });
+        } else {
+          console.log(
+            `[conversationsStore] Conversation with ${contactId} already read or not found, skipping`,
+          );
+        }
       },
 
       incrementUnread: (contactId) => {
@@ -608,6 +759,80 @@ export const useConversationsStore = create<ConversationsState>()(
                 ...conv,
                 isTyping: false,
                 typingTimestamp: undefined,
+              };
+            }
+          });
+
+          return { conversations: updatedConversations };
+        });
+      },
+
+      setGroupTypingStatus: (groupId, userId, isTyping) => {
+        set((state) => {
+          // Tìm conversation nhóm dựa trên groupId
+          const updatedConversations = state.conversations.map((conv) => {
+            // Chỉ xử lý nếu là nhóm và đúng groupId
+            if (conv.type !== "GROUP" || conv.group?.id !== groupId)
+              return conv;
+
+            // Tìm thông tin người dùng đang nhập từ danh sách thành viên nhóm
+            const typingUserInfo = conv.group?.memberUsers?.find(
+              (member) => member.id === userId,
+            );
+
+            // Nếu đang nhập, thêm vào danh sách người đang nhập
+            if (isTyping) {
+              // Tạo một danh sách người đang nhập mới hoặc sử dụng danh sách hiện tại
+              const currentTypingUsers = conv.typingUsers || [];
+
+              // Kiểm tra xem người dùng đã có trong danh sách chưa
+              const userIndex = currentTypingUsers.findIndex(
+                (u) => u.userId === userId,
+              );
+
+              let updatedTypingUsers;
+              if (userIndex >= 0) {
+                // Cập nhật thời gian nếu người dùng đã có trong danh sách
+                updatedTypingUsers = [...currentTypingUsers];
+                updatedTypingUsers[userIndex] = {
+                  ...updatedTypingUsers[userIndex],
+                  timestamp: new Date(),
+                };
+              } else {
+                // Thêm người dùng mới vào danh sách
+                updatedTypingUsers = [
+                  ...currentTypingUsers,
+                  {
+                    userId,
+                    fullName: typingUserInfo?.fullName || "Thành viên nhóm",
+                    profilePictureUrl:
+                      typingUserInfo?.profilePictureUrl || null,
+                    timestamp: new Date(),
+                  },
+                ];
+              }
+
+              return {
+                ...conv,
+                isTyping: true,
+                typingTimestamp: new Date(),
+                typingUsers: updatedTypingUsers,
+              };
+            }
+            // Nếu dừng nhập, xóa người dùng khỏi danh sách người đang nhập
+            else {
+              // Lọc người dùng ra khỏi danh sách
+              const updatedTypingUsers = (conv.typingUsers || []).filter(
+                (u) => u.userId !== userId,
+              );
+
+              return {
+                ...conv,
+                // Chỉ đặt isTyping = false nếu không còn ai đang nhập
+                isTyping: updatedTypingUsers.length > 0,
+                typingTimestamp:
+                  updatedTypingUsers.length > 0 ? new Date() : undefined,
+                typingUsers: updatedTypingUsers,
               };
             }
           });

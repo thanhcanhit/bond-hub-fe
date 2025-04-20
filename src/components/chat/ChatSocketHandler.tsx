@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { Socket } from "socket.io-client";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
@@ -89,6 +89,29 @@ export default function ChatSocketHandler() {
             userInfo: selectedContact.userInfo,
           };
         }
+        // For group messages, try to find sender info from the group members
+        else if (
+          currentChatType === "GROUP" &&
+          selectedGroup &&
+          message.groupId === selectedGroup.id
+        ) {
+          const senderMember = selectedGroup.memberUsers?.find(
+            (member) => member.id === message.senderId,
+          );
+          if (senderMember) {
+            // If we found the sender in the group members, use that info
+            message.sender.userInfo = {
+              ...(message.sender.userInfo || {}),
+              id: message.senderId,
+              fullName: senderMember.fullName,
+              profilePictureUrl: senderMember.profilePictureUrl,
+              createdAt: message.sender.userInfo?.createdAt || new Date(),
+              updatedAt: message.sender.userInfo?.updatedAt || new Date(),
+              blockStrangers: message.sender.userInfo?.blockStrangers || false,
+              userAuth: message.sender,
+            };
+          }
+        }
         // If sender doesn't have userInfo or has incomplete userInfo
         else if (
           !message.sender.userInfo ||
@@ -115,7 +138,7 @@ export default function ChatSocketHandler() {
       }
       return message;
     },
-    [currentUser, selectedContact],
+    [currentUser, selectedContact, selectedGroup, currentChatType],
   );
 
   // Handle new message event
@@ -232,6 +255,30 @@ export default function ChatSocketHandler() {
           selectedGroup &&
           message.groupId === selectedGroup.id);
 
+      // Nếu tin nhắn thuộc nhóm hiện tại, đảm bảo thông tin người gửi được cập nhật từ danh sách thành viên
+      if (
+        currentChatType === "GROUP" &&
+        selectedGroup &&
+        message.groupId === selectedGroup.id
+      ) {
+        const senderMember = selectedGroup.memberUsers?.find(
+          (member) => member.id === message.senderId,
+        );
+        if (senderMember && message.sender) {
+          // Cập nhật thông tin người gửi từ danh sách thành viên nhóm
+          message.sender.userInfo = {
+            ...(message.sender.userInfo || {}),
+            id: message.senderId,
+            fullName: senderMember.fullName,
+            profilePictureUrl: senderMember.profilePictureUrl,
+            createdAt: message.sender.userInfo?.createdAt || new Date(),
+            updatedAt: message.sender.userInfo?.updatedAt || new Date(),
+            blockStrangers: false,
+            userAuth: message.sender,
+          };
+        }
+      }
+
       // Nếu tin nhắn thuộc cuộc trò chuyện đang mở, thêm vào danh sách tin nhắn
       if (isFromCurrentChat) {
         // Kiểm tra xem tin nhắn đã tồn tại trong danh sách chưa
@@ -265,6 +312,33 @@ export default function ChatSocketHandler() {
       const shouldIncrementUnread = Boolean(
         message.senderId !== currentUser?.id && !isFromCurrentChat,
       );
+
+      // Tìm thông tin người gửi trong danh sách cuộc trò chuyện nếu là tin nhắn nhóm
+      if (message.groupId && message.messageType === "GROUP") {
+        const groupConversation = conversationsStore.conversations.find(
+          (conv) => conv.type === "GROUP" && conv.group?.id === message.groupId,
+        );
+
+        if (groupConversation && groupConversation.group?.memberUsers) {
+          const senderMember = groupConversation.group.memberUsers.find(
+            (member) => member.id === message.senderId,
+          );
+
+          if (senderMember && message.sender) {
+            // Cập nhật thông tin người gửi từ danh sách thành viên nhóm
+            message.sender.userInfo = {
+              ...(message.sender.userInfo || {}),
+              id: message.senderId,
+              fullName: senderMember.fullName,
+              profilePictureUrl: senderMember.profilePictureUrl,
+              createdAt: message.sender.userInfo?.createdAt || new Date(),
+              updatedAt: message.sender.userInfo?.updatedAt || new Date(),
+              blockStrangers: false,
+              userAuth: message.sender,
+            };
+          }
+        }
+      }
 
       conversationsStore.processNewMessage(message, {
         // Tăng số lượng tin nhắn chưa đọc nếu tin nhắn từ người khác và không phải cuộc trò chuyện đang mở
@@ -493,7 +567,21 @@ export default function ChatSocketHandler() {
         console.log(
           `[ChatSocketHandler] Setting typing status for ${typingId} to true`,
         );
-        conversationsStore.setTypingStatus(data.userId, true);
+
+        // Xác định loại cuộc trò chuyện (nhóm hoặc cá nhân)
+        const isGroupChat = Boolean(data.groupId);
+
+        if (isGroupChat) {
+          // Đối với nhóm, cập nhật trạng thái typing cho nhóm với thông tin người đang nhập
+          conversationsStore.setGroupTypingStatus(
+            data.groupId!,
+            data.userId,
+            true,
+          );
+        } else {
+          // Đối với chat cá nhân, cập nhật trạng thái typing cho người dùng
+          conversationsStore.setTypingStatus(data.userId, true);
+        }
       }
     },
     [currentUser],
@@ -515,7 +603,21 @@ export default function ChatSocketHandler() {
         console.log(
           `[ChatSocketHandler] Setting typing status for ${typingId} to false`,
         );
-        conversationsStore.setTypingStatus(data.userId, false);
+
+        // Xác định loại cuộc trò chuyện (nhóm hoặc cá nhân)
+        const isGroupChat = Boolean(data.groupId);
+
+        if (isGroupChat) {
+          // Đối với nhóm, cập nhật trạng thái typing cho nhóm với thông tin người đang nhập
+          conversationsStore.setGroupTypingStatus(
+            data.groupId!,
+            data.userId,
+            false,
+          );
+        } else {
+          // Đối với chat cá nhân, cập nhật trạng thái typing cho người dùng
+          conversationsStore.setTypingStatus(data.userId, false);
+        }
       }
     },
     [currentUser],
@@ -597,6 +699,9 @@ export default function ChatSocketHandler() {
   // Không cần sendHeartbeat nữa vì đã được xử lý trong SocketProvider
 
   // Thiết lập các event listener cho socket
+  // Use a ref to track if event listeners are already set up
+  const eventListenersSetupRef = useRef(false);
+
   useEffect(() => {
     // Early return if no socket or user
     if (!messageSocket || !currentUser) {
@@ -613,29 +718,41 @@ export default function ChatSocketHandler() {
       messageSocket.emit("getUserStatus", { userIds });
     }
 
-    console.log("[ChatSocketHandler] Setting up socket event listeners");
+    // Only set up event listeners if they haven't been set up yet
+    if (!eventListenersSetupRef.current) {
+      console.log("[ChatSocketHandler] Setting up socket event listeners");
 
-    // Register message event handlers
-    messageSocket.on("newMessage", handleNewMessage);
-    messageSocket.on("messageRead", handleMessageRead);
-    messageSocket.on("messageRecalled", handleMessageRecalled);
-    messageSocket.on("messageReactionUpdated", handleMessageReactionUpdated);
-    messageSocket.on("userTyping", handleUserTyping);
-    messageSocket.on("userTypingStopped", handleUserTypingStopped);
-    messageSocket.on("userStatus", handleUserStatus);
+      // Register message event handlers
+      messageSocket.on("newMessage", handleNewMessage);
+      messageSocket.on("messageRead", handleMessageRead);
+      messageSocket.on("messageRecalled", handleMessageRecalled);
+      messageSocket.on("messageReactionUpdated", handleMessageReactionUpdated);
+      messageSocket.on("userTyping", handleUserTyping);
+      messageSocket.on("userTypingStopped", handleUserTypingStopped);
+      messageSocket.on("userStatus", handleUserStatus);
 
-    // Log all registered listeners for debugging
-    console.log(
-      "[ChatSocketHandler] Current listeners:",
-      messageSocket.listeners("newMessage").length,
-    );
+      // Log all registered listeners for debugging
+      console.log(
+        "[ChatSocketHandler] Current listeners:",
+        messageSocket.listeners("newMessage").length,
+      );
 
-    // Clean up on unmount or when dependencies change
+      // Mark event listeners as set up
+      eventListenersSetupRef.current = true;
+    }
+
+    // Clean up on unmount only, not when dependencies change
     return () => {
+      // Only clean up if the component is unmounting
+      if (!messageSocket) {
+        console.log("[ChatSocketHandler] No socket, skipping cleanup");
+        return;
+      }
+
       console.log("[ChatSocketHandler] Removing message socket event handlers");
 
       // Safety check - if socket is no longer available, we can't remove listeners
-      if (!messageSocket || !messageSocket.connected) {
+      if (!messageSocket.connected) {
         console.log(
           "[ChatSocketHandler] Socket no longer available, skipping cleanup",
         );
@@ -668,6 +785,9 @@ export default function ChatSocketHandler() {
         messageSocket.off("userTyping", handleUserTyping);
         messageSocket.off("userTypingStopped", handleUserTypingStopped);
         messageSocket.off("userStatus", handleUserStatus);
+
+        // Reset the ref
+        eventListenersSetupRef.current = false;
 
         // Log listeners after cleanup
         console.log("[ChatSocketHandler] Listeners after cleanup:", {

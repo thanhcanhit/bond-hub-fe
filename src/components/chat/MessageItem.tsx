@@ -4,7 +4,14 @@ import React, { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
 import { formatMessageTime } from "@/utils/dateUtils";
-import { Message, Media, ReactionType, UserInfo } from "@/types/base";
+import {
+  Message,
+  Media,
+  ReactionType,
+  UserInfo,
+  MessageType,
+  User,
+} from "@/types/base";
 import MediaGrid from "./MediaGrid";
 import ForwardMessageDialog from "./ForwardMessageDialog";
 import ReactionPicker from "./ReactionPicker";
@@ -189,6 +196,7 @@ interface MessageItemProps {
   onMessageClick?: (message: Message) => void;
   highlight?: string;
   userInfo?: UserInfo; // Thêm userInfo cho người gửi
+  isGroupMessage?: boolean; // Thêm flag để xác định tin nhắn nhóm
 }
 
 export default function MessageItem({
@@ -199,7 +207,13 @@ export default function MessageItem({
   onMessageClick,
   highlight,
   userInfo,
+  isGroupMessage,
 }: MessageItemProps) {
+  // Auto-detect if this is a group message if not explicitly provided
+  const isGroup =
+    isGroupMessage ||
+    message.messageType === MessageType.GROUP ||
+    !!message.groupId;
   const [isHovered, setIsHovered] = useState(false);
   const [isForwardDialogOpen, setIsForwardDialogOpen] = useState(false);
   const formattedTime = formatMessageTime(message.createdAt);
@@ -410,7 +424,16 @@ export default function MessageItem({
                   undefined
                 }
               />
-              <AvatarFallback>{getUserInitials(message.sender)}</AvatarFallback>
+              <AvatarFallback>
+                {getUserInitials({
+                  userInfo:
+                    userInfo ||
+                    message.sender?.userInfo ||
+                    ({
+                      fullName: isGroup ? "Thành viên" : "Người dùng",
+                    } as UserInfo),
+                } as User)}
+              </AvatarFallback>
             </Avatar>
           </div>
         )}
@@ -523,6 +546,15 @@ export default function MessageItem({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+            </div>
+          )}
+
+          {/* Display sender name for group messages */}
+          {isGroup && !isCurrentUser && (
+            <div className="text-xs font-medium text-blue-600 mb-1">
+              {message.sender?.userInfo?.fullName ||
+                userInfo?.fullName ||
+                "Thành viên nhóm"}
             </div>
           )}
 
@@ -768,7 +800,16 @@ export default function MessageItem({
                 }
                 className="object-cover"
               />
-              <AvatarFallback>{getUserInitials(currentUser)}</AvatarFallback>
+              <AvatarFallback>
+                {getUserInitials(
+                  currentUser ||
+                    ({
+                      userInfo: {
+                        fullName: "Bạn",
+                      },
+                    } as User),
+                )}
+              </AvatarFallback>
             </Avatar>
           </div>
         )}
