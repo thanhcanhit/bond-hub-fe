@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/collapsible";
 import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useConversationsStore } from "@/stores/conversationsStore";
 import { toast } from "sonner";
 import { getRelationship } from "@/actions/friend.action";
 import {
@@ -1463,17 +1464,21 @@ export default function GroupInfo({
         // Đặt selectedGroup về null để đóng chat
         chatStore.setSelectedGroup(null);
 
+        // Xóa nhóm khỏi danh sách cuộc trò chuyện
+        const conversationsStore = useConversationsStore.getState();
+        conversationsStore.removeConversation(group.id);
+
         // Đóng dialog thông tin nhóm
         onClose();
 
         // Thông báo cho người dùng
-        alert("Đã xóa nhóm thành công");
+        toast.success("Đã giải tán nhóm thành công");
       } else {
-        alert(`Lỗi: ${result.error}`);
+        toast.error(`Lỗi: ${result.error}`);
       }
     } catch (error) {
       console.error("Error deleting group:", error);
-      alert("Đã xảy ra lỗi khi xóa nhóm");
+      toast.error("Đã xảy ra lỗi khi giải tán nhóm");
     } finally {
       setIsProcessing(false);
     }
@@ -1498,17 +1503,21 @@ export default function GroupInfo({
         // Đặt selectedGroup về null để đóng chat
         chatStore.setSelectedGroup(null);
 
+        // Xóa nhóm khỏi danh sách cuộc trò chuyện
+        const conversationsStore = useConversationsStore.getState();
+        conversationsStore.removeConversation(group.id);
+
         // Đóng dialog thông tin nhóm
         onClose();
 
         // Thông báo cho người dùng
-        alert("Đã rời nhóm thành công");
+        toast.success("Đã rời nhóm thành công");
       } else {
-        alert(`Lỗi: ${result.error}`);
+        toast.error(`Lỗi: ${result.error}`);
       }
     } catch (error) {
       console.error("Error leaving group:", error);
-      alert("Đã xảy ra lỗi khi rời nhóm");
+      toast.error("Đã xảy ra lỗi khi rời nhóm");
     } finally {
       setIsProcessing(false);
     }
