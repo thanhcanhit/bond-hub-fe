@@ -892,28 +892,95 @@ export const useConversationsStore = create<ConversationsState>()(
 
         if (!currentUser) return undefined;
 
-        // Determine if this is a user or group message
-        const isGroupMessage = message.messageType === MessageType.GROUP;
+        // Đảm bảo tin nhắn có messageType được đặt chính xác
+        let processedMessage = { ...message };
 
-        if (isGroupMessage && message.groupId) {
-          // Find group conversation
-          return conversations.find(
+        // Nếu không có messageType, hãy xác định dựa trên các trường khác
+        if (!processedMessage.messageType) {
+          if (processedMessage.groupId) {
+            processedMessage.messageType = MessageType.GROUP;
+            console.log(
+              `[conversationsStore] Set messageType to GROUP for message ${processedMessage.id}`,
+            );
+          } else if (processedMessage.receiverId) {
+            processedMessage.messageType = MessageType.USER;
+            console.log(
+              `[conversationsStore] Set messageType to USER for message ${processedMessage.id}`,
+            );
+          }
+        }
+
+        // Xác định rõ ràng loại tin nhắn dựa trên messageType và các trường khác
+        const isGroupMessage =
+          processedMessage.messageType === MessageType.GROUP;
+        const isUserMessage = processedMessage.messageType === MessageType.USER;
+
+        console.log(
+          `[conversationsStore] Finding conversation for message ${processedMessage.id}, type: ${processedMessage.messageType}`,
+        );
+
+        // Xử lý tin nhắn nhóm
+        if (isGroupMessage && processedMessage.groupId) {
+          // Tìm cuộc trò chuyện nhóm
+          const groupConversation = conversations.find(
             (conv) =>
-              conv.type === "GROUP" && conv.group?.id === message.groupId,
+              conv.type === "GROUP" &&
+              conv.group?.id === processedMessage.groupId,
           );
-        } else {
-          // For user messages, find the conversation with the other user
+
+          if (groupConversation) {
+            console.log(
+              `[conversationsStore] Found group conversation for message ${processedMessage.id}: ${processedMessage.groupId}`,
+            );
+          } else {
+            console.log(
+              `[conversationsStore] Group conversation not found for message ${processedMessage.id}: ${processedMessage.groupId}`,
+            );
+          }
+
+          return groupConversation;
+        }
+        // Xử lý tin nhắn trực tiếp
+        else if (
+          isUserMessage ||
+          (!isGroupMessage && !processedMessage.groupId)
+        ) {
+          // Đối với tin nhắn trực tiếp, tìm cuộc trò chuyện với người dùng khác
           const otherUserId =
-            message.senderId === currentUser.id
-              ? message.receiverId
-              : message.senderId;
+            processedMessage.senderId === currentUser.id
+              ? processedMessage.receiverId
+              : processedMessage.senderId;
 
-          if (!otherUserId) return undefined;
+          if (!otherUserId) {
+            console.log(
+              `[conversationsStore] Cannot determine other user ID for message ${processedMessage.id}`,
+            );
+            return undefined;
+          }
 
-          return conversations.find(
+          const userConversation = conversations.find(
             (conv) => conv.type === "USER" && conv.contact.id === otherUserId,
           );
+
+          if (userConversation) {
+            console.log(
+              `[conversationsStore] Found user conversation for message ${processedMessage.id} with user ${otherUserId}`,
+            );
+          } else {
+            console.log(
+              `[conversationsStore] User conversation not found for message ${processedMessage.id} with user ${otherUserId}`,
+            );
+          }
+
+          return userConversation;
         }
+
+        // Nếu không thể xác định loại cuộc trò chuyện, ghi log và trả về undefined
+        console.log(
+          `[conversationsStore] Could not determine conversation type for message:`,
+          processedMessage,
+        );
+        return undefined;
       },
 
       // Utility function to check if a message is newer than the last message in a conversation
@@ -933,31 +1000,56 @@ export const useConversationsStore = create<ConversationsState>()(
 
         if (!currentUser) return;
 
-        // Determine if this is a user or group message
-        const isGroupMessage = message.messageType === MessageType.GROUP;
+        // Đảm bảo tin nhắn có messageType được đặt chính xác
+        let processedMessage = { ...message };
 
-        if (isGroupMessage && message.groupId && message.group) {
-          // Check if group conversation exists
+        // Nếu không có messageType, hãy xác định dựa trên các trường khác
+        if (!processedMessage.messageType) {
+          if (processedMessage.groupId) {
+            processedMessage.messageType = MessageType.GROUP;
+            console.log(
+              `[conversationsStore] Set messageType to GROUP for message ${processedMessage.id}`,
+            );
+          } else if (processedMessage.receiverId) {
+            processedMessage.messageType = MessageType.USER;
+            console.log(
+              `[conversationsStore] Set messageType to USER for message ${processedMessage.id}`,
+            );
+          }
+        }
+
+        // Xác định rõ ràng loại tin nhắn dựa trên messageType và các trường khác
+        const isGroupMessage =
+          processedMessage.messageType === MessageType.GROUP;
+        const isUserMessage = processedMessage.messageType === MessageType.USER;
+
+        if (
+          isGroupMessage &&
+          processedMessage.groupId &&
+          processedMessage.group
+        ) {
+          // Kiểm tra xem cuộc trò chuyện nhóm đã tồn tại chưa
           const existingConversation = conversations.find(
             (conv) =>
-              conv.type === "GROUP" && conv.group?.id === message.groupId,
+              conv.type === "GROUP" &&
+              conv.group?.id === processedMessage.groupId,
           );
 
           if (!existingConversation) {
             console.log(
-              `[conversationsStore] Creating new group conversation with ${message.groupId}`,
+              `[conversationsStore] Creating new group conversation with ${processedMessage.groupId}`,
             );
 
-            // Create placeholder contact for group conversation
+            // Tạo placeholder contact cho cuộc trò chuyện nhóm
             const placeholderContact: User & { userInfo: UserInfo } = {
-              id: message.senderId || "unknown",
+              id: processedMessage.senderId || "unknown",
               email: "",
               phoneNumber: "",
               passwordHash: "",
               createdAt: new Date(),
               updatedAt: new Date(),
               userInfo: {
-                id: message.senderId || "unknown",
+                id: processedMessage.senderId || "unknown",
                 fullName: "Group Member",
                 profilePictureUrl: null,
                 statusMessage: "",
@@ -991,23 +1083,27 @@ export const useConversationsStore = create<ConversationsState>()(
             addConversation({
               contact: placeholderContact,
               group: {
-                id: message.group.id,
-                name: message.group.name,
-                avatarUrl: message.group.avatarUrl,
-                createdAt: message.group.createdAt,
+                id: processedMessage.group.id,
+                name: processedMessage.group.name,
+                avatarUrl: processedMessage.group.avatarUrl,
+                createdAt: processedMessage.group.createdAt,
               },
-              lastMessage: message,
-              unreadCount: message.senderId !== currentUser.id ? 1 : 0,
-              lastActivity: new Date(message.createdAt),
+              lastMessage: processedMessage,
+              unreadCount: processedMessage.senderId !== currentUser.id ? 1 : 0,
+              lastActivity: new Date(processedMessage.createdAt),
               type: "GROUP",
             });
           }
-        } else {
-          // Handle user conversation
+        } else if (
+          isUserMessage ||
+          (!isGroupMessage && !processedMessage.groupId)
+        ) {
+          // Chỉ tạo cuộc trò chuyện trực tiếp nếu đây không phải là tin nhắn nhóm
+          // Xử lý cuộc trò chuyện trực tiếp
           const contactId =
-            message.senderId === currentUser.id
-              ? message.receiverId
-              : message.senderId;
+            processedMessage.senderId === currentUser.id
+              ? processedMessage.receiverId
+              : processedMessage.senderId;
 
           if (!contactId) return;
 
@@ -1021,23 +1117,33 @@ export const useConversationsStore = create<ConversationsState>()(
               `[conversationsStore] Creating new user conversation with ${contactId}`,
             );
 
-            // If message is from current user, use receiver as contact
-            if (message.senderId === currentUser.id && message.receiver) {
+            // Nếu tin nhắn từ người dùng hiện tại, sử dụng người nhận làm liên hệ
+            if (
+              processedMessage.senderId === currentUser.id &&
+              processedMessage.receiver
+            ) {
               addConversation({
-                contact: message.receiver as User & { userInfo: UserInfo },
-                lastMessage: message,
-                unreadCount: 0, // Message from self, so unreadCount = 0
-                lastActivity: new Date(message.createdAt),
+                contact: processedMessage.receiver as User & {
+                  userInfo: UserInfo;
+                },
+                lastMessage: processedMessage,
+                unreadCount: 0, // Tin nhắn từ chính mình, nên unreadCount = 0
+                lastActivity: new Date(processedMessage.createdAt),
                 type: "USER",
               });
             }
-            // If message is from other user, use sender as contact
-            else if (message.sender && message.sender.userInfo) {
+            // Nếu tin nhắn từ người dùng khác, sử dụng người gửi làm liên hệ
+            else if (
+              processedMessage.sender &&
+              processedMessage.sender.userInfo
+            ) {
               addConversation({
-                contact: message.sender as User & { userInfo: UserInfo },
-                lastMessage: message,
-                unreadCount: 1, // Message from other user, so unreadCount = 1
-                lastActivity: new Date(message.createdAt),
+                contact: processedMessage.sender as User & {
+                  userInfo: UserInfo;
+                },
+                lastMessage: processedMessage,
+                unreadCount: 1, // Tin nhắn từ người khác, nên unreadCount = 1
+                lastActivity: new Date(processedMessage.createdAt),
                 type: "USER",
               });
             }
@@ -1048,9 +1154,10 @@ export const useConversationsStore = create<ConversationsState>()(
                   if (result.success && result.user) {
                     addConversation({
                       contact: result.user as User & { userInfo: UserInfo },
-                      lastMessage: message,
-                      unreadCount: message.senderId !== currentUser.id ? 1 : 0,
-                      lastActivity: new Date(message.createdAt),
+                      lastMessage: processedMessage,
+                      unreadCount:
+                        processedMessage.senderId !== currentUser.id ? 1 : 0,
+                      lastActivity: new Date(processedMessage.createdAt),
                       type: "USER",
                     });
                   }

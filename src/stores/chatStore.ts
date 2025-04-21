@@ -256,8 +256,48 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     console.log(`[chatStore] Processing new message ${message.id}`);
 
+    // Kiểm tra xem tin nhắn có phù hợp với loại cuộc trò chuyện hiện tại không
+    const { currentChatType, selectedContact, selectedGroup } = get();
+
+    // Đảm bảo tin nhắn có messageType được đặt chính xác
+    let processedMessage = { ...message };
+
+    // Nếu không có messageType, hãy xác định dựa trên các trường khác
+    if (!processedMessage.messageType) {
+      if (processedMessage.groupId) {
+        processedMessage.messageType = MessageType.GROUP;
+        console.log(
+          `[chatStore] Set messageType to GROUP for message ${processedMessage.id}`,
+        );
+      } else if (processedMessage.receiverId) {
+        processedMessage.messageType = MessageType.USER;
+        console.log(
+          `[chatStore] Set messageType to USER for message ${processedMessage.id}`,
+        );
+      }
+    }
+
+    // Kiểm tra xem tin nhắn có phù hợp với cuộc trò chuyện hiện tại không
+    const isMessageTypeCompatible =
+      (currentChatType === "USER" &&
+        processedMessage.messageType === MessageType.USER) ||
+      (currentChatType === "GROUP" &&
+        processedMessage.messageType === MessageType.GROUP);
+
+    // Nếu tin nhắn không phù hợp với loại cuộc trò chuyện hiện tại, chỉ đồng bộ với conversationsStore
+    if (!isMessageTypeCompatible && currentChatType !== null) {
+      console.log(
+        `[chatStore] Message type ${processedMessage.messageType} doesn't match current chat type ${currentChatType}, skipping chat update`,
+      );
+
+      // Vẫn đồng bộ với conversationsStore để cập nhật danh sách cuộc trò chuyện
+      if (notifyConversationStore) {
+        get().syncWithConversationStore(processedMessage);
+      }
+      return;
+    }
+
     // Ensure readBy array doesn't contain duplicates
-    const processedMessage = { ...message };
     if (processedMessage.readBy) {
       // Convert to array if it's not already
       const readByArray = Array.isArray(processedMessage.readBy)
