@@ -20,6 +20,16 @@ interface AddedToGroupEventData {
   timestamp: Date;
 }
 
+// Define types for removedFromGroup event
+interface RemovedFromGroupEventData {
+  groupId: string;
+  groupName?: string;
+  removedBy: string;
+  kicked?: boolean; // True if user was kicked by admin
+  left?: boolean; // True if user left voluntarily
+  timestamp: Date;
+}
+
 // Define types for updateGroupList event
 interface UpdateGroupListEventData {
   action: "added_to_group" | "removed_from_group" | "group_dissolved";
@@ -573,6 +583,55 @@ export default function GroupSocketHandler() {
       }
     };
 
+    // Handler for removedFromGroup event
+    const handleRemovedFromGroup = (data: RemovedFromGroupEventData) => {
+      console.log(
+        "[GroupSocketHandler] Removed from group event received:",
+        data,
+      );
+
+      // This event is sent directly to the user when they are removed from a group
+      if (currentUser?.id) {
+        // Find the group in conversations
+        const groupConversation = conversations.find(
+          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+        );
+
+        // Get group name from event or from local data
+        const groupName =
+          data.groupName ||
+          (groupConversation ? groupConversation.group?.name : null) ||
+          "chat";
+
+        // Show appropriate notification based on whether user was kicked or left voluntarily
+        if (data.kicked) {
+          toast.info(`Bạn đã bị xóa khỏi nhóm ${groupName}`);
+        } else if (data.left) {
+          toast.info(`Bạn đã rời khỏi nhóm ${groupName}`);
+        } else {
+          toast.info(`Bạn đã không còn trong nhóm ${groupName}`);
+        }
+
+        // If this is the currently selected group, navigate away
+        if (selectedGroup && selectedGroup.id === data.groupId) {
+          console.log(
+            `[GroupSocketHandler] Currently selected group was removed, clearing selection`,
+          );
+          // Clear selected group
+          useChatStore.getState().setSelectedGroup(null);
+        }
+
+        // Remove this group from conversations
+        console.log(
+          `[GroupSocketHandler] Removing group ${data.groupId} from conversations because current user was removed`,
+        );
+        useConversationsStore.getState().removeConversation(data.groupId);
+
+        // Clear chat messages for this group
+        useChatStore.getState().clearChatCache("GROUP", data.groupId);
+      }
+    };
+
     // Handler for updateGroupList event
     const handleUpdateGroupList = (data: UpdateGroupListEventData) => {
       console.log(
@@ -601,10 +660,22 @@ export default function GroupSocketHandler() {
         if (selectedGroup && selectedGroup.id === data.groupId) {
           useChatStore.getState().setSelectedGroup(null);
         }
+
+        // Clear chat messages for this group
+        useChatStore.getState().clearChatCache("GROUP", data.groupId);
       } else if (data.action === "group_dissolved") {
         console.log(
           "[GroupSocketHandler] Group was dissolved, updating group list",
         );
+
+        // Find the group in conversations to get its name
+        const groupConversation = conversations.find(
+          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+        );
+        const groupName = groupConversation?.group?.name || "chat";
+
+        // Show notification
+        toast.info(`Nhóm ${groupName} đã bị giải tán`);
 
         // Remove the group from conversations
         useConversationsStore.getState().removeConversation(data.groupId);
@@ -613,6 +684,9 @@ export default function GroupSocketHandler() {
         if (selectedGroup && selectedGroup.id === data.groupId) {
           useChatStore.getState().setSelectedGroup(null);
         }
+
+        // Clear chat messages for this group
+        useChatStore.getState().clearChatCache("GROUP", data.groupId);
       }
     };
 
@@ -700,6 +774,7 @@ export default function GroupSocketHandler() {
 
     // Register event handlers - both our custom events and backend events
     groupSocket.on("addedToGroup", handleAddedToGroup);
+    groupSocket.on("removedFromGroup", handleRemovedFromGroup);
     groupSocket.on("groupCreated", handleGroupCreated);
     groupSocket.on("groupUpdated", handleGroupUpdated);
     groupSocket.on("memberAdded", handleMemberAdded);
@@ -728,6 +803,7 @@ export default function GroupSocketHandler() {
 
         // Remove event listeners
         groupSocket.off("addedToGroup", handleAddedToGroup);
+        groupSocket.off("removedFromGroup", handleRemovedFromGroup);
         groupSocket.off("groupCreated", handleGroupCreated);
         groupSocket.off("groupUpdated", handleGroupUpdated);
         groupSocket.off("memberAdded", handleMemberAdded);
