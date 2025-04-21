@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Users, Upload, Search } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
-import { createGroup, updateGroupAvatar } from "@/actions/group.action";
+import { createGroupWithAvatar } from "@/actions/group.action";
 import { toast } from "sonner";
 import { useFriendStore } from "@/stores/friendStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
@@ -80,12 +80,10 @@ export default function CreateGroupDialog({
 
     setIsLoading(true);
     try {
-      // Log dữ liệu trước khi gọi API để debug
-      // Tạo nhóm với API
       // Chuyển đổi danh sách ID thành viên thành định dạng mới
       const initialMembers = selectedFriends.map((userId) => ({
         userId: userId,
-        // addedById sẽ được thêm tự động trong createGroup
+        // addedById sẽ được thêm tự động trong createGroupWithAvatar
       }));
 
       // Kiểm tra currentUser có tồn tại không
@@ -95,32 +93,15 @@ export default function CreateGroupDialog({
         return;
       }
 
-      const result = await createGroup({
-        name: groupName.trim(),
-        creatorId: currentUser.id, // Thêm creatorId vào payload
-        initialMembers: initialMembers,
-      });
+      // Gọi API tạo nhóm với avatar trong một lần gọi duy nhất
+      const result = await createGroupWithAvatar(
+        groupName.trim(),
+        currentUser.id,
+        initialMembers,
+        avatarFile || undefined,
+      );
 
       if (result.success && result.group) {
-        // Nếu có file avatar, tải lên
-        if (avatarFile) {
-          const formData = new FormData();
-          formData.append("file", avatarFile);
-
-          const avatarResult = await updateGroupAvatar(
-            result.group.id,
-            formData,
-          );
-
-          if (!avatarResult.success) {
-            console.error("Failed to upload group avatar:", avatarResult.error);
-            // Không muốn thất bại toàn bộ quá trình nếu chỉ việc tải avatar thất bại
-            toast.warning(
-              "Nhóm đã được tạo nhưng không thể tải lên ảnh đại diện",
-            );
-          }
-        }
-
         // Làm mới danh sách cuộc trò chuyện từ server
         if (currentUser?.id) {
           const conversationsStore = useConversationsStore.getState();
@@ -139,15 +120,6 @@ export default function CreateGroupDialog({
 
         // Thông báo thành công
         toast.success("Tạo nhóm thành công");
-
-        // Sử dụng router để chuyển hướng đến trang chat
-        // và truyền tham số để mở chat nhóm
-        const url = `/dashboard/chat?groupId=${result.group.id}`;
-
-        // Sử dụng setTimeout để đảm bảo store được cập nhật trước khi chuyển trang
-        setTimeout(() => {
-          window.location.href = url;
-        }, 500);
 
         // Reset form
         setGroupName("");
