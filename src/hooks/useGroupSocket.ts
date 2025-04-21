@@ -3,7 +3,8 @@ import { Socket, io } from "socket.io-client";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
-// import { getGroupById } from "@/actions/group.action";
+import { getGroupById } from "@/actions/group.action";
+import { GroupRole } from "@/types/base";
 
 /**
  * Hook to connect to the groups WebSocket namespace and handle group events
@@ -41,24 +42,69 @@ export const useGroupSocket = () => {
   const refreshAllGroupData = useCallback(async () => {
     console.log("[useGroupSocket] Refreshing all group data");
 
-    // Refresh the selected group
-    refreshSelectedGroup();
+    try {
+      // Refresh conversations list first
+      if (currentUser?.id) {
+        console.log(
+          "[useGroupSocket] Loading conversations in refreshAllGroupData",
+        );
+        const conversationsStore = useConversationsStore.getState();
+        await conversationsStore.loadConversations(currentUser.id);
+        console.log(
+          "[useGroupSocket] Conversations loaded in refreshAllGroupData",
+        );
 
-    // Refresh conversations list
-    if (currentUser?.id) {
-      const conversationsStore = useConversationsStore.getState();
-      await conversationsStore.loadConversations(currentUser.id);
+        // Force update UI
+        conversationsStore.forceUpdate();
+      }
+
+      // Then refresh the selected group
+      console.log(
+        "[useGroupSocket] Refreshing selected group in refreshAllGroupData",
+      );
+      await refreshSelectedGroup();
+      console.log(
+        "[useGroupSocket] Selected group refreshed in refreshAllGroupData",
+      );
+    } catch (error) {
+      console.error("[useGroupSocket] Error in refreshAllGroupData:", error);
     }
   }, [refreshSelectedGroup, currentUser?.id]);
 
-  const triggerGroupsReload = () => {
-    if (socketRef.current && socketRef.current.connected) {
-      console.log("[useGroupSocket] Manually triggering groups reload");
-      socketRef.current.emit("requestReload");
-    } else {
-      console.log(
-        "[useGroupSocket] Socket not connected, refreshing data directly",
-      );
+  const triggerGroupsReload = async () => {
+    console.log("[useGroupSocket] Manually triggering groups reload");
+
+    try {
+      // Tải lại danh sách cuộc trò chuyện trước
+      if (currentUser?.id) {
+        console.log(
+          "[useGroupSocket] Loading conversations in triggerGroupsReload",
+        );
+        await useConversationsStore
+          .getState()
+          .loadConversations(currentUser.id);
+        console.log(
+          "[useGroupSocket] Conversations loaded in triggerGroupsReload",
+        );
+
+        // Force update UI
+        useConversationsStore.getState().forceUpdate();
+      }
+
+      // Sau đó gửi sự kiện socket nếu có thể
+      if (socketRef.current && socketRef.current.connected) {
+        console.log("[useGroupSocket] Emitting requestReload event");
+        socketRef.current.emit("requestReload");
+        socketRef.current.emit("broadcastReload");
+      } else {
+        console.log(
+          "[useGroupSocket] Socket not connected, refreshing selected group directly",
+        );
+        await refreshSelectedGroup();
+      }
+    } catch (error) {
+      console.error("[useGroupSocket] Error in triggerGroupsReload:", error);
+      // Fallback to refreshAllGroupData if anything fails
       refreshAllGroupData();
     }
   };
@@ -88,11 +134,7 @@ export const useGroupSocket = () => {
       console.log("[GroupSocket] Socket exposed to window.groupSocket");
     }
 
-    // Join personal room immediately after connection
-    socket.on("connect", () => {
-      console.log("[GroupSocket] Connected");
-      joinUserRoom();
-    });
+    // Join personal room immediately after connection - handled in the main connect event below
 
     // Handle join confirmations
     socket.on("joinedGroup", (data) => {
@@ -121,21 +163,277 @@ export const useGroupSocket = () => {
       console.log("[useGroupSocket] User added to group event received:", data);
       if (currentUser?.id) {
         console.log(
-          "[useGroupSocket] Current user was added to a group, updating UI",
+          "[useGroupSocket] Current user was added to a group, creating group conversation",
         );
-        setTimeout(() => {
-          useConversationsStore.getState().forceUpdate();
-        }, 0);
+
+        // Tạo cuộc trò chuyện nhóm mới nếu chưa tồn tại
+        setTimeout(async () => {
+          try {
+            if (data.groupId) {
+              // Tham gia vào phòng nhóm
+              console.log(
+                `[useGroupSocket] Joining group room: ${data.groupId} after being added`,
+              );
+              joinGroupRoom(data.groupId);
+
+              // Lấy thông tin nhóm từ API
+              const result = await getGroupById(data.groupId);
+              if (result.success && result.group) {
+                console.log(
+                  `[useGroupSocket] Got group data for ${data.groupId}, checking if conversation exists`,
+                );
+
+                // Kiểm tra xem cuộc trò chuyện nhóm đã tồn tại chưa
+                const conversations =
+                  useConversationsStore.getState().conversations;
+                const existingConversation = conversations.find(
+                  (conv) =>
+                    conv.type === "GROUP" && conv.group?.id === data.groupId,
+                );
+
+                if (!existingConversation) {
+                  console.log(
+                    `[useGroupSocket] Creating new group conversation for ${data.groupId}`,
+                  );
+
+                  // Tạo placeholder contact cho cuộc trò chuyện nhóm
+                  const placeholderContact = {
+                    id: currentUser.id,
+                    email: currentUser.email || "",
+                    phoneNumber: currentUser.phoneNumber || "",
+                    passwordHash: currentUser.passwordHash,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    userInfo: currentUser.userInfo || {
+                      id: currentUser.id,
+                      fullName: "Group Member",
+                      profilePictureUrl: null,
+                      statusMessage: "",
+                      blockStrangers: false,
+                      createdAt: new Date(),
+                      updatedAt: new Date(),
+                      userAuth: currentUser,
+                    },
+                    refreshTokens: [],
+                    qrCodes: [],
+                    posts: [],
+                    stories: [],
+                    groupMembers: [],
+                    cloudFiles: [],
+                    pinnedItems: [],
+                    sentFriends: [],
+                    receivedFriends: [],
+                    contacts: [],
+                    contactOf: [],
+                    settings: [],
+                    postReactions: [],
+                    hiddenPosts: [],
+                    addedBy: [],
+                    notifications: [],
+                    sentMessages: [],
+                    receivedMessages: [],
+                    comments: [],
+                  };
+
+                  // Thêm cuộc trò chuyện nhóm mới
+                  useConversationsStore.getState().addConversation({
+                    contact: placeholderContact,
+                    group: {
+                      id: result.group.id,
+                      name: result.group.name,
+                      avatarUrl: result.group.avatarUrl,
+                      createdAt: result.group.createdAt,
+                    },
+                    lastMessage: undefined,
+                    unreadCount: 0,
+                    lastActivity: new Date(),
+                    type: "GROUP",
+                  });
+
+                  // Force update UI
+                  useConversationsStore.getState().forceUpdate();
+                  console.log(
+                    `[useGroupSocket] Group conversation created for ${data.groupId}`,
+                  );
+                } else {
+                  console.log(
+                    `[useGroupSocket] Group conversation already exists for ${data.groupId}`,
+                  );
+                }
+
+                // Tải lại danh sách cuộc trò chuyện từ API để đảm bảo có dữ liệu mới nhất
+                await useConversationsStore
+                  .getState()
+                  .loadConversations(currentUser.id);
+                console.log(
+                  "[useGroupSocket] Conversations reloaded after addedToGroup event",
+                );
+
+                // Đảm bảo UI được cập nhật
+                useConversationsStore.getState().forceUpdate();
+              }
+            }
+          } catch (error) {
+            console.error(
+              "[useGroupSocket] Error handling addedToGroup event:",
+              error,
+            );
+
+            // Fallback: Tải lại danh sách cuộc trò chuyện từ API
+            if (currentUser?.id) {
+              try {
+                await useConversationsStore
+                  .getState()
+                  .loadConversations(currentUser.id);
+                useConversationsStore.getState().forceUpdate();
+              } catch (fallbackError) {
+                console.error(
+                  "[useGroupSocket] Error in fallback conversation reload:",
+                  fallbackError,
+                );
+              }
+            }
+          }
+        }, 500);
       }
     });
 
     socket.on("groupCreated", (data) => {
       console.log("[useGroupSocket] Group created:", data);
       if (currentUser?.id) {
-        console.log("[useGroupSocket] Updating UI to show new group");
-        setTimeout(() => {
-          useConversationsStore.getState().forceUpdate();
-        }, 0);
+        console.log(
+          "[useGroupSocket] Creating group conversation after group creation",
+        );
+
+        // Tạo cuộc trò chuyện nhóm mới nếu chưa tồn tại
+        setTimeout(async () => {
+          try {
+            if (data.groupId) {
+              // Tham gia vào phòng nhóm
+              console.log(
+                `[useGroupSocket] Joining group room: ${data.groupId} after creation`,
+              );
+              joinGroupRoom(data.groupId);
+
+              // Lấy thông tin nhóm từ API
+              const result = await getGroupById(data.groupId);
+              if (result.success && result.group) {
+                console.log(
+                  `[useGroupSocket] Got group data for ${data.groupId}, checking if conversation exists`,
+                );
+
+                // Kiểm tra xem cuộc trò chuyện nhóm đã tồn tại chưa
+                const conversations =
+                  useConversationsStore.getState().conversations;
+                const existingConversation = conversations.find(
+                  (conv) =>
+                    conv.type === "GROUP" && conv.group?.id === data.groupId,
+                );
+
+                if (!existingConversation) {
+                  console.log(
+                    `[useGroupSocket] Creating new group conversation for ${data.groupId}`,
+                  );
+
+                  // Tạo placeholder contact cho cuộc trò chuyện nhóm
+                  const placeholderContact = {
+                    id: currentUser.id,
+                    email: currentUser.email || "",
+                    phoneNumber: currentUser.phoneNumber || "",
+                    passwordHash: currentUser.passwordHash,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    userInfo: currentUser.userInfo || {
+                      id: currentUser.id,
+                      fullName: "Group Member",
+                      profilePictureUrl: null,
+                      statusMessage: "",
+                      blockStrangers: false,
+                      createdAt: new Date(),
+                      updatedAt: new Date(),
+                      userAuth: currentUser,
+                    },
+                    refreshTokens: [],
+                    qrCodes: [],
+                    posts: [],
+                    stories: [],
+                    groupMembers: [],
+                    cloudFiles: [],
+                    pinnedItems: [],
+                    sentFriends: [],
+                    receivedFriends: [],
+                    contacts: [],
+                    contactOf: [],
+                    settings: [],
+                    postReactions: [],
+                    hiddenPosts: [],
+                    addedBy: [],
+                    notifications: [],
+                    sentMessages: [],
+                    receivedMessages: [],
+                    comments: [],
+                  };
+
+                  // Thêm cuộc trò chuyện nhóm mới
+                  useConversationsStore.getState().addConversation({
+                    contact: placeholderContact,
+                    group: {
+                      id: result.group.id,
+                      name: result.group.name,
+                      avatarUrl: result.group.avatarUrl,
+                      createdAt: result.group.createdAt,
+                    },
+                    lastMessage: undefined,
+                    unreadCount: 0,
+                    lastActivity: new Date(),
+                    type: "GROUP",
+                  });
+
+                  // Force update UI
+                  useConversationsStore.getState().forceUpdate();
+                  console.log(
+                    `[useGroupSocket] Group conversation created for ${data.groupId}`,
+                  );
+                } else {
+                  console.log(
+                    `[useGroupSocket] Group conversation already exists for ${data.groupId}`,
+                  );
+                }
+
+                // Tải lại danh sách cuộc trò chuyện từ API để đảm bảo có dữ liệu mới nhất
+                await useConversationsStore
+                  .getState()
+                  .loadConversations(currentUser.id);
+                console.log(
+                  "[useGroupSocket] Conversations reloaded after group creation",
+                );
+
+                // Đảm bảo UI được cập nhật
+                useConversationsStore.getState().forceUpdate();
+              }
+            }
+          } catch (error) {
+            console.error(
+              "[useGroupSocket] Error handling groupCreated event:",
+              error,
+            );
+
+            // Fallback: Tải lại danh sách cuộc trò chuyện từ API
+            if (currentUser?.id) {
+              try {
+                await useConversationsStore
+                  .getState()
+                  .loadConversations(currentUser.id);
+                useConversationsStore.getState().forceUpdate();
+              } catch (fallbackError) {
+                console.error(
+                  "[useGroupSocket] Error in fallback conversation reload:",
+                  fallbackError,
+                );
+              }
+            }
+          }
+        }, 500);
       }
     });
 
@@ -147,13 +445,37 @@ export const useGroupSocket = () => {
     socket.on("memberAdded", (data) => {
       console.log("[useGroupSocket] Member added to group:", data);
 
-      const selectedGroup = useChatStore.getState().selectedGroup;
-      if (selectedGroup && selectedGroup.id === data.groupId) {
-        console.log(
-          "[useGroupSocket] Refreshing selected group after member added",
-        );
-        refreshSelectedGroup();
-      }
+      // Tải lại danh sách cuộc trò chuyện từ API và cập nhật UI
+      setTimeout(async () => {
+        try {
+          if (currentUser?.id) {
+            // Tải lại danh sách cuộc trò chuyện từ API
+            await useConversationsStore
+              .getState()
+              .loadConversations(currentUser.id);
+            console.log(
+              "[useGroupSocket] Conversations reloaded after member added",
+            );
+
+            // Đảm bảo UI được cập nhật
+            useConversationsStore.getState().forceUpdate();
+          }
+
+          // Cập nhật nhóm được chọn nếu có
+          const selectedGroup = useChatStore.getState().selectedGroup;
+          if (selectedGroup && selectedGroup.id === data.groupId) {
+            console.log(
+              "[useGroupSocket] Refreshing selected group after member added",
+            );
+            await refreshSelectedGroup();
+          }
+        } catch (error) {
+          console.error(
+            "[useGroupSocket] Error handling memberAdded event:",
+            error,
+          );
+        }
+      }, 500);
     });
 
     socket.on("memberRemoved", (data) => {
@@ -171,9 +493,70 @@ export const useGroupSocket = () => {
 
         // Remove the group from conversations
         useConversationsStore.getState().removeConversation(data.groupId);
+
+        // Force update UI
+        setTimeout(() => {
+          useConversationsStore.getState().forceUpdate();
+        }, 100);
+
+        // Tải lại danh sách cuộc trò chuyện từ API để đảm bảo UI được cập nhật
+        setTimeout(async () => {
+          try {
+            if (currentUser?.id) {
+              await useConversationsStore
+                .getState()
+                .loadConversations(currentUser.id);
+              console.log(
+                "[useGroupSocket] Conversations reloaded after user removed from group",
+              );
+              useConversationsStore.getState().forceUpdate();
+            }
+          } catch (error) {
+            console.error(
+              "[useGroupSocket] Error reloading conversations after user removed:",
+              error,
+            );
+          }
+        }, 500);
       } else {
         // If another member was removed, refresh the group data
-        refreshAllGroupData();
+        console.log(
+          "[useGroupSocket] Another member was removed, refreshing group data",
+        );
+
+        // Tải lại danh sách cuộc trò chuyện từ API và cập nhật UI
+        setTimeout(async () => {
+          try {
+            if (currentUser?.id) {
+              // Tải lại danh sách cuộc trò chuyện từ API
+              await useConversationsStore
+                .getState()
+                .loadConversations(currentUser.id);
+              console.log(
+                "[useGroupSocket] Conversations reloaded after member removed",
+              );
+
+              // Đảm bảo UI được cập nhật
+              useConversationsStore.getState().forceUpdate();
+
+              // Cập nhật nhóm được chọn nếu có
+              const selectedGroup = useChatStore.getState().selectedGroup;
+              if (selectedGroup && selectedGroup.id === data.groupId) {
+                console.log(
+                  "[useGroupSocket] Refreshing selected group after member removed",
+                );
+                await refreshSelectedGroup();
+              }
+            }
+          } catch (error) {
+            console.error(
+              "[useGroupSocket] Error handling memberRemoved event:",
+              error,
+            );
+            // Fallback to refreshAllGroupData if anything fails
+            refreshAllGroupData();
+          }
+        }, 500);
       }
     });
 
@@ -219,11 +602,144 @@ export const useGroupSocket = () => {
           groupId: data.groupId,
           userId: currentUser?.id,
         });
+
+        // Xóa nhóm khỏi danh sách cuộc trò chuyện
+        useConversationsStore.getState().removeConversation(data.groupId);
+        useConversationsStore.getState().forceUpdate();
       } else if (data.action === "added_to_group") {
-        console.log(`[useGroupSocket] User was added to a group, updating UI`);
-        setTimeout(() => {
-          useConversationsStore.getState().forceUpdate();
-        }, 0);
+        console.log(
+          `[useGroupSocket] User was added to a group via updateGroupList, creating group conversation`,
+        );
+
+        // Thêm: Tạo cuộc trò chuyện nhóm mới nếu chưa tồn tại
+        setTimeout(async () => {
+          try {
+            if (currentUser?.id && data.groupId) {
+              // Tham gia vào phòng nhóm
+              console.log(
+                `[useGroupSocket] Joining group room: ${data.groupId} after updateGroupList`,
+              );
+              joinGroupRoom(data.groupId);
+
+              // Lấy thông tin nhóm từ API
+              const result = await getGroupById(data.groupId);
+              if (result.success && result.group) {
+                console.log(
+                  `[useGroupSocket] Got group data for ${data.groupId}, checking if conversation exists`,
+                );
+
+                // Kiểm tra xem cuộc trò chuyện nhóm đã tồn tại chưa
+                const conversations =
+                  useConversationsStore.getState().conversations;
+                const existingConversation = conversations.find(
+                  (conv) =>
+                    conv.type === "GROUP" && conv.group?.id === data.groupId,
+                );
+
+                if (!existingConversation) {
+                  console.log(
+                    `[useGroupSocket] Creating new group conversation for ${data.groupId}`,
+                  );
+
+                  // Tạo placeholder contact cho cuộc trò chuyện nhóm
+                  const placeholderContact = {
+                    id: currentUser.id,
+                    email: currentUser.email || "",
+                    phoneNumber: currentUser.phoneNumber || "",
+                    passwordHash: currentUser.passwordHash,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    userInfo: currentUser.userInfo || {
+                      id: currentUser.id,
+                      fullName: "Group Member",
+                      profilePictureUrl: null,
+                      statusMessage: "",
+                      blockStrangers: false,
+                      createdAt: new Date(),
+                      updatedAt: new Date(),
+                      userAuth: currentUser,
+                    },
+                    refreshTokens: [],
+                    qrCodes: [],
+                    posts: [],
+                    stories: [],
+                    groupMembers: [],
+                    cloudFiles: [],
+                    pinnedItems: [],
+                    sentFriends: [],
+                    receivedFriends: [],
+                    contacts: [],
+                    contactOf: [],
+                    settings: [],
+                    postReactions: [],
+                    hiddenPosts: [],
+                    addedBy: [],
+                    notifications: [],
+                    sentMessages: [],
+                    receivedMessages: [],
+                    comments: [],
+                  };
+
+                  // Thêm cuộc trò chuyện nhóm mới
+                  useConversationsStore.getState().addConversation({
+                    contact: placeholderContact,
+                    group: {
+                      id: result.group.id,
+                      name: result.group.name,
+                      avatarUrl: result.group.avatarUrl,
+                      createdAt: result.group.createdAt,
+                    },
+                    lastMessage: undefined,
+                    unreadCount: 0,
+                    lastActivity: new Date(),
+                    type: "GROUP",
+                  });
+
+                  // Force update UI
+                  useConversationsStore.getState().forceUpdate();
+                  console.log(
+                    `[useGroupSocket] Group conversation created for ${data.groupId}`,
+                  );
+                } else {
+                  console.log(
+                    `[useGroupSocket] Group conversation already exists for ${data.groupId}`,
+                  );
+                }
+
+                // Tải lại danh sách cuộc trò chuyện từ API để đảm bảo có dữ liệu mới nhất
+                await useConversationsStore
+                  .getState()
+                  .loadConversations(currentUser.id);
+                console.log(
+                  "[useGroupSocket] Conversations reloaded after updateGroupList event",
+                );
+
+                // Đảm bảo UI được cập nhật
+                useConversationsStore.getState().forceUpdate();
+              }
+            }
+          } catch (error) {
+            console.error(
+              "[useGroupSocket] Error handling updateGroupList event:",
+              error,
+            );
+
+            // Fallback: Tải lại danh sách cuộc trò chuyện từ API
+            if (currentUser?.id) {
+              try {
+                await useConversationsStore
+                  .getState()
+                  .loadConversations(currentUser.id);
+                useConversationsStore.getState().forceUpdate();
+              } catch (fallbackError) {
+                console.error(
+                  "[useGroupSocket] Error in fallback conversation reload:",
+                  fallbackError,
+                );
+              }
+            }
+          }
+        }, 500);
       }
     });
 
@@ -233,9 +749,30 @@ export const useGroupSocket = () => {
         data,
       );
 
-      setTimeout(() => {
-        useConversationsStore.getState().forceUpdate();
-      }, 0);
+      // Tải lại danh sách cuộc trò chuyện từ API thay vì chỉ forceUpdate
+      setTimeout(async () => {
+        try {
+          if (currentUser?.id) {
+            // Tải lại danh sách cuộc trò chuyện từ API
+            await useConversationsStore
+              .getState()
+              .loadConversations(currentUser.id);
+            console.log(
+              "[useGroupSocket] Conversations reloaded after forceUpdateConversations event",
+            );
+
+            // Đảm bảo UI được cập nhật
+            useConversationsStore.getState().forceUpdate();
+          }
+        } catch (error) {
+          console.error(
+            "[useGroupSocket] Error reloading conversations:",
+            error,
+          );
+          // Fallback to forceUpdate if loadConversations fails
+          useConversationsStore.getState().forceUpdate();
+        }
+      }, 500);
 
       if (data && data.groupId) {
         const selectedGroup = useChatStore.getState().selectedGroup;
@@ -254,14 +791,68 @@ export const useGroupSocket = () => {
       console.log(
         "[useGroupSocket] Received reload event from groups WebSocket, refreshing data...",
       );
-      refreshAllGroupData();
+
+      // Tải lại danh sách cuộc trò chuyện từ API và cập nhật UI
+      setTimeout(async () => {
+        try {
+          if (currentUser?.id) {
+            // Tải lại danh sách cuộc trò chuyện từ API
+            await useConversationsStore
+              .getState()
+              .loadConversations(currentUser.id);
+            console.log(
+              "[useGroupSocket] Conversations reloaded after reload event",
+            );
+
+            // Đảm bảo UI được cập nhật
+            useConversationsStore.getState().forceUpdate();
+
+            // Cập nhật nhóm được chọn nếu có
+            refreshSelectedGroup();
+          }
+        } catch (error) {
+          console.error(
+            "[useGroupSocket] Error reloading conversations:",
+            error,
+          );
+          // Fallback to refreshAllGroupData if loadConversations fails
+          refreshAllGroupData();
+        }
+      }, 500);
     });
 
     socket.on("requestReload", () => {
       console.log(
         "[useGroupSocket] Received requestReload event, refreshing data...",
       );
-      refreshAllGroupData();
+
+      // Tải lại danh sách cuộc trò chuyện từ API và cập nhật UI
+      setTimeout(async () => {
+        try {
+          if (currentUser?.id) {
+            // Tải lại danh sách cuộc trò chuyện từ API
+            await useConversationsStore
+              .getState()
+              .loadConversations(currentUser.id);
+            console.log(
+              "[useGroupSocket] Conversations reloaded after requestReload event",
+            );
+
+            // Đảm bảo UI được cập nhật
+            useConversationsStore.getState().forceUpdate();
+
+            // Cập nhật nhóm được chọn nếu có
+            refreshSelectedGroup();
+          }
+        } catch (error) {
+          console.error(
+            "[useGroupSocket] Error reloading conversations:",
+            error,
+          );
+          // Fallback to refreshAllGroupData if loadConversations fails
+          refreshAllGroupData();
+        }
+      }, 500);
     });
 
     socket.on("joinGroupSuccess", (data) => {
@@ -278,12 +869,37 @@ export const useGroupSocket = () => {
     });
 
     socket.on("connect", () => {
+      console.log("[GroupSocket] Connected");
+      joinUserRoom();
+
       setTimeout(() => {
         if (socket.connected) {
           console.log(
             "[useGroupSocket] Requesting server to broadcast reload to all clients",
           );
           socket.emit("broadcastReload");
+
+          // Tải lại danh sách cuộc trò chuyện từ API khi kết nối lại
+          if (currentUser?.id) {
+            console.log(
+              "[useGroupSocket] Reloading conversations after reconnect",
+            );
+            useConversationsStore
+              .getState()
+              .loadConversations(currentUser.id)
+              .then(() => {
+                console.log(
+                  "[useGroupSocket] Conversations reloaded after reconnect",
+                );
+                useConversationsStore.getState().forceUpdate();
+              })
+              .catch((error) => {
+                console.error(
+                  "[useGroupSocket] Error reloading conversations after reconnect:",
+                  error,
+                );
+              });
+          }
         }
       }, 1000);
     });
