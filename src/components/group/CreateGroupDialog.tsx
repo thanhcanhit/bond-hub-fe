@@ -102,19 +102,6 @@ export default function CreateGroupDialog({
       );
 
       if (result.success && result.group) {
-        // Làm mới danh sách cuộc trò chuyện từ server
-        if (currentUser?.id) {
-          const conversationsStore = useConversationsStore.getState();
-          conversationsStore.loadConversations(currentUser.id);
-
-          // Log thông tin nhóm đã tạo
-          console.log("Group created successfully:", {
-            id: result.group.id,
-            name: result.group.name,
-            type: "GROUP",
-          });
-        }
-
         // Đóng dialog trước
         onOpenChange(false);
 
@@ -126,6 +113,22 @@ export default function CreateGroupDialog({
         setSelectedFriends([]);
         setAvatarFile(null);
         setAvatarPreview(null);
+
+        // Làm mới danh sách cuộc trò chuyện từ server
+        if (currentUser?.id) {
+          // Log thông tin nhóm đã tạo
+          console.log("Group created successfully:", {
+            id: result.group.id,
+            name: result.group.name,
+            type: "GROUP",
+          });
+
+          // Đợi 1 giây để đảm bảo socket events được xử lý trước
+          setTimeout(() => {
+            const conversationsStore = useConversationsStore.getState();
+            conversationsStore.loadConversations(currentUser.id);
+          }, 1000);
+        }
       } else {
         toast.error(result.error || "Không thể tạo nhóm");
       }

@@ -8,7 +8,7 @@ import { useFriendSocket } from "@/hooks/useFriendSocket";
 import { useGroupSocket } from "@/hooks/useGroupSocket";
 import ChatSocketHandler from "./chat/ChatSocketHandler";
 import GroupSocketHandler from "./group/GroupSocketHandler";
-// import GroupDissolvedHandler from "./group/GroupDissolvedHandler"; // Đợi backend cập nhật
+import GroupDissolvedHandler from "./group/GroupDissolvedHandler";
 
 // Sử dụng memo để tránh re-render không cần thiết
 function SocketProvider({ children }: { children: React.ReactNode }) {
@@ -41,7 +41,7 @@ function SocketProvider({ children }: { children: React.ReactNode }) {
         <>
           <ChatSocketHandler />
           <GroupSocketHandler />
-          {/* <GroupDissolvedHandler /> */} {/* Đợi backend cập nhật */}
+          <GroupDissolvedHandler />
         </>
       )}
       {children}
