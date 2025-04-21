@@ -348,13 +348,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setSelectedContact: (contact) => {
     console.log(`[chatStore] Setting selected contact: ${contact?.id}`);
 
-    // First, clear messages and set loading state
+    // First, update state but don't clear messages immediately to avoid flickering
     set({
       selectedContact: contact,
       selectedGroup: null,
       currentChatType: contact ? "USER" : null,
-      messages: [], // Clear messages immediately
-      isLoading: contact ? true : false, // Set loading state if we're selecting a contact
+      // Don't clear messages immediately to avoid flickering
+      // messages: [],
+      // Don't set loading state immediately to avoid flickering
+      // isLoading: contact ? true : false,
       currentPage: 1, // Reset page number
       hasMoreMessages: true, // Reset hasMoreMessages flag
       replyingTo: null, // Clear any reply state
@@ -401,13 +403,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // No need to fetch additional data for groups - all necessary information
     // is already available in the conversation store
 
-    // Clear messages and set loading state
+    // Update state but don't clear messages immediately to avoid flickering
     set({
       selectedGroup: group,
       selectedContact: null,
       currentChatType: group ? "GROUP" : null,
-      messages: [], // Clear messages immediately
-      isLoading: group ? true : false, // Set loading state if we're selecting a group
+      // Don't clear messages immediately to avoid flickering
+      // messages: [],
+      // Don't set loading state immediately to avoid flickering
+      // isLoading: group ? true : false,
       currentPage: 1, // Reset page number
       hasMoreMessages: true, // Reset hasMoreMessages flag
       replyingTo: null, // Clear any reply state
@@ -472,7 +476,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    set({ isLoading: true, currentPage: 1, hasMoreMessages: true });
+    // Set loading state but don't clear messages immediately to avoid flickering
+    // Only set isLoading if we don't already have messages for this conversation
+    const shouldShowLoading = currentState.messages.length === 0;
+    set({
+      currentPage: 1,
+      hasMoreMessages: true,
+      isLoading: shouldShowLoading,
+    });
+
     try {
       let result;
       if (type === "USER") {
@@ -1778,7 +1790,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // Load messages for this conversation
           await get().loadMessages(id, "USER");
 
-          return true;
+          // Check if messages were loaded successfully
+          const messagesLoaded = get().messages.length > 0;
+          console.log(
+            `[chatStore] User messages loaded successfully: ${messagesLoaded}`,
+          );
+          return messagesLoaded;
         }
         console.log(`[chatStore] Failed to fetch user data for ${id}`);
         return false;
@@ -1870,7 +1887,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           console.log(`[chatStore] Loading messages for group ${id}`);
           await get().loadMessages(id, "GROUP");
 
-          return true;
+          // Check if messages were loaded successfully
+          const messagesLoaded = get().messages.length > 0;
+          console.log(
+            `[chatStore] Group messages loaded successfully: ${messagesLoaded}`,
+          );
+          return messagesLoaded;
         }
         console.log(`[chatStore] Failed to fetch group data for ${id}`);
         return false;
@@ -1905,6 +1927,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Clear cache for this conversation
     get().clearChatCache(type, id);
+
+    // Don't clear messages immediately to avoid flickering
+    // Only set loading state if we don't have messages
+    const currentState = get();
+    const shouldShowLoading = currentState.messages.length === 0;
+
+    if (shouldShowLoading) {
+      set({ isLoading: true });
+    }
 
     // Load messages
     return get().loadMessages(id, type);

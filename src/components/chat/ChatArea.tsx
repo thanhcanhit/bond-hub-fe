@@ -96,7 +96,11 @@ export default function ChatArea({
     // Only scroll if it's a new message, not a reaction update
     if (shouldScrollToBottom()) {
       console.log(`[ChatArea] Scrolling to bottom for new message`);
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      // Use requestAnimationFrame for smoother scrolling
+      requestAnimationFrame(() => {
+        // Use smooth behavior for new messages
+        scrollToBottom("smooth");
+      });
     }
 
     // Update last message in conversations list when messages change
@@ -144,9 +148,9 @@ export default function ChatArea({
   const hasScrolledForConversationRef = useRef<boolean>(false);
 
   // Function to scroll to bottom - extracted to avoid creating in render
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView();
+      messagesEndRef.current.scrollIntoView({ behavior });
     }
   }, []);
 
@@ -188,8 +192,12 @@ export default function ChatArea({
         `(conversation changed: ${conversationChanged}, messages changed: ${messageCountChanged})`,
       );
 
-      // Use setTimeout to ensure DOM is updated
-      setTimeout(scrollToBottom, 0);
+      // Use requestAnimationFrame instead of setTimeout for smoother scrolling
+      // This ensures the scroll happens after the browser has finished rendering
+      requestAnimationFrame(() => {
+        // Use auto behavior for initial load (instant scroll)
+        scrollToBottom("auto");
+      });
 
       // Update refs
       hasScrolledForConversationRef.current = true;
@@ -239,8 +247,8 @@ export default function ChatArea({
           }
 
           // After loading, restore relative scroll position
-          // Wait a bit for DOM to update
-          setTimeout(() => {
+          // Use requestAnimationFrame for smoother scrolling
+          requestAnimationFrame(() => {
             // Verify the conversation hasn't changed during loading
             const currentState = useChatStore.getState();
             const currentId =
@@ -259,13 +267,16 @@ export default function ChatArea({
               // Calculate new scroll position based on height difference
               const newScrollHeight = chatContainerRef.current.scrollHeight;
               const heightDifference = newScrollHeight - scrollHeight;
-              chatContainerRef.current.scrollTop =
-                scrollPosition + heightDifference;
+              // Use scrollTo with behavior: 'instant' for more reliable positioning
+              chatContainerRef.current.scrollTo({
+                top: scrollPosition + heightDifference,
+                behavior: "auto",
+              });
               console.log(
                 `[ChatArea] Adjusted scroll position after loading older messages`,
               );
             }
-          }, 100);
+          });
         });
       }
     };
@@ -368,7 +379,9 @@ export default function ChatArea({
 
         // Scroll to bottom when typing status changes to true
         if (newStatus) {
-          setTimeout(scrollToBottom, 100);
+          requestAnimationFrame(() => {
+            scrollToBottom("smooth");
+          });
         }
       }
     },

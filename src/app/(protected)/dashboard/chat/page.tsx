@@ -140,10 +140,27 @@ export default function ChatPage() {
         setSelectedContact(existingConversation.contact);
         contactSet = true;
 
-        // Reload messages for this conversation
-        setTimeout(() => {
-          chatStore.reloadConversationMessages(id, "USER");
-        }, 0);
+        // Check if we have cached messages before forcing a reload
+        const cacheKey = `USER_${id}`;
+        const cachedData = chatStore.messageCache[cacheKey];
+        const currentTime = new Date();
+        const isCacheValid =
+          cachedData &&
+          currentTime.getTime() - cachedData.lastFetched.getTime() <
+            5 * 60 * 1000;
+
+        // Only reload if we don't have valid cache
+        if (!isCacheValid || !cachedData || cachedData.messages.length === 0) {
+          console.log(
+            `[ChatPage] No valid cache for user ${id}, reloading messages`,
+          );
+          // Use requestAnimationFrame for smoother UI
+          requestAnimationFrame(() => {
+            // Use a flag to indicate this is a retry to avoid clearing messages again
+            chatStore.setShouldFetchMessages(true);
+            chatStore.reloadConversationMessages(id, "USER");
+          });
+        }
       }
 
       // Only fetch additional user data if we don't have it in the conversation store
@@ -212,18 +229,31 @@ export default function ChatPage() {
         }
 
         // Proceed with opening the chat
-        await chatStore.openChat(id, "GROUP");
+        const success = await chatStore.openChat(id, "GROUP");
 
-        // If we still have issues, try to reload the conversation after a short delay
-        setTimeout(() => {
-          const currentSelectedGroup = useChatStore.getState().selectedGroup;
-          if (currentSelectedGroup?.id === id) {
-            console.log(
-              `[ChatPage] Reloading group conversation messages after delay`,
-            );
-            chatStore.reloadConversationMessages(id, "GROUP");
-          }
-        }, 2000);
+        // Only reload if the initial load failed or if there are no messages
+        // This prevents unnecessary double loading
+        if (!success) {
+          console.log(
+            `[ChatPage] Initial group chat load failed, will retry after delay`,
+          );
+          // Use a shorter delay to improve user experience
+          setTimeout(() => {
+            const currentSelectedGroup = useChatStore.getState().selectedGroup;
+            const currentMessages = useChatStore.getState().messages;
+            if (
+              currentSelectedGroup?.id === id &&
+              (!currentMessages || currentMessages.length === 0)
+            ) {
+              console.log(
+                `[ChatPage] Reloading group conversation messages after delay (no messages loaded)`,
+              );
+              // Use a flag to indicate this is a retry to avoid clearing messages again
+              chatStore.setShouldFetchMessages(true);
+              chatStore.reloadConversationMessages(id, "GROUP");
+            }
+          }, 1000); // Reduced from 2000ms to 1000ms
+        }
       } catch (error) {
         console.error("Error opening group chat:", error);
       }

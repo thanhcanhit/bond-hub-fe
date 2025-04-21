@@ -97,6 +97,27 @@ export default function ChatSocketHandler() {
   // Function to ensure message sender has userInfo
   const ensureMessageHasUserInfo = useCallback(
     (message: Message) => {
+      // Make sure messageType is correctly set based on the message properties
+      if (message.groupId && !message.messageType) {
+        message = {
+          ...message,
+          messageType: MessageType.GROUP,
+        };
+        console.log(
+          "[ChatSocketHandler] ensureMessageHasUserInfo: Set messageType to GROUP for message with groupId",
+          message.id,
+        );
+      } else if (message.receiverId && !message.messageType) {
+        message = {
+          ...message,
+          messageType: MessageType.USER,
+        };
+        console.log(
+          "[ChatSocketHandler] ensureMessageHasUserInfo: Set messageType to USER for message with receiverId",
+          message.id,
+        );
+      }
+
       if (message.sender) {
         // If sender is current user, always use current user's userInfo
         if (message.senderId === currentUser?.id) {
@@ -215,29 +236,13 @@ export default function ChatSocketHandler() {
     (data: MessageEventData) => {
       console.log("[ChatSocketHandler] New message received:", data);
 
-      // Ensure the message has the correct messageType set
+      // Ensure the message has the correct messageType set and user info
       let message = ensureMessageHasUserInfo(data.message);
 
-      // Make sure messageType is correctly set based on the message properties
-      if (message.groupId && !message.messageType) {
-        message = {
-          ...message,
-          messageType: MessageType.GROUP,
-        };
-        console.log(
-          "[ChatSocketHandler] Set messageType to GROUP for message with groupId",
-          message.id,
-        );
-      } else if (message.receiverId && !message.messageType) {
-        message = {
-          ...message,
-          messageType: MessageType.USER,
-        };
-        console.log(
-          "[ChatSocketHandler] Set messageType to USER for message with receiverId",
-          message.id,
-        );
-      }
+      // Log message details for debugging
+      console.log(
+        `[ChatSocketHandler] Processing new message: id=${message.id}, type=${message.messageType}, groupId=${message.groupId || "none"}, senderId=${message.senderId}, receiverId=${message.receiverId || "none"}`,
+      );
 
       const conversationsStore = useConversationsStore.getState();
       const chatStore = useChatStore.getState();
@@ -339,18 +344,29 @@ export default function ChatSocketHandler() {
 
       // Kiểm tra xem tin nhắn có thuộc cuộc trò chuyện đang mở không
       // Đồng thời kiểm tra loại tin nhắn để đảm bảo tin nhắn nhóm chỉ hiển thị trong nhóm và tin nhắn trực tiếp chỉ hiển thị trong cuộc trò chuyện trực tiếp
-      const isFromCurrentChat =
-        // Tin nhắn trực tiếp chỉ hiển thị trong cuộc trò chuyện trực tiếp
-        (currentChatType === "USER" &&
-          selectedContact &&
-          (message.messageType === MessageType.USER || !message.messageType) && // Đảm bảo là tin nhắn trực tiếp
-          (message.senderId === selectedContact.id ||
-            message.receiverId === selectedContact.id)) ||
-        // Tin nhắn nhóm chỉ hiển thị trong cuộc trò chuyện nhóm
-        (currentChatType === "GROUP" &&
+      let isFromCurrentChat = false;
+
+      // Kiểm tra chi tiết dựa trên loại tin nhắn
+      if (message.messageType === MessageType.GROUP || message.groupId) {
+        // Đây là tin nhắn nhóm
+        isFromCurrentChat =
+          currentChatType === "GROUP" &&
           selectedGroup &&
-          (message.messageType === MessageType.GROUP || message.groupId) && // Đảm bảo là tin nhắn nhóm
-          message.groupId === selectedGroup.id);
+          message.groupId === selectedGroup.id;
+        console.log(
+          `[ChatSocketHandler] Group message check: message.groupId=${message.groupId}, selectedGroup.id=${selectedGroup?.id}, isFromCurrentChat=${isFromCurrentChat}`,
+        );
+      } else {
+        // Đây là tin nhắn trực tiếp
+        isFromCurrentChat =
+          currentChatType === "USER" &&
+          selectedContact &&
+          (message.senderId === selectedContact.id ||
+            message.receiverId === selectedContact.id);
+        console.log(
+          `[ChatSocketHandler] Direct message check: message.senderId=${message.senderId}, message.receiverId=${message.receiverId}, selectedContact.id=${selectedContact?.id}, isFromCurrentChat=${isFromCurrentChat}`,
+        );
+      }
 
       // Thông tin người gửi đã được cập nhật trong ensureMessageHasUserInfo
 
@@ -359,7 +375,29 @@ export default function ChatSocketHandler() {
         // Kiểm tra xem tin nhắn đã tồn tại trong danh sách chưa
         const messageExists = messages.some((msg) => msg.id === message.id);
         if (!messageExists) {
-          console.log(`[ChatSocketHandler] Adding message to current chat`);
+          console.log(
+            `[ChatSocketHandler] Adding message to current chat: ${message.id} (groupId: ${message.groupId || "none"})`,
+          );
+
+          // Kiểm tra lại một lần nữa để đảm bảo tin nhắn được thêm vào đúng cuộc trò chuyện
+          const currentState = useChatStore.getState();
+          const stillValid =
+            message.messageType === MessageType.GROUP || message.groupId
+              ? // Tin nhắn nhóm
+                currentState.currentChatType === "GROUP" &&
+                currentState.selectedGroup?.id === message.groupId
+              : // Tin nhắn trực tiếp
+                currentState.currentChatType === "USER" &&
+                currentState.selectedContact?.id &&
+                (message.senderId === currentState.selectedContact.id ||
+                  message.receiverId === currentState.selectedContact.id);
+
+          if (!stillValid) {
+            console.log(
+              `[ChatSocketHandler] Conversation changed since message was received, skipping`,
+            );
+            return;
+          }
 
           // Sử dụng hàm processNewMessage để xử lý tin nhắn mới
           chatStore.processNewMessage(message, {
@@ -378,6 +416,10 @@ export default function ChatSocketHandler() {
             resetUnread();
           }
         }
+      } else {
+        console.log(
+          `[ChatSocketHandler] Message ${message.id} is not for current chat (groupId: ${message.groupId || "none"})`,
+        );
       }
 
       // Xử lý tin nhắn trong conversationsStore
@@ -570,14 +612,26 @@ export default function ChatSocketHandler() {
         // Chỉ phát âm thanh khi người khác thả cảm xúc cho tin nhắn của mình
         if (!isCurrentUser && messageToUpdate.senderId === currentUser?.id) {
           // Kiểm tra xem tin nhắn có thuộc cuộc trò chuyện hiện tại không
-          const isFromCurrentChat =
-            (currentChatType === "USER" &&
+          let isFromCurrentChat = false;
+
+          // Kiểm tra chi tiết dựa trên loại tin nhắn
+          if (
+            messageToUpdate.messageType === MessageType.GROUP ||
+            messageToUpdate.groupId
+          ) {
+            // Đây là tin nhắn nhóm
+            isFromCurrentChat =
+              currentChatType === "GROUP" &&
+              selectedGroup &&
+              messageToUpdate.groupId === selectedGroup.id;
+          } else {
+            // Đây là tin nhắn trực tiếp
+            isFromCurrentChat =
+              currentChatType === "USER" &&
               selectedContact &&
               (messageToUpdate.senderId === selectedContact.id ||
-                messageToUpdate.receiverId === selectedContact.id)) ||
-            (currentChatType === "GROUP" &&
-              selectedGroup &&
-              messageToUpdate.groupId === selectedGroup.id);
+                messageToUpdate.receiverId === selectedContact.id);
+          }
 
           // Chỉ phát âm thanh nếu không phải cuộc trò chuyện hiện tại
           if (!isFromCurrentChat) {

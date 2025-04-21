@@ -30,6 +30,10 @@ export default function AudioVisualizer({
     let loadAttempts = 0;
     const maxAttempts = 3;
 
+    // Set initial loading state
+    setIsLoading(true);
+    setLoadError(null);
+
     // Create audio element
     const audio = new Audio();
 
@@ -91,7 +95,11 @@ export default function AudioVisualizer({
 
     const handleError = (event?: Event) => {
       // Xử lý an toàn khi truy cập thông tin lỗi
-      let errorInfo = {};
+      let errorInfo: {
+        message?: string;
+        code?: number | string;
+        error?: string;
+      } = {};
 
       try {
         // Kiểm tra xem audio.error có tồn tại không
@@ -110,21 +118,24 @@ export default function AudioVisualizer({
         };
       }
 
-      // Log detailed error information
-      console.error("Audio loading error:", {
-        ...errorInfo,
-        url: url,
-        fileName: fileName,
-        eventType: event ? event.type : "unknown",
-        audioState: audio
-          ? {
-              paused: audio.paused,
-              ended: audio.ended,
-              networkState: audio.networkState,
-              readyState: audio.readyState,
-            }
-          : "audio object unavailable",
-      });
+      // Log detailed error information - use a string message instead of empty object
+      console.error(
+        "Audio loading error: " + (errorInfo.message || "Unknown error"),
+        {
+          errorDetails: errorInfo,
+          url: url,
+          fileName: fileName,
+          eventType: event ? event.type : "unknown",
+          audioState: audio
+            ? {
+                paused: audio.paused,
+                ended: audio.ended,
+                networkState: audio.networkState,
+                readyState: audio.readyState,
+              }
+            : "audio object unavailable",
+        },
+      );
 
       // Implement exponential backoff for retries
       if (loadAttempts < maxAttempts) {
@@ -162,6 +173,13 @@ export default function AudioVisualizer({
             "Failed to load audio after multiple attempts, hiding progress bar",
           );
           setDuration(0);
+        }
+
+        // Set a user-friendly error message
+        if (isMounted) {
+          setLoadError(
+            "Không thể tải tệp âm thanh. Vui lòng tải xuống để nghe.",
+          );
         }
 
         // Create a fallback audio element as a last resort
@@ -234,7 +252,13 @@ export default function AudioVisualizer({
 
     // Set audio source and load
     audio.preload = "metadata";
-    audio.src = url;
+
+    // Add a cache-busting parameter to the URL to avoid browser caching issues
+    const cacheBustUrl = url.includes("?")
+      ? `${url}&_cb=${Date.now()}`
+      : `${url}?_cb=${Date.now()}`;
+
+    audio.src = cacheBustUrl;
     audio.load();
 
     // Store reference
@@ -265,11 +289,20 @@ export default function AudioVisualizer({
 
   // Progress bar component with click to seek functionality
   const renderProgressBar = () => {
-    // If we have a load error, show error message
+    // If we have a load error, show error message with download option
     if (loadError) {
       return (
-        <div className="w-full h-3 flex items-center justify-center">
+        <div className="w-full flex flex-col items-center justify-center gap-1">
           <div className="text-xs text-red-500">{loadError}</div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDownload();
+            }}
+            className="text-xs text-blue-500 hover:underline"
+          >
+            Tải xuống
+          </button>
         </div>
       );
     }
@@ -413,11 +446,17 @@ export default function AudioVisualizer({
           className="h-8 w-8 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 hover:text-blue-700 flex-shrink-0"
           onClick={(e) => {
             e.stopPropagation();
-            togglePlayPause();
+            if (loadError) {
+              handleDownload();
+            } else {
+              togglePlayPause();
+            }
           }}
-          disabled={isLoading || !!loadError}
+          disabled={isLoading}
         >
-          {isPlaying ? (
+          {loadError ? (
+            <Download className="h-4 w-4" />
+          ) : isPlaying ? (
             <Pause className="h-4 w-4" />
           ) : (
             <Play className="h-4 w-4" />
@@ -426,8 +465,8 @@ export default function AudioVisualizer({
 
         <div className="flex-1 min-w-0">
           <div className="w-full">
+            {/* Don't use src directly here since we're managing it in the useEffect */}
             <audio
-              src={url}
               ref={audioRef}
               className="hidden"
               preload="metadata"
@@ -476,8 +515,8 @@ export default function AudioVisualizer({
       <div className="bg-gray-50 p-4 rounded-lg">
         <div className="flex justify-center mb-4">
           <div className="w-full">
+            {/* Don't use src directly here since we're managing it in the useEffect */}
             <audio
-              src={url}
               ref={audioRef}
               className="hidden"
               preload="metadata"
@@ -493,10 +532,18 @@ export default function AudioVisualizer({
             variant="ghost"
             size="icon"
             className="h-10 w-10 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 hover:text-blue-700"
-            onClick={togglePlayPause}
-            disabled={isLoading || !!loadError}
+            onClick={(e) => {
+              if (loadError) {
+                handleDownload(e);
+              } else {
+                togglePlayPause();
+              }
+            }}
+            disabled={isLoading}
           >
-            {isPlaying ? (
+            {loadError ? (
+              <Download className="h-5 w-5" />
+            ) : isPlaying ? (
               <Pause className="h-5 w-5" />
             ) : (
               <Play className="h-5 w-5" />

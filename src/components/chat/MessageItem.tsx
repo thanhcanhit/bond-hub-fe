@@ -465,6 +465,7 @@ export default function MessageItem({
                   size="icon"
                   className="h-7 w-7 rounded-full bg-white shadow-sm hover:bg-gray-100"
                   onClick={handleReply}
+                  disabled
                 >
                   <AtSign className="h-4 w-4 text-gray-600" />
                 </Button>
@@ -505,7 +506,7 @@ export default function MessageItem({
                     </>
                   )}
                   {!isCurrentUser && !message.recalled && (
-                    <DropdownMenuItem onClick={handleReply}>
+                    <DropdownMenuItem disabled onClick={handleReply}>
                       <Reply className="h-4 w-4 mr-2" />
                       <span>Trả lời</span>
                     </DropdownMenuItem>
@@ -516,16 +517,16 @@ export default function MessageItem({
                       <span>Chuyển tiếp</span>
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem>
+                  <DropdownMenuItem disabled>
                     <Pin className="h-4 w-4 mr-2" />
                     <span>Ghim tin nhắn</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem disabled>
                     <Info className="h-4 w-4 mr-2" />
                     <span>Xem chi tiết</span>
                   </DropdownMenuItem>
                   {!message.recalled && (
-                    <DropdownMenuItem onClick={handleMarkAsUnread}>
+                    <DropdownMenuItem disabled onClick={handleMarkAsUnread}>
                       <Mail className="h-4 w-4 mr-2" />
                       <span>Đánh dấu chưa đọc</span>
                     </DropdownMenuItem>
