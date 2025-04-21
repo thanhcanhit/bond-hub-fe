@@ -67,7 +67,7 @@ export default function GroupChatHeader({
 
   // Hàm kiểm tra xem người dùng hiện tại có còn là thành viên của nhóm không
   const checkGroupMembership = useCallback(async () => {
-    if (!group || !currentUser || isCheckingMembership) return;
+    if (!group?.id || !currentUser?.id || isCheckingMembership) return;
 
     try {
       setIsCheckingMembership(true);
@@ -129,18 +129,12 @@ export default function GroupChatHeader({
     } finally {
       setIsCheckingMembership(false);
     }
-  }, [
-    group,
-    currentUser,
-    isCheckingMembership,
-    membershipCheckInterval,
-    setSelectedGroup,
-  ]);
+  }, [group?.id, currentUser?.id, isCheckingMembership]);
 
   // Thiết lập interval kiểm tra thành viên nhóm
   useEffect(() => {
     // Chỉ thiết lập interval nếu có nhóm được chọn
-    if (group && currentUser) {
+    if (group?.id && currentUser?.id) {
       console.log(
         `[GroupChatHeader] Setting up membership check interval for group ${group.id}`,
       );
@@ -161,7 +155,7 @@ export default function GroupChatHeader({
         setMembershipCheckInterval(null);
       };
     }
-  }, [checkGroupMembership, group, currentUser]);
+  }, [group?.id, currentUser?.id, checkGroupMembership]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

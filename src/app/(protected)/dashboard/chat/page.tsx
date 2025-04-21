@@ -81,24 +81,35 @@ export default function ChatPage() {
   useEffect(() => {
     const handleResize = () => {
       const width = window.innerWidth;
+      const newIsMobile = width < 768;
+      const newIsTablet = width >= 768 && width < 1024;
+      const newIsTabContentVisible = !isChatOpen || width >= 768;
+      const newShowContactInfo = width >= 1024 && showContactInfo;
 
-      // Set device type flags
-      setIsMobile(width < 768);
-      setIsTablet(width >= 768 && width < 1024);
-
-      // Show conversation list if no chat is open or screen is large enough
-      // Hide conversation list on small screens when a chat is open
-      setIsTabContentVisible(!isChatOpen || width >= 768);
-
-      // Hide contact info on smaller screens
-      if (width < 1024) {
-        setShowContactInfo(false);
+      // Only update states if values have changed
+      if (newIsMobile !== isMobile) {
+        setIsMobile(newIsMobile);
+      }
+      if (newIsTablet !== isTablet) {
+        setIsTablet(newIsTablet);
+      }
+      if (newIsTabContentVisible !== isTabContentVisible) {
+        setIsTabContentVisible(newIsTabContentVisible);
+      }
+      if (newShowContactInfo !== showContactInfo) {
+        setShowContactInfo(newShowContactInfo);
       }
     };
+
+    // Initial call
     handleResize();
+
+    // Add event listener
     window.addEventListener("resize", handleResize);
+
+    // Cleanup
     return () => window.removeEventListener("resize", handleResize);
-  }, [isChatOpen]);
+  }, [isChatOpen, showContactInfo]); // Only depend on these values
 
   // Handle selecting a contact or group
   const handleSelectContact = async (
