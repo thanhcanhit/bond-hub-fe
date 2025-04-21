@@ -9,6 +9,26 @@ import { GroupRole } from "@/types/base";
 /**
  * Hook to connect to the groups WebSocket namespace and handle group events
  */
+// Biến để theo dõi thời gian gọi API gần nhất
+let lastApiCallTimestamp = 0;
+const API_THROTTLE_MS = 2000; // 2 giây
+
+// Biến để theo dõi thời gian forceUpdate gần nhất
+let lastForceUpdateTimestamp = 0;
+const FORCE_UPDATE_THROTTLE_MS = 1000; // 1 giây
+
+// Hàm throttle forceUpdate để tránh gọi quá nhiều lần
+const throttledForceUpdate = () => {
+  const now = Date.now();
+  if (now - lastForceUpdateTimestamp > FORCE_UPDATE_THROTTLE_MS) {
+    console.log("[useGroupSocket] Throttled forceUpdate");
+    useConversationsStore.getState().forceUpdate();
+    lastForceUpdateTimestamp = now;
+  } else {
+    console.log("[useGroupSocket] Skipping forceUpdate due to throttling");
+  }
+};
+
 export const useGroupSocket = () => {
   const socketRef = useRef<Socket | null>(null);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -43,20 +63,8 @@ export const useGroupSocket = () => {
     console.log("[useGroupSocket] Refreshing all group data");
 
     try {
-      // Refresh conversations list first
-      if (currentUser?.id) {
-        console.log(
-          "[useGroupSocket] Loading conversations in refreshAllGroupData",
-        );
-        const conversationsStore = useConversationsStore.getState();
-        await conversationsStore.loadConversations(currentUser.id);
-        console.log(
-          "[useGroupSocket] Conversations loaded in refreshAllGroupData",
-        );
-
-        // Force update UI
-        conversationsStore.forceUpdate();
-      }
+      // Chỉ cập nhật UI và nhóm được chọn mà không tải lại danh sách cuộc trò chuyện
+      throttledForceUpdate();
 
       // Then refresh the selected group
       console.log(
@@ -69,27 +77,14 @@ export const useGroupSocket = () => {
     } catch (error) {
       console.error("[useGroupSocket] Error in refreshAllGroupData:", error);
     }
-  }, [refreshSelectedGroup, currentUser?.id]);
+  }, [refreshSelectedGroup]);
 
   const triggerGroupsReload = async () => {
     console.log("[useGroupSocket] Manually triggering groups reload");
 
     try {
-      // Tải lại danh sách cuộc trò chuyện trước
-      if (currentUser?.id) {
-        console.log(
-          "[useGroupSocket] Loading conversations in triggerGroupsReload",
-        );
-        await useConversationsStore
-          .getState()
-          .loadConversations(currentUser.id);
-        console.log(
-          "[useGroupSocket] Conversations loaded in triggerGroupsReload",
-        );
-
-        // Force update UI
-        useConversationsStore.getState().forceUpdate();
-      }
+      // Chỉ cập nhật UI mà không tải lại danh sách cuộc trò chuyện
+      throttledForceUpdate();
 
       // Sau đó gửi sự kiện socket nếu có thể
       if (socketRef.current && socketRef.current.connected) {
@@ -279,13 +274,11 @@ export const useGroupSocket = () => {
                   console.log(
                     `[useGroupSocket] Group conversation created for ${data.groupId}`,
                   );
-
-                  // Không cần gọi loadConversations nếu đã tạo thành công cuộc trò chuyện
                 } else {
                   console.log(
                     `[useGroupSocket] Could not get group data for ${data.groupId}, falling back to loadConversations`,
                   );
-                  // Chỉ gọi loadConversations nếu đã quá thời gian throttle
+
                   const now = Date.now();
                   if (now - lastApiCallTimestamp > API_THROTTLE_MS) {
                     await useConversationsStore
@@ -431,13 +424,11 @@ export const useGroupSocket = () => {
                   console.log(
                     `[useGroupSocket] Group conversation created for ${data.groupId}`,
                   );
-
-                  // Không cần gọi loadConversations nếu đã tạo thành công cuộc trò chuyện
                 } else {
                   console.log(
                     `[useGroupSocket] Could not get group data for ${data.groupId}, falling back to loadConversations`,
                   );
-                  // Chỉ gọi loadConversations nếu đã quá thời gian throttle
+
                   const now = Date.now();
                   if (now - lastApiCallTimestamp > API_THROTTLE_MS) {
                     await useConversationsStore
@@ -465,7 +456,18 @@ export const useGroupSocket = () => {
 
     socket.on("groupUpdated", (data) => {
       console.log("[useGroupSocket] Group updated:", data);
-      refreshAllGroupData();
+
+      // Chỉ cập nhật nhóm được chọn mà không tải lại toàn bộ danh sách cuộc trò chuyện
+      const selectedGroup = useChatStore.getState().selectedGroup;
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        console.log(
+          "[useGroupSocket] Refreshing selected group after group update",
+        );
+        refreshSelectedGroup();
+      } else {
+        // Chỉ cập nhật UI mà không gọi API
+        throttledForceUpdate();
+      }
     });
 
     socket.on("memberAdded", (data) => {
@@ -492,7 +494,7 @@ export const useGroupSocket = () => {
                 "[useGroupSocket] Throttled API call for memberAdded event",
               );
               // Cập nhật UI trước khi gọi API
-              useConversationsStore.getState().forceUpdate();
+              throttledForceUpdate();
 
               // Tải lại danh sách cuộc trò chuyện từ API
               await useConversationsStore
@@ -506,14 +508,14 @@ export const useGroupSocket = () => {
               lastApiCallTimestamp = now;
 
               // Đảm bảo UI được cập nhật
-              useConversationsStore.getState().forceUpdate();
+              throttledForceUpdate();
             }
           } else {
             console.log(
               "[useGroupSocket] Skipping API call for memberAdded event due to throttling",
             );
             // Vẫn cập nhật UI
-            useConversationsStore.getState().forceUpdate();
+            throttledForceUpdate();
           }
         } catch (error) {
           console.error(
@@ -541,7 +543,7 @@ export const useGroupSocket = () => {
         useConversationsStore.getState().removeConversation(data.groupId);
 
         // Force update UI
-        useConversationsStore.getState().forceUpdate();
+        throttledForceUpdate();
 
         // Chỉ tải lại danh sách cuộc trò chuyện nếu đã quá thời gian throttle
         setTimeout(async () => {
@@ -558,7 +560,7 @@ export const useGroupSocket = () => {
                 "[useGroupSocket] Conversations reloaded after user removed from group",
               );
               lastApiCallTimestamp = now;
-              useConversationsStore.getState().forceUpdate();
+              throttledForceUpdate();
             } else {
               console.log(
                 "[useGroupSocket] Skipping API call after user removed due to throttling",
@@ -598,7 +600,7 @@ export const useGroupSocket = () => {
                   "[useGroupSocket] Throttled API call for memberRemoved event",
                 );
                 // Cập nhật UI trước khi gọi API
-                useConversationsStore.getState().forceUpdate();
+                throttledForceUpdate();
 
                 // Tải lại danh sách cuộc trò chuyện từ API
                 await useConversationsStore
@@ -612,14 +614,14 @@ export const useGroupSocket = () => {
                 lastApiCallTimestamp = now;
 
                 // Đảm bảo UI được cập nhật
-                useConversationsStore.getState().forceUpdate();
+                throttledForceUpdate();
               }
             } else {
               console.log(
                 "[useGroupSocket] Skipping API call for memberRemoved event due to throttling",
               );
               // Vẫn cập nhật UI
-              useConversationsStore.getState().forceUpdate();
+              throttledForceUpdate();
             }
           } catch (error) {
             console.error(
@@ -633,7 +635,18 @@ export const useGroupSocket = () => {
 
     socket.on("memberRoleUpdated", (data) => {
       console.log("[useGroupSocket] Member role updated:", data);
-      refreshAllGroupData();
+
+      // Chỉ cập nhật nhóm được chọn mà không tải lại toàn bộ danh sách cuộc trò chuyện
+      const selectedGroup = useChatStore.getState().selectedGroup;
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        console.log(
+          "[useGroupSocket] Refreshing selected group after role update",
+        );
+        refreshSelectedGroup();
+      } else {
+        // Chỉ cập nhật UI mà không gọi API
+        throttledForceUpdate();
+      }
     });
 
     socket.on("groupDeleted", (data) => {
@@ -662,9 +675,7 @@ export const useGroupSocket = () => {
       useConversationsStore.getState().removeConversation(data.groupId);
     });
 
-    // Biến để theo dõi thời gian gọi API gần nhất
-    let lastApiCallTimestamp = 0;
-    const API_THROTTLE_MS = 2000; // 2 giây
+    // Sử dụng các biến đã khai báo ở phạm vi toàn cục
 
     socket.on("updateGroupList", (data) => {
       console.log("[useGroupSocket] Update group list event received:", data);
@@ -680,7 +691,7 @@ export const useGroupSocket = () => {
 
         // Xóa nhóm khỏi danh sách cuộc trò chuyện
         useConversationsStore.getState().removeConversation(data.groupId);
-        useConversationsStore.getState().forceUpdate();
+        throttledForceUpdate();
       } else if (data.action === "added_to_group") {
         console.log(
           `[useGroupSocket] User was added to a group via updateGroupList, creating group conversation`,
@@ -795,24 +806,22 @@ export const useGroupSocket = () => {
                   });
 
                   // Force update UI
-                  useConversationsStore.getState().forceUpdate();
+                  throttledForceUpdate();
                   console.log(
                     `[useGroupSocket] Group conversation created for ${data.groupId}`,
                   );
-
-                  // Không cần gọi loadConversations nếu đã tạo thành công cuộc trò chuyện
                 } else {
                   console.log(
                     `[useGroupSocket] Could not get group data for ${data.groupId}, falling back to loadConversations`,
                   );
-                  // Chỉ gọi loadConversations nếu đã quá thời gian throttle
+
                   const now = Date.now();
                   if (now - lastApiCallTimestamp > API_THROTTLE_MS) {
                     await useConversationsStore
                       .getState()
                       .loadConversations(currentUser.id);
                     lastApiCallTimestamp = now;
-                    useConversationsStore.getState().forceUpdate();
+                    throttledForceUpdate();
                   }
                 }
               } else {
@@ -850,45 +859,44 @@ export const useGroupSocket = () => {
         useChatStore.getState().clearChatCache("GROUP", data.groupId);
       }
 
-      // Chỉ tải lại danh sách cuộc trò chuyện nếu đã quá thời gian throttle
+      // Chỉ cập nhật UI mà không gọi API, trừ khi có yêu cầu cụ thể trong data
       setTimeout(async () => {
         try {
-          const now = Date.now();
-          if (currentUser?.id && now - lastApiCallTimestamp > API_THROTTLE_MS) {
-            console.log(
-              "[useGroupSocket] Throttled API call for forceUpdateConversations event",
-            );
+          // Kiểm tra xem có yêu cầu cụ thể để tải lại danh sách cuộc trò chuyện không
+          const shouldReloadConversations = data?.forceReload === true;
 
-            // Cập nhật UI trước khi gọi API
-            useConversationsStore.getState().forceUpdate();
+          if (shouldReloadConversations && currentUser?.id) {
+            const now = Date.now();
+            if (now - lastApiCallTimestamp > API_THROTTLE_MS) {
+              console.log(
+                "[useGroupSocket] Forced API call for forceUpdateConversations event",
+              );
 
-            // Tải lại danh sách cuộc trò chuyện từ API
-            await useConversationsStore
-              .getState()
-              .loadConversations(currentUser.id);
-            console.log(
-              "[useGroupSocket] Conversations reloaded after forceUpdateConversations event",
-            );
+              // Cập nhật UI trước khi gọi API
+              throttledForceUpdate();
 
-            // Cập nhật timestamp
-            lastApiCallTimestamp = now;
+              // Tải lại danh sách cuộc trò chuyện từ API
+              await useConversationsStore
+                .getState()
+                .loadConversations(currentUser.id);
+              console.log(
+                "[useGroupSocket] Conversations reloaded after forceUpdateConversations event",
+              );
 
-            // Đảm bảo UI được cập nhật
-            useConversationsStore.getState().forceUpdate();
-          } else {
-            console.log(
-              "[useGroupSocket] Skipping API call for forceUpdateConversations event due to throttling",
-            );
-            // Vẫn cập nhật UI
-            useConversationsStore.getState().forceUpdate();
+              // Cập nhật timestamp
+              lastApiCallTimestamp = now;
+            }
           }
+
+          // Luôn cập nhật UI
+          throttledForceUpdate();
         } catch (error) {
           console.error(
             "[useGroupSocket] Error handling forceUpdateConversations event:",
             error,
           );
           // Fallback to forceUpdate if anything fails
-          useConversationsStore.getState().forceUpdate();
+          throttledForceUpdate();
         }
       }, 300);
     });
@@ -899,40 +907,14 @@ export const useGroupSocket = () => {
         `[useGroupSocket] Received ${eventName} event, refreshing data...`,
       );
 
-      // Chỉ tải lại danh sách cuộc trò chuyện nếu đã quá thời gian throttle
+      // Chỉ cập nhật UI và nhóm được chọn mà không tải lại danh sách cuộc trò chuyện
       setTimeout(async () => {
         try {
           // Cập nhật nhóm được chọn nếu có
           await refreshSelectedGroup();
 
-          const now = Date.now();
-          if (currentUser?.id && now - lastApiCallTimestamp > API_THROTTLE_MS) {
-            console.log(
-              `[useGroupSocket] Throttled API call for ${eventName} event`,
-            );
-            // Cập nhật UI trước khi gọi API
-            useConversationsStore.getState().forceUpdate();
-
-            // Tải lại danh sách cuộc trò chuyện từ API
-            await useConversationsStore
-              .getState()
-              .loadConversations(currentUser.id);
-            console.log(
-              `[useGroupSocket] Conversations reloaded after ${eventName} event`,
-            );
-
-            // Cập nhật timestamp
-            lastApiCallTimestamp = now;
-
-            // Đảm bảo UI được cập nhật
-            useConversationsStore.getState().forceUpdate();
-          } else {
-            console.log(
-              `[useGroupSocket] Skipping API call for ${eventName} event due to throttling`,
-            );
-            // Vẫn cập nhật UI
-            useConversationsStore.getState().forceUpdate();
-          }
+          // Chỉ cập nhật UI mà không gọi API
+          throttledForceUpdate();
         } catch (error) {
           console.error(
             `[useGroupSocket] Error handling ${eventName} event:`,
@@ -969,46 +951,14 @@ export const useGroupSocket = () => {
           );
           socket.emit("broadcastReload");
 
-          // Chỉ tải lại danh sách cuộc trò chuyện nếu đã quá thời gian throttle
-          const now = Date.now();
-          if (currentUser?.id && now - lastApiCallTimestamp > API_THROTTLE_MS) {
-            console.log(
-              "[useGroupSocket] Reloading conversations after reconnect",
-            );
+          // Chỉ cập nhật UI và nhóm được chọn mà không tải lại danh sách cuộc trò chuyện
+          console.log("[useGroupSocket] Updating UI after reconnect");
 
-            // Cập nhật UI trước khi gọi API
-            useConversationsStore.getState().forceUpdate();
+          // Cập nhật UI
+          throttledForceUpdate();
 
-            // Tải lại danh sách cuộc trò chuyện từ API
-            useConversationsStore
-              .getState()
-              .loadConversations(currentUser.id)
-              .then(() => {
-                console.log(
-                  "[useGroupSocket] Conversations reloaded after reconnect",
-                );
-                lastApiCallTimestamp = now;
-                useConversationsStore.getState().forceUpdate();
-
-                // Cập nhật nhóm được chọn nếu có
-                refreshSelectedGroup();
-              })
-              .catch((error) => {
-                console.error(
-                  "[useGroupSocket] Error reloading conversations after reconnect:",
-                  error,
-                );
-              });
-          } else {
-            console.log(
-              "[useGroupSocket] Skipping API call after reconnect due to throttling",
-            );
-            // Vẫn cập nhật UI
-            useConversationsStore.getState().forceUpdate();
-
-            // Cập nhật nhóm được chọn nếu có
-            refreshSelectedGroup();
-          }
+          // Cập nhật nhóm được chọn nếu có
+          refreshSelectedGroup();
         }
       }, 1000);
     });

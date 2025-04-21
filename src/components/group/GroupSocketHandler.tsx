@@ -381,7 +381,6 @@ export default function GroupSocketHandler() {
         // const groupName = data.group?.name || "mới";
         // toast.success(`Bạn đã được thêm vào nhóm ${groupName}`);
 
-        // Không cần gọi loadConversations, chỉ cần forceUpdate để cập nhật UI
         setTimeout(() => {
           useConversationsStore.getState().forceUpdate();
         }, 0);
@@ -463,7 +462,7 @@ export default function GroupSocketHandler() {
                 console.log(
                   "[GroupSocketHandler] Current user is a member of the new group, adding to conversations",
                 );
-                // Không cần gọi loadConversations, chỉ cần forceUpdate để cập nhật UI
+
                 setTimeout(() => {
                   useConversationsStore.getState().forceUpdate();
                 }, 0);
@@ -491,7 +490,6 @@ export default function GroupSocketHandler() {
           "[GroupSocketHandler] User was added to a group, updating group list",
         );
 
-        // Không cần gọi loadConversations, chỉ cần forceUpdate để cập nhật UI
         setTimeout(() => {
           useConversationsStore.getState().forceUpdate();
         }, 0);
@@ -659,8 +657,6 @@ export default function GroupSocketHandler() {
           }, 0);
         }
       }
-
-      // Không cần gọi loadConversations, đã có forceUpdate ở trên
     };
 
     // Register event handlers - both our custom events and backend events

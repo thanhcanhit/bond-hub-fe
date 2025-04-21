@@ -1232,8 +1232,6 @@ export const useConversationsStore = create<ConversationsState>()(
               );
             }, 0);
 
-            // Không cần gọi loadConversations vì đã xóa nhóm khỏi danh sách cuộc trò chuyện
-
             return true;
           } else {
             const displayName = groupName || groupId;

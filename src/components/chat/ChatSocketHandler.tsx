@@ -769,7 +769,6 @@ export default function ChatSocketHandler() {
           "[ChatSocketHandler] User was added to a group, updating group list",
         );
 
-        // Không cần gọi loadConversations, chỉ cần forceUpdate để cập nhật UI
         setTimeout(() => {
           useConversationsStore.getState().forceUpdate();
         }, 0);
@@ -790,7 +789,6 @@ export default function ChatSocketHandler() {
 
       // Không xử lý sự kiện group_dissolved ở đây vì đã được xử lý trong GroupSocketHandler
       if (data.action === "group_created" || data.action === "member_removed") {
-        // Không cần gọi loadConversations, chỉ cần forceUpdate để cập nhật UI
         setTimeout(() => {
           useConversationsStore.getState().forceUpdate();
         }, 0);
