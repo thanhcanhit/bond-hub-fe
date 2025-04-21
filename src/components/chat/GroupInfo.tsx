@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Group, User, UserInfo, Media, GroupRole } from "@/types/base";
 import { getLinkIcon, getLinkTitle } from "@/utils/link-utils";
 import MediaViewer from "@/components/media/MediaViewer";
-import { useGroupSocket } from "@/hooks/useGroupSocket";
+//import { useGroupSocket } from "@/hooks/useGroupSocket";
 import {
   X,
   Users,
@@ -169,7 +169,7 @@ export default function GroupInfo({
 
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
-  const groupSocket = useGroupSocket();
+  // const groupSocket = useGroupSocket();
   const [forceUpdate, setForceUpdate] = useState(0);
 
   // Hàm cập nhật danh sách thành viên (sử dụng useCallback để tránh tạo hàm mới mỗi khi render)
