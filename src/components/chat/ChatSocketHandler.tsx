@@ -766,49 +766,15 @@ export default function ChatSocketHandler() {
           "[ChatSocketHandler] User was added to a group, updating group list",
         );
 
-        // Reload conversations to get the new group
-        if (currentUser?.id) {
-          useConversationsStore.getState().loadConversations(currentUser.id);
-        }
-      } else if (data.action === "removed_from_group") {
-        console.log(
-          "[ChatSocketHandler] User was removed from a group, updating group list",
-        );
-
-        // Remove the group from conversations
-        useConversationsStore.getState().removeConversation(data.groupId);
-
-        // If this is the currently selected group, navigate away
-        if (selectedGroup && selectedGroup.id === data.groupId) {
-          useChatStore.getState().setSelectedGroup(null);
-        }
-
-        // Clear chat messages for this group
-        useChatStore.getState().clearChatCache("GROUP", data.groupId);
-
-        // Show notification
-        toast.info("Bạn đã bị xóa khỏi nhóm hoặc đã rời nhóm");
-      } else if (data.action === "group_dissolved") {
-        console.log(
-          "[ChatSocketHandler] Group was dissolved, updating group list",
-        );
-
-        // Remove the group from conversations
-        useConversationsStore.getState().removeConversation(data.groupId);
-
-        // If this is the currently selected group, navigate away
-        if (selectedGroup && selectedGroup.id === data.groupId) {
-          useChatStore.getState().setSelectedGroup(null);
-        }
-
-        // Clear chat messages for this group
-        useChatStore.getState().clearChatCache("GROUP", data.groupId);
-
-        // Show notification
-        toast.info("Nhóm đã bị giải tán bởi quản trị viên");
+        // Không cần gọi loadConversations, chỉ cần forceUpdate để cập nhật UI
+        setTimeout(() => {
+          useConversationsStore.getState().forceUpdate();
+        }, 0);
       }
+      // Không xử lý các sự kiện removed_from_group và group_dissolved ở đây
+      // vì đã được xử lý trong GroupSocketHandler
     },
-    [currentUser, selectedGroup],
+    [currentUser],
   );
 
   // Handle updateConversationList event
@@ -819,29 +785,15 @@ export default function ChatSocketHandler() {
         data,
       );
 
-      if (data.action === "group_dissolved") {
-        console.log(
-          "[ChatSocketHandler] Group was dissolved, updating conversation list",
-        );
-
-        // Remove the group from conversations
-        useConversationsStore.getState().removeConversation(data.groupId);
-
-        // If this is the currently selected group, navigate away
-        if (selectedGroup && selectedGroup.id === data.groupId) {
-          useChatStore.getState().setSelectedGroup(null);
-        }
-      } else if (
-        data.action === "group_created" ||
-        data.action === "member_removed"
-      ) {
-        // Reload conversations to get updated list
-        if (currentUser?.id) {
-          useConversationsStore.getState().loadConversations(currentUser.id);
-        }
+      // Không xử lý sự kiện group_dissolved ở đây vì đã được xử lý trong GroupSocketHandler
+      if (data.action === "group_created" || data.action === "member_removed") {
+        // Không cần gọi loadConversations, chỉ cần forceUpdate để cập nhật UI
+        setTimeout(() => {
+          useConversationsStore.getState().forceUpdate();
+        }, 0);
       }
     },
-    [currentUser, selectedGroup],
+    [currentUser],
   );
 
   // Send typing indicator

@@ -1232,16 +1232,7 @@ export const useConversationsStore = create<ConversationsState>()(
               );
             }, 0);
 
-            // Also reload conversations to ensure we have the latest data
-            const currentUser = useAuthStore.getState().user;
-            if (currentUser?.id) {
-              setTimeout(() => {
-                console.log(
-                  `[conversationsStore] Reloading conversations after removal from group ${displayName} (${groupId})`,
-                );
-                get().loadConversations(currentUser.id);
-              }, 100);
-            }
+            // Không cần gọi loadConversations vì đã xóa nhóm khỏi danh sách cuộc trò chuyện
 
             return true;
           } else {

@@ -104,35 +104,35 @@ export const useGroupSocket = () => {
     window.triggerGroupsReload = triggerGroupsReload;
   }
 
-  // Polling interval for conversation updates (in milliseconds)
-  const POLLING_INTERVAL = 10000; // 10 seconds
+  // Polling interval for conversation updates (in milliseconds) - DISABLED
+  // const POLLING_INTERVAL = 10000; // 10 seconds
 
-  // Set up polling for conversation updates
-  useEffect(() => {
-    // Only set up polling if user is authenticated
-    if (!isAuthenticated || !currentUser?.id) {
-      return;
-    }
+  // Set up polling for conversation updates - DISABLED to prevent frequent reloading
+  // useEffect(() => {
+  //   // Only set up polling if user is authenticated
+  //   if (!isAuthenticated || !currentUser?.id) {
+  //     return;
+  //   }
 
-    console.log(
-      `[useGroupSocket] Setting up polling for conversation updates every ${POLLING_INTERVAL}ms`,
-    );
+  //   console.log(
+  //     `[useGroupSocket] Setting up polling for conversation updates every ${POLLING_INTERVAL}ms`,
+  //   );
 
-    // Function to poll for conversation updates
-    const pollConversations = () => {
-      console.log("[useGroupSocket] Polling for conversation updates");
-      useConversationsStore.getState().loadConversations(currentUser.id);
-    };
+  //   // Function to poll for conversation updates
+  //   const pollConversations = () => {
+  //     console.log("[useGroupSocket] Polling for conversation updates");
+  //     useConversationsStore.getState().loadConversations(currentUser.id);
+  //   };
 
-    // Set up interval for polling
-    const intervalId = setInterval(pollConversations, POLLING_INTERVAL);
+  //   // Set up interval for polling
+  //   const intervalId = setInterval(pollConversations, POLLING_INTERVAL);
 
-    // Clean up interval on unmount
-    return () => {
-      console.log("[useGroupSocket] Cleaning up polling interval");
-      clearInterval(intervalId);
-    };
-  }, [isAuthenticated, currentUser]);
+  //   // Clean up interval on unmount
+  //   return () => {
+  //     console.log("[useGroupSocket] Cleaning up polling interval");
+  //     clearInterval(intervalId);
+  //   };
+  // }, [isAuthenticated, currentUser]);
 
   useEffect(() => {
     // Only connect if user is authenticated and has a token
@@ -243,9 +243,12 @@ export const useGroupSocket = () => {
       // This event is sent directly to the user when they are added to a group
       if (currentUser?.id) {
         console.log(
-          "[useGroupSocket] Current user was added to a group, reloading conversations",
+          "[useGroupSocket] Current user was added to a group, updating UI",
         );
-        useConversationsStore.getState().loadConversations(currentUser.id);
+        // Không cần gọi loadConversations, chỉ cần forceUpdate để cập nhật UI
+        setTimeout(() => {
+          useConversationsStore.getState().forceUpdate();
+        }, 0);
 
         // Đã tắt toast thông báo khi được thêm vào nhóm
         // toast.success(`Bạn đã được thêm vào nhóm ${data.group?.name || "mới"}`);
@@ -254,12 +257,13 @@ export const useGroupSocket = () => {
 
     socket.on("groupCreated", (data) => {
       console.log("[useGroupSocket] Group created:", data);
-      // When a group is created, we need to load the user's conversations to get the new group
+      // When a group is created, we need to update the UI
       if (currentUser?.id) {
-        console.log(
-          "[useGroupSocket] Reloading conversations to get new group",
-        );
-        useConversationsStore.getState().loadConversations(currentUser.id);
+        console.log("[useGroupSocket] Updating UI to show new group");
+        // Không cần gọi loadConversations, chỉ cần forceUpdate để cập nhật UI
+        setTimeout(() => {
+          useConversationsStore.getState().forceUpdate();
+        }, 0);
       }
     });
 
@@ -433,15 +437,13 @@ export const useGroupSocket = () => {
           );
         }
 
-        // Tải lại danh sách cuộc trò chuyện sau một khoảng thời gian ngắn để đảm bảo UI được cập nhật
-        if (currentUser?.id) {
-          setTimeout(() => {
-            console.log(
-              `[useGroupSocket] Reloading conversations after removal from group ${data.groupId}`,
-            );
-            conversationsStore.loadConversations(currentUser.id);
-          }, 100);
-        }
+        // Đảm bảo UI được cập nhật ngay lập tức
+        setTimeout(() => {
+          console.log(
+            `[useGroupSocket] Forcing UI update after removal from group ${data.groupId}`,
+          );
+          conversationsStore.forceUpdate();
+        }, 0);
 
         // Leave the group room to stop receiving messages
         console.log(
@@ -491,66 +493,12 @@ export const useGroupSocket = () => {
     });
 
     // Backend uses groupDissolved instead of groupDeleted
+    // Chỉ xử lý việc rời khỏi phòng nhóm, phần xử lý chính được thực hiện trong GroupSocketHandler
     socket.on("groupDissolved", (data) => {
       console.log("[useGroupSocket] Group dissolved event received:", data);
-      console.log("[useGroupSocket] Group dissolved data type:", typeof data);
-      console.log(
-        "[useGroupSocket] Group dissolved data keys:",
-        Object.keys(data),
-      );
 
-      // Xóa nhóm khỏi danh sách cuộc trò chuyện
+      // Chỉ xử lý việc rời khỏi phòng nhóm
       if (data && data.groupId) {
-        console.log(
-          `[useGroupSocket] Removing dissolved group ${data.groupId} from conversations`,
-        );
-
-        // Nếu đang xem nhóm này, chuyển về trạng thái không chọn nhóm
-        const selectedGroup = useChatStore.getState().selectedGroup;
-        if (selectedGroup && selectedGroup.id === data.groupId) {
-          console.log(
-            `[useGroupSocket] Currently selected group was dissolved, clearing selection`,
-          );
-          useChatStore.getState().setSelectedGroup(null);
-        }
-
-        // Xóa tin nhắn của nhóm khỏi cache
-        useChatStore.getState().clearChatCache("GROUP", data.groupId);
-        console.log(
-          `[useGroupSocket] Cleared chat cache for dissolved group ${data.groupId}`,
-        );
-
-        // Hiển thị thông báo
-        const groupName = data.groupName || "chat";
-        toast.info(`Nhóm ${groupName} đã bị giải tán`);
-
-        // Xóa nhóm khỏi danh sách cuộc trò chuyện
-        const conversationsStore = useConversationsStore.getState();
-        const removed = conversationsStore.checkAndRemoveGroups(
-          data.groupId,
-          groupName,
-        );
-
-        if (removed) {
-          console.log(
-            `[useGroupSocket] Successfully removed dissolved group ${data.groupId} from conversations`,
-          );
-        } else {
-          console.log(
-            `[useGroupSocket] Dissolved group ${data.groupId} not found in conversations`,
-          );
-        }
-
-        // Tải lại danh sách cuộc trò chuyện sau một khoảng thời gian ngắn để đảm bảo UI được cập nhật
-        if (currentUser?.id) {
-          setTimeout(() => {
-            console.log(
-              `[useGroupSocket] Reloading conversations after group dissolution ${data.groupId}`,
-            );
-            conversationsStore.loadConversations(currentUser.id);
-          }, 100);
-        }
-
         // Leave the group room to stop receiving messages
         console.log(
           `[useGroupSocket] Leaving group room: group:${data.groupId} via groupDissolved`,
@@ -559,78 +507,19 @@ export const useGroupSocket = () => {
           groupId: data.groupId,
           userId: currentUser?.id,
         });
-      } else {
-        console.error(
-          "[useGroupSocket] Invalid groupDissolved event data:",
-          data,
-        );
       }
     });
 
     // For backward compatibility
+    // Chỉ xử lý việc rời khỏi phòng nhóm, phần xử lý chính được thực hiện trong GroupSocketHandler
     socket.on("groupDeleted", (data) => {
       console.log(
         "[useGroupSocket] Group deleted (legacy event) received:",
         data,
       );
-      console.log("[useGroupSocket] Group deleted data type:", typeof data);
-      console.log(
-        "[useGroupSocket] Group deleted data keys:",
-        Object.keys(data),
-      );
 
-      // Xử lý giống như groupDissolved
+      // Chỉ xử lý việc rời khỏi phòng nhóm
       if (data && data.groupId) {
-        console.log(
-          `[useGroupSocket] Removing deleted group ${data.groupId} from conversations`,
-        );
-
-        // Nếu đang xem nhóm này, chuyển về trạng thái không chọn nhóm
-        const selectedGroup = useChatStore.getState().selectedGroup;
-        if (selectedGroup && selectedGroup.id === data.groupId) {
-          console.log(
-            `[useGroupSocket] Currently selected group was deleted, clearing selection`,
-          );
-          useChatStore.getState().setSelectedGroup(null);
-        }
-
-        // Xóa tin nhắn của nhóm khỏi cache
-        useChatStore.getState().clearChatCache("GROUP", data.groupId);
-        console.log(
-          `[useGroupSocket] Cleared chat cache for deleted group ${data.groupId}`,
-        );
-
-        // Hiển thị thông báo
-        const groupName = data.groupName || "chat";
-        toast.info(`Nhóm ${groupName} đã bị xóa`);
-
-        // Xóa nhóm khỏi danh sách cuộc trò chuyện
-        const conversationsStore = useConversationsStore.getState();
-        const removed = conversationsStore.checkAndRemoveGroups(
-          data.groupId,
-          groupName,
-        );
-
-        if (removed) {
-          console.log(
-            `[useGroupSocket] Successfully removed deleted group ${data.groupId} from conversations`,
-          );
-        } else {
-          console.log(
-            `[useGroupSocket] Deleted group ${data.groupId} not found in conversations`,
-          );
-        }
-
-        // Tải lại danh sách cuộc trò chuyện sau một khoảng thời gian ngắn để đảm bảo UI được cập nhật
-        if (currentUser?.id) {
-          setTimeout(() => {
-            console.log(
-              `[useGroupSocket] Reloading conversations after group deletion ${data.groupId}`,
-            );
-            conversationsStore.loadConversations(currentUser.id);
-          }, 100);
-        }
-
         // Leave the group room to stop receiving messages
         console.log(
           `[useGroupSocket] Leaving group room: group:${data.groupId} via groupDeleted`,
@@ -639,66 +528,16 @@ export const useGroupSocket = () => {
           groupId: data.groupId,
           userId: currentUser?.id,
         });
-      } else {
-        console.error(
-          "[useGroupSocket] Invalid groupDeleted event data:",
-          data,
-        );
       }
     });
 
     // Listen for updateGroupList event
+    // Chỉ xử lý việc rời khỏi phòng nhóm và tải lại danh sách cuộc trò chuyện khi được thêm vào nhóm mới
     socket.on("updateGroupList", (data) => {
       console.log("[useGroupSocket] Update group list event received:", data);
 
       if (data.action === "removed_from_group" && data.groupId) {
-        console.log(
-          `[useGroupSocket] User was removed from group ${data.groupId}, updating group list`,
-        );
-
-        // Nếu đang xem nhóm này, chuyển về trạng thái không chọn nhóm
-        const selectedGroup = useChatStore.getState().selectedGroup;
-        if (selectedGroup && selectedGroup.id === data.groupId) {
-          console.log(
-            `[useGroupSocket] Clearing selected group ${data.groupId} via updateGroupList`,
-          );
-          useChatStore.getState().setSelectedGroup(null);
-        }
-
-        // Xóa tin nhắn của nhóm khỏi cache
-        useChatStore.getState().clearChatCache("GROUP", data.groupId);
-        console.log(
-          `[useGroupSocket] Cleared chat cache for group ${data.groupId} via updateGroupList`,
-        );
-
-        // Hiển thị thông báo
-        toast.info(`Bạn đã bị xóa khỏi một nhóm`);
-
-        // Xóa nhóm khỏi danh sách cuộc trò chuyện
-        const conversationsStore = useConversationsStore.getState();
-        const removed = conversationsStore.checkAndRemoveGroups(data.groupId);
-
-        if (removed) {
-          console.log(
-            `[useGroupSocket] Successfully removed group ${data.groupId} from conversations via updateGroupList`,
-          );
-        } else {
-          console.log(
-            `[useGroupSocket] Group ${data.groupId} not found in conversations via updateGroupList`,
-          );
-        }
-
-        // Tải lại danh sách cuộc trò chuyện sau một khoảng thời gian ngắn để đảm bảo UI được cập nhật
-        if (currentUser?.id) {
-          setTimeout(() => {
-            console.log(
-              `[useGroupSocket] Reloading conversations after removal from group ${data.groupId} via updateGroupList`,
-            );
-            conversationsStore.loadConversations(currentUser.id);
-          }, 100);
-        }
-
-        // Leave the group room to stop receiving messages
+        // Chỉ xử lý việc rời khỏi phòng nhóm
         console.log(
           `[useGroupSocket] Leaving group room: group:${data.groupId} via updateGroupList`,
         );
@@ -707,17 +546,16 @@ export const useGroupSocket = () => {
           userId: currentUser?.id,
         });
       } else if (data.action === "added_to_group") {
-        // Tải lại danh sách cuộc trò chuyện để lấy nhóm mới
-        if (currentUser?.id) {
-          console.log(
-            `[useGroupSocket] User was added to a group, reloading conversations`,
-          );
-          useConversationsStore.getState().loadConversations(currentUser.id);
-        }
+        // Cập nhật UI để hiển thị nhóm mới
+        console.log(`[useGroupSocket] User was added to a group, updating UI`);
+        setTimeout(() => {
+          useConversationsStore.getState().forceUpdate();
+        }, 0);
       }
     });
 
     // Listen for updateConversationList event
+    // Chỉ xử lý việc rời khỏi phòng nhóm, phần xử lý chính được thực hiện trong GroupSocketHandler
     socket.on("updateConversationList", (data) => {
       console.log(
         "[useGroupSocket] Update conversation list event received:",
@@ -725,57 +563,7 @@ export const useGroupSocket = () => {
       );
 
       if (data.action === "group_dissolved" && data.groupId) {
-        console.log(
-          `[useGroupSocket] Group ${data.groupId} was dissolved, updating conversation list`,
-        );
-
-        // Nếu đang xem nhóm này, chuyển về trạng thái không chọn nhóm
-        const selectedGroup = useChatStore.getState().selectedGroup;
-        if (selectedGroup && selectedGroup.id === data.groupId) {
-          console.log(
-            `[useGroupSocket] Clearing selected dissolved group ${data.groupId}`,
-          );
-          useChatStore.getState().setSelectedGroup(null);
-        }
-
-        // Xóa tin nhắn của nhóm khỏi cache
-        useChatStore.getState().clearChatCache("GROUP", data.groupId);
-        console.log(
-          `[useGroupSocket] Cleared chat cache for dissolved group ${data.groupId}`,
-        );
-
-        // Hiển thị thông báo
-        const groupName = data.groupName || "chat";
-        toast.info(`Nhóm ${groupName} đã bị giải tán`);
-
-        // Xóa nhóm khỏi danh sách cuộc trò chuyện
-        const conversationsStore = useConversationsStore.getState();
-        const removed = conversationsStore.checkAndRemoveGroups(
-          data.groupId,
-          groupName,
-        );
-
-        if (removed) {
-          console.log(
-            `[useGroupSocket] Successfully removed dissolved group ${data.groupId} from conversations via updateConversationList`,
-          );
-        } else {
-          console.log(
-            `[useGroupSocket] Dissolved group ${data.groupId} not found in conversations via updateConversationList`,
-          );
-        }
-
-        // Tải lại danh sách cuộc trò chuyện sau một khoảng thời gian ngắn để đảm bảo UI được cập nhật
-        if (currentUser?.id) {
-          setTimeout(() => {
-            console.log(
-              `[useGroupSocket] Reloading conversations after group dissolution ${data.groupId} via updateConversationList`,
-            );
-            conversationsStore.loadConversations(currentUser.id);
-          }, 100);
-        }
-
-        // Leave the group room to stop receiving messages
+        // Chỉ xử lý việc rời khỏi phòng nhóm
         console.log(
           `[useGroupSocket] Leaving group room: group:${data.groupId} via updateConversationList`,
         );
@@ -787,57 +575,7 @@ export const useGroupSocket = () => {
         data.action === "member_removed" &&
         data.userId === currentUser?.id
       ) {
-        console.log(
-          `[useGroupSocket] Current user was removed from group ${data.groupId}, updating conversation list via updateConversationList`,
-        );
-
-        // Nếu đang xem nhóm này, chuyển về trạng thái không chọn nhóm
-        const selectedGroup = useChatStore.getState().selectedGroup;
-        if (selectedGroup && selectedGroup.id === data.groupId) {
-          console.log(
-            `[useGroupSocket] Clearing selected group ${data.groupId} via updateConversationList`,
-          );
-          useChatStore.getState().setSelectedGroup(null);
-        }
-
-        // Xóa tin nhắn của nhóm khỏi cache
-        useChatStore.getState().clearChatCache("GROUP", data.groupId);
-        console.log(
-          `[useGroupSocket] Cleared chat cache for group ${data.groupId} via updateConversationList`,
-        );
-
-        // Hiển thị thông báo
-        const groupName = data.groupName || "chat";
-        toast.info(`Bạn đã bị xóa khỏi nhóm ${groupName}`);
-
-        // Xóa nhóm khỏi danh sách cuộc trò chuyện
-        const conversationsStore = useConversationsStore.getState();
-        const removed = conversationsStore.checkAndRemoveGroups(
-          data.groupId,
-          groupName,
-        );
-
-        if (removed) {
-          console.log(
-            `[useGroupSocket] Successfully removed group ${data.groupId} from conversations via updateConversationList`,
-          );
-        } else {
-          console.log(
-            `[useGroupSocket] Group ${data.groupId} not found in conversations via updateConversationList`,
-          );
-        }
-
-        // Tải lại danh sách cuộc trò chuyện sau một khoảng thời gian ngắn để đảm bảo UI được cập nhật
-        if (currentUser?.id) {
-          setTimeout(() => {
-            console.log(
-              `[useGroupSocket] Reloading conversations after removal from group ${data.groupId} via updateConversationList`,
-            );
-            conversationsStore.loadConversations(currentUser.id);
-          }, 100);
-        }
-
-        // Leave the group room to stop receiving messages
+        // Chỉ xử lý việc rời khỏi phòng nhóm
         console.log(
           `[useGroupSocket] Leaving group room: group:${data.groupId} via updateConversationList`,
         );
@@ -849,6 +587,7 @@ export const useGroupSocket = () => {
     });
 
     // Handle direct user events
+    // Chỉ xử lý việc rời khỏi phòng nhóm, phần xử lý chính được thực hiện trong GroupSocketHandler
     socket.on("directUserEvent", (data) => {
       console.log("[useGroupSocket] Direct user event received:", data);
 
@@ -862,7 +601,7 @@ export const useGroupSocket = () => {
           `[useGroupSocket] Processing direct event ${data.eventName} for current user`,
         );
 
-        // Directly process the event data without using handlers
+        // Chỉ xử lý việc rời khỏi phòng nhóm
         if (
           data.eventName === "removedFromGroup" ||
           (data.eventName === "updateGroupList" &&
@@ -873,58 +612,6 @@ export const useGroupSocket = () => {
           // Extract common data
           const eventData = data.eventData as Record<string, unknown>;
           const groupId = eventData.groupId as string;
-          const groupName = (eventData.groupName as string) || "chat";
-
-          console.log(
-            `[useGroupSocket] Processing removal from group ${groupId} via directUserEvent`,
-          );
-
-          // Force immediate removal of the group from conversations
-          const conversationsStore = useConversationsStore.getState();
-
-          // If this is the currently selected group, clear selection
-          const selectedGroup = useChatStore.getState().selectedGroup;
-          if (selectedGroup && selectedGroup.id === groupId) {
-            console.log(
-              `[useGroupSocket] Clearing selected group ${groupId} via directUserEvent`,
-            );
-            useChatStore.getState().setSelectedGroup(null);
-          }
-
-          // Clear chat messages for this group
-          useChatStore.getState().clearChatCache("GROUP", groupId);
-          console.log(
-            `[useGroupSocket] Cleared chat cache for group ${groupId} via directUserEvent`,
-          );
-
-          // Show notification
-          toast.info(`Bạn đã bị xóa khỏi nhóm ${groupName}`);
-
-          // Use the checkAndRemoveGroups function to remove the group from conversations
-          const removed = conversationsStore.checkAndRemoveGroups(
-            groupId,
-            groupName,
-          );
-
-          if (removed) {
-            console.log(
-              `[useGroupSocket] Successfully removed group ${groupId} from conversations via directUserEvent`,
-            );
-          } else {
-            console.log(
-              `[useGroupSocket] Group ${groupId} not found in conversations via directUserEvent`,
-            );
-          }
-
-          // Reload conversations after a short delay to ensure UI is updated
-          if (currentUser?.id) {
-            setTimeout(() => {
-              console.log(
-                `[useGroupSocket] Reloading conversations after removal from group ${groupId} via directUserEvent`,
-              );
-              conversationsStore.loadConversations(currentUser.id);
-            }, 100);
-          }
 
           // Leave the group room to stop receiving messages
           console.log(
@@ -936,37 +623,30 @@ export const useGroupSocket = () => {
     });
 
     // Handle forceUpdateConversations event
+    // Chỉ xử lý việc cập nhật UI, không gọi loadConversations
     socket.on("forceUpdateConversations", (data) => {
       console.log(
         "[useGroupSocket] Received forceUpdateConversations event:",
         data,
       );
 
-      // Force reload conversations immediately
-      if (currentUser?.id) {
-        console.log(
-          "[useGroupSocket] Forcing immediate reload of conversations",
-        );
-        useConversationsStore.getState().loadConversations(currentUser.id);
+      // Force UI update
+      setTimeout(() => {
+        useConversationsStore.getState().forceUpdate();
+      }, 0);
 
-        // Also force UI update
-        setTimeout(() => {
-          useConversationsStore.getState().forceUpdate();
-        }, 0);
-
-        // If this is related to a group removal, check if we need to clear selection
-        if (data && data.groupId) {
-          const selectedGroup = useChatStore.getState().selectedGroup;
-          if (selectedGroup && selectedGroup.id === data.groupId) {
-            console.log(
-              `[useGroupSocket] Clearing selected group ${data.groupId} via forceUpdateConversations`,
-            );
-            useChatStore.getState().setSelectedGroup(null);
-          }
-
-          // Clear chat messages for this group
-          useChatStore.getState().clearChatCache("GROUP", data.groupId);
+      // If this is related to a group removal, check if we need to clear selection
+      if (data && data.groupId) {
+        const selectedGroup = useChatStore.getState().selectedGroup;
+        if (selectedGroup && selectedGroup.id === data.groupId) {
+          console.log(
+            `[useGroupSocket] Clearing selected group ${data.groupId} via forceUpdateConversations`,
+          );
+          useChatStore.getState().setSelectedGroup(null);
         }
+
+        // Clear chat messages for this group
+        useChatStore.getState().clearChatCache("GROUP", data.groupId);
       }
     });
 

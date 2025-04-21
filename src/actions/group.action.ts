@@ -278,32 +278,57 @@ export async function deleteGroup(groupId: string, deletedById?: string) {
 
     await axiosInstance.delete(`/groups/${groupId}`);
 
-    // Emit group deleted event - use both our custom event name and backend event name
-    emitGroupEvent("groupDeleted", {
-      groupId,
-      deletedById: deletedById || "unknown",
-      timestamp: new Date(),
-      groupName, // Include group name in the event
-    });
-
-    // Also emit the backend event name with đúng cấu trúc dữ liệu
+    // Chỉ phát một sự kiện duy nhất để tránh gửi quá nhiều request
+    // Sử dụng tên sự kiện của backend để đảm bảo tương thích
+    console.log(
+      `[group.action] Emitting single groupDissolved event for group ${groupId}`,
+    );
     emitGroupEvent("groupDissolved", {
       groupId,
-      dissolvedBy: deletedById || "unknown", // Backend sử dụng dissolvedBy thay vì deletedById
+      dissolvedBy: deletedById || "unknown",
       timestamp: new Date(),
-      groupName, // Include group name in the event
+      groupName,
+      // Thêm các trường cần thiết để đảm bảo tất cả các handler đều có thể xử lý
+      action: "group_dissolved",
+      deletedById: deletedById || "unknown",
     });
 
-    // Emit additional events for better UI handling
-    // Emit updateConversationList event to ensure frontend updates the conversation list
-    if (deletedById) {
-      emitGroupEvent("updateConversationList", {
-        action: "group_dissolved",
-        groupId,
-        groupName,
-        dissolvedBy: deletedById,
-        timestamp: new Date(),
-      });
+    // Cập nhật UI ngay lập tức
+    if (typeof window !== "undefined") {
+      // Sử dụng import động
+      import("@/stores/conversationsStore").then(
+        ({ useConversationsStore }) => {
+          import("@/stores/authStore").then(({ useAuthStore }) => {
+            import("@/stores/chatStore").then(({ useChatStore }) => {
+              const currentUser = useAuthStore.getState().user;
+              const selectedGroup = useChatStore.getState().selectedGroup;
+
+              // Nếu đang xem nhóm này, xóa selection
+              if (selectedGroup && selectedGroup.id === groupId) {
+                useChatStore.getState().setSelectedGroup(null);
+              }
+
+              // Xóa cache
+              useChatStore.getState().clearChatCache("GROUP", groupId);
+
+              // Xóa nhóm khỏi danh sách cuộc trò chuyện
+              useConversationsStore.getState().removeConversation(groupId);
+
+              // Force update UI
+              useConversationsStore.getState().forceUpdate();
+
+              // Tải lại danh sách cuộc trò chuyện sau một khoảng thời gian ngắn
+              if (currentUser?.id) {
+                setTimeout(() => {
+                  useConversationsStore
+                    .getState()
+                    .loadConversations(currentUser.id);
+                }, 300);
+              }
+            });
+          });
+        },
+      );
     }
 
     return { success: true };

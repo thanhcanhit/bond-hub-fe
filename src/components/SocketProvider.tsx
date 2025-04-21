@@ -1,25 +1,17 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import { useSocketConnection } from "@/hooks/useSocketConnection";
-import { useUserDataSync } from "@/hooks/useUserDataSync";
 import { useAuthStore } from "@/stores/authStore";
 import { useFriendSocket } from "@/hooks/useFriendSocket";
 import { useGroupSocket } from "@/hooks/useGroupSocket";
 import ChatSocketHandler from "./chat/ChatSocketHandler";
 import GroupSocketHandler from "./group/GroupSocketHandler";
-import GroupDissolvedHandler from "./group/GroupDissolvedHandler";
 
 // Sử dụng memo để tránh re-render không cần thiết
 function SocketProvider({ children }: { children: React.ReactNode }) {
   // Sử dụng selector để chỉ lấy giá trị cần thiết, tránh re-render khi các giá trị khác thay đổi
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-
-  // Sử dụng useMemo để tính toán interval chỉ khi cần thiết
-  const syncInterval = useMemo(() => {
-    // Tăng interval lên 60 giây để giảm tải server
-    return 60000; // 60 giây
-  }, []);
 
   // Chỉ khởi tạo socket connection nếu đã đăng nhập
   useSocketConnection(isAuthenticated);
@@ -30,9 +22,8 @@ function SocketProvider({ children }: { children: React.ReactNode }) {
   // Khởi tạo kết nối socket cho namespace /groups để lắng nghe sự kiện nhóm
   useGroupSocket();
 
-  // Đồng bộ dữ liệu người dùng từ database với interval dài hơn
-  // Chỉ hoạt động khi đã đăng nhập
-  useUserDataSync(syncInterval, isAuthenticated);
+  // Tạm thời tắt đồng bộ dữ liệu người dùng để tránh gọi API quá nhiều
+  // Đã xóa useUserDataSync để giảm số lượng API calls
 
   // Trả về các socket handlers và children
   return (
@@ -41,7 +32,6 @@ function SocketProvider({ children }: { children: React.ReactNode }) {
         <>
           <ChatSocketHandler />
           <GroupSocketHandler />
-          <GroupDissolvedHandler />
         </>
       )}
       {children}
