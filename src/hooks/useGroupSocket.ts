@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { Socket, io } from "socket.io-client";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
@@ -26,7 +26,7 @@ export const useGroupSocket = () => {
   const conversations = useConversationsStore((state) => state.conversations);
 
   // Function to refresh all group data
-  const refreshAllGroupData = async () => {
+  const refreshAllGroupData = useCallback(async () => {
     console.log("[useGroupSocket] Refreshing all group data");
 
     // Refresh the currently selected group if any
@@ -60,7 +60,7 @@ export const useGroupSocket = () => {
         }
       }
     }
-  };
+  }, [conversations, refreshSelectedGroup, updateConversation]);
 
   // Function to manually trigger a reload of all groups
   const triggerGroupsReload = () => {
@@ -206,6 +206,80 @@ export const useGroupSocket = () => {
     socket.on("memberRemoved", (data) => {
       console.log("[useGroupSocket] Member removed from group:", data);
       refreshAllGroupData();
+    });
+
+    // Listen for removedFromGroup event (when current user is removed from a group)
+    socket.on("removedFromGroup", (data) => {
+      console.log(
+        "[useGroupSocket] User removed from group event received:",
+        data,
+      );
+      console.log(
+        "[useGroupSocket] Removed from group data type:",
+        typeof data,
+      );
+      console.log(
+        "[useGroupSocket] Removed from group data keys:",
+        Object.keys(data),
+      );
+
+      // Make sure we have a groupId
+      if (data && data.groupId) {
+        console.log(
+          `[useGroupSocket] Processing removal from group ${data.groupId}`,
+        );
+
+        // Kiểm tra xem nhóm có tồn tại trong danh sách cuộc trò chuyện không
+        const conversations = useConversationsStore.getState().conversations;
+        const groupExists = conversations.some(
+          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+        );
+
+        console.log(
+          `[useGroupSocket] Group ${data.groupId} exists in conversations: ${groupExists}`,
+        );
+
+        if (groupExists) {
+          // Xóa nhóm khỏi danh sách cuộc trò chuyện
+          useConversationsStore.getState().removeConversation(data.groupId);
+          console.log(
+            `[useGroupSocket] Group ${data.groupId} removed from conversations`,
+          );
+
+          // Nếu đang xem nhóm này, chuyển về trạng thái không chọn nhóm
+          const selectedGroup = useChatStore.getState().selectedGroup;
+          if (selectedGroup && selectedGroup.id === data.groupId) {
+            console.log(
+              `[useGroupSocket] Currently selected group was left, clearing selection`,
+            );
+            useChatStore.getState().setSelectedGroup(null);
+          }
+
+          // Hiển thị thông báo phù hợp
+          const groupName = data.groupName || "chat";
+          if (data.kicked) {
+            toast.info(`Bạn đã bị xóa khỏi nhóm ${groupName}`);
+          } else if (data.left) {
+            toast.info(`Bạn đã rời khỏi nhóm ${groupName}`);
+          } else {
+            toast.info(`Bạn không còn là thành viên của nhóm ${groupName}`);
+          }
+
+          // Tải lại danh sách cuộc trò chuyện để đảm bảo UI được cập nhật
+          if (currentUser?.id) {
+            setTimeout(() => {
+              useConversationsStore
+                .getState()
+                .loadConversations(currentUser.id);
+            }, 500);
+          }
+        }
+      } else {
+        console.error(
+          "[useGroupSocket] Invalid removedFromGroup event data:",
+          data,
+        );
+      }
     });
 
     // Backend uses roleChanged instead of memberRoleUpdated
@@ -408,6 +482,7 @@ export const useGroupSocket = () => {
         socket.off("groupUpdated");
         socket.off("memberAdded");
         socket.off("memberRemoved");
+        socket.off("removedFromGroup");
         socket.off("roleChanged");
         socket.off("avatarUpdated");
         socket.off("groupDissolved");
@@ -439,6 +514,8 @@ export const useGroupSocket = () => {
     currentUser,
     refreshSelectedGroup,
     updateConversation,
+    conversations,
+    refreshAllGroupData,
   ]);
 
   return socketRef.current;

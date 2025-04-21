@@ -893,9 +893,7 @@ export const useConversationsStore = create<ConversationsState>()(
         if (!currentUser) return undefined;
 
         // Determine if this is a user or group message
-        const isGroupMessage =
-          message.messageType === MessageType.GROUP ||
-          (message.groupId && !message.receiverId);
+        const isGroupMessage = message.messageType === MessageType.GROUP;
 
         if (isGroupMessage && message.groupId) {
           // Find group conversation
@@ -903,7 +901,7 @@ export const useConversationsStore = create<ConversationsState>()(
             (conv) =>
               conv.type === "GROUP" && conv.group?.id === message.groupId,
           );
-        } else if (!isGroupMessage) {
+        } else {
           // For user messages, find the conversation with the other user
           const otherUserId =
             message.senderId === currentUser.id
@@ -916,13 +914,6 @@ export const useConversationsStore = create<ConversationsState>()(
             (conv) => conv.type === "USER" && conv.contact.id === otherUserId,
           );
         }
-
-        // If we can't determine the conversation type, log and return undefined
-        console.log(
-          `[conversationsStore] Could not determine conversation type for message:`,
-          message,
-        );
-        return undefined;
       },
 
       // Utility function to check if a message is newer than the last message in a conversation
@@ -943,9 +934,7 @@ export const useConversationsStore = create<ConversationsState>()(
         if (!currentUser) return;
 
         // Determine if this is a user or group message
-        const isGroupMessage =
-          message.messageType === MessageType.GROUP ||
-          (message.groupId && !message.receiverId);
+        const isGroupMessage = message.messageType === MessageType.GROUP;
 
         if (isGroupMessage && message.groupId && message.group) {
           // Check if group conversation exists
@@ -1013,8 +1002,7 @@ export const useConversationsStore = create<ConversationsState>()(
               type: "GROUP",
             });
           }
-        } else if (!isGroupMessage) {
-          // Only create user conversation if it's not a group message
+        } else {
           // Handle user conversation
           const contactId =
             message.senderId === currentUser.id
@@ -1075,10 +1063,6 @@ export const useConversationsStore = create<ConversationsState>()(
                 });
             }
           }
-        } else {
-          console.log(
-            `[conversationsStore] Message type not properly identified, skipping conversation creation`,
-          );
         }
       },
 

@@ -1,80 +1,158 @@
 "use client";
 
-// Đợi backend cập nhật
-// import { useEffect } from "react";
-// import { useAuthStore } from "@/stores/authStore";
-// import { useConversationsStore } from "@/stores/conversationsStore";
-// import { useChatStore } from "@/stores/chatStore";
-// import { toast } from "sonner";
+import { useEffect } from "react";
+import { useAuthStore } from "@/stores/authStore";
+import { useConversationsStore } from "@/stores/conversationsStore";
+import { useChatStore } from "@/stores/chatStore";
+import { toast } from "sonner";
+import { useGroupSocket } from "@/hooks/useGroupSocket";
 
 /**
  * Component to handle group dissolved events
  * This is a separate component to ensure that group dissolved events are handled properly
  * even if other socket handlers fail
- *
- * Đợi backend cập nhật
  */
 export default function GroupDissolvedHandler() {
-  // Đợi backend cập nhật
-  // const currentUser = useAuthStore((state) => state.user);
-  // const removeConversation = useConversationsStore((state) => state.removeConversation);
-  // const loadConversations = useConversationsStore((state) => state.loadConversations);
-  // const selectedGroup = useChatStore((state) => state.selectedGroup);
-  // const setSelectedGroup = useChatStore((state) => state.setSelectedGroup);
+  const currentUser = useAuthStore((state) => state.user);
+  const removeConversation = useConversationsStore(
+    (state) => state.removeConversation,
+  );
+  const loadConversations = useConversationsStore(
+    (state) => state.loadConversations,
+  );
+  const selectedGroup = useChatStore((state) => state.selectedGroup);
+  const setSelectedGroup = useChatStore((state) => state.setSelectedGroup);
+  const groupSocket = useGroupSocket();
 
-  // useEffect(() => {
-  //   // Get the group socket from window object
-  //   const groupSocket = window.groupSocket;
-  //   if (!groupSocket || !currentUser) return;
+  useEffect(() => {
+    if (!groupSocket || !currentUser) return;
 
-  //   // Handler for groupDissolved event
-  //   const handleGroupDissolved = (data: any) => {
-  //     console.log('[GroupDissolvedHandler] Group dissolved event received:', data);
-  //     console.log('[GroupDissolvedHandler] Group dissolved data type:', typeof data);
-  //     console.log('[GroupDissolvedHandler] Group dissolved data keys:', Object.keys(data));
+    // Handler for groupDissolved event
+    const handleGroupDissolved = (data: Record<string, unknown>) => {
+      console.log(
+        "[GroupDissolvedHandler] Group dissolved event received:",
+        data,
+      );
+      console.log(
+        "[GroupDissolvedHandler] Group dissolved data type:",
+        typeof data,
+      );
+      console.log(
+        "[GroupDissolvedHandler] Group dissolved data keys:",
+        Object.keys(data),
+      );
 
-  //     // Make sure we have a groupId
-  //     const groupId = data.groupId;
-  //     if (!groupId) {
-  //       console.error('[GroupDissolvedHandler] Invalid groupDissolved event data:', data);
-  //       return;
-  //     }
+      // Make sure we have a groupId
+      const groupId = data.groupId as string;
+      if (!groupId) {
+        console.error(
+          "[GroupDissolvedHandler] Invalid groupDissolved event data:",
+          data,
+        );
+        return;
+      }
 
-  //     console.log(`[GroupDissolvedHandler] Processing group dissolution for group ${groupId}`);
+      console.log(
+        `[GroupDissolvedHandler] Processing group dissolution for group ${groupId}`,
+      );
 
-  //     // Show toast notification
-  //     const groupName = data.groupName || "chat";
-  //     toast.info(`Nhóm ${groupName} đã bị giải tán`);
+      // Show toast notification
+      const groupName = (data.groupName as string) || "chat";
+      toast.info(`Nhóm ${groupName} đã bị giải tán`);
 
-  //     // If this is the currently selected group, clear selection
-  //     if (selectedGroup && selectedGroup.id === groupId) {
-  //       console.log(`[GroupDissolvedHandler] Currently selected group was dissolved, clearing selection`);
-  //       setSelectedGroup(null);
-  //     }
+      // If this is the currently selected group, clear selection
+      if (selectedGroup && selectedGroup.id === groupId) {
+        console.log(
+          `[GroupDissolvedHandler] Currently selected group was dissolved, clearing selection`,
+        );
+        setSelectedGroup(null);
+      }
 
-  //     // Remove this group from conversations
-  //     console.log(`[GroupDissolvedHandler] Removing dissolved group ${groupId} from conversations`);
-  //     removeConversation(groupId);
+      // Remove this group from conversations
+      console.log(
+        `[GroupDissolvedHandler] Removing dissolved group ${groupId} from conversations`,
+      );
+      removeConversation(groupId);
 
-  //     // Force reload conversations to ensure UI is updated
-  //     console.log(`[GroupDissolvedHandler] Forcing reload of conversations after group dissolution`);
-  //     setTimeout(() => {
-  //       if (currentUser?.id) {
-  //         loadConversations(currentUser.id);
-  //       }
-  //     }, 500);
-  //   };
+      // Force reload conversations to ensure UI is updated
+      console.log(
+        `[GroupDissolvedHandler] Forcing reload of conversations after group dissolution`,
+      );
+      setTimeout(() => {
+        if (currentUser?.id) {
+          loadConversations(currentUser.id);
+        }
+      }, 500);
+    };
 
-  //   // Register event handler
-  //   console.log('[GroupDissolvedHandler] Registering groupDissolved event handler');
-  //   groupSocket.on('groupDissolved', handleGroupDissolved);
+    // Handler for removedFromGroup event
+    const handleRemovedFromGroup = (data: Record<string, unknown>) => {
+      console.log(
+        "[GroupDissolvedHandler] Removed from group event received:",
+        data,
+      );
 
-  //   // Cleanup
-  //   return () => {
-  //     console.log('[GroupDissolvedHandler] Cleaning up groupDissolved event handler');
-  //     groupSocket.off('groupDissolved', handleGroupDissolved);
-  //   };
-  // }, [currentUser, selectedGroup, removeConversation, loadConversations, setSelectedGroup]);
+      // Make sure we have a groupId
+      const groupId = data.groupId as string;
+      if (!groupId) {
+        console.error(
+          "[GroupDissolvedHandler] Invalid removedFromGroup event data:",
+          data,
+        );
+        return;
+      }
+
+      // Show appropriate toast notification
+      const groupName = (data.groupName as string) || "chat";
+      if (data.kicked as boolean) {
+        toast.info(`Bạn đã bị xóa khỏi nhóm ${groupName}`);
+      } else if (data.left as boolean) {
+        toast.info(`Bạn đã rời khỏi nhóm ${groupName}`);
+      } else {
+        toast.info(`Bạn không còn là thành viên của nhóm ${groupName}`);
+      }
+
+      // If this is the currently selected group, clear selection
+      if (selectedGroup && selectedGroup.id === groupId) {
+        console.log(
+          `[GroupDissolvedHandler] Currently selected group was left, clearing selection`,
+        );
+        setSelectedGroup(null);
+      }
+
+      // Remove this group from conversations
+      console.log(
+        `[GroupDissolvedHandler] Removing group ${groupId} from conversations after being removed`,
+      );
+      removeConversation(groupId);
+
+      // Force reload conversations to ensure UI is updated
+      setTimeout(() => {
+        if (currentUser?.id) {
+          loadConversations(currentUser.id);
+        }
+      }, 500);
+    };
+
+    // Register event handlers
+    console.log("[GroupDissolvedHandler] Registering group event handlers");
+    groupSocket.on("groupDissolved", handleGroupDissolved);
+    groupSocket.on("removedFromGroup", handleRemovedFromGroup);
+
+    // Cleanup
+    return () => {
+      console.log("[GroupDissolvedHandler] Cleaning up group event handlers");
+      groupSocket.off("groupDissolved", handleGroupDissolved);
+      groupSocket.off("removedFromGroup", handleRemovedFromGroup);
+    };
+  }, [
+    currentUser,
+    selectedGroup,
+    removeConversation,
+    loadConversations,
+    setSelectedGroup,
+    groupSocket,
+  ]);
 
   // This component doesn't render anything
   return null;
