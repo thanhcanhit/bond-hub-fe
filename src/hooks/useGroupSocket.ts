@@ -37,11 +37,19 @@ export const useGroupSocket = () => {
       (conv) => conv.type === "GROUP",
     );
 
+    console.log(
+      `[useGroupSocket] Refreshing ${groupConversations.length} group conversations`,
+    );
+
     for (const conv of groupConversations) {
       if (conv.group?.id) {
         try {
+          console.log(`[useGroupSocket] Refreshing group ${conv.group.id}`);
           const result = await getGroupById(conv.group.id);
           if (result.success && result.group) {
+            console.log(
+              `[useGroupSocket] Successfully refreshed group ${conv.group.id}`,
+            );
             // Update the conversation with new group data
             updateConversation(conv.group.id, {
               group: {
@@ -49,8 +57,14 @@ export const useGroupSocket = () => {
                 name: result.group.name,
                 avatarUrl: result.group.avatarUrl,
                 memberUsers: result.group.memberUsers,
+                memberIds: result.group.memberIds, // Ensure member IDs are updated
               },
             });
+
+            // Force UI update
+            setTimeout(() => {
+              useConversationsStore.getState().forceUpdate();
+            }, 0);
           }
         } catch (error) {
           console.error(
@@ -59,6 +73,16 @@ export const useGroupSocket = () => {
           );
         }
       }
+    }
+
+    // Trigger a global event to notify all components about the data refresh
+    if (typeof window !== "undefined" && window.triggerGroupsReload) {
+      console.log(
+        "[useGroupSocket] Triggering global group reload event after refreshAllGroupData",
+      );
+      setTimeout(() => {
+        window.triggerGroupsReload?.();
+      }, 100);
     }
   }, [conversations, refreshSelectedGroup, updateConversation]);
 
@@ -223,8 +247,8 @@ export const useGroupSocket = () => {
         );
         useConversationsStore.getState().loadConversations(currentUser.id);
 
-        // Show a toast notification
-        toast.success(`Bạn đã được thêm vào nhóm ${data.group?.name || "mới"}`);
+        // Đã tắt toast thông báo khi được thêm vào nhóm
+        // toast.success(`Bạn đã được thêm vào nhóm ${data.group?.name || "mới"}`);
       }
     });
 
@@ -246,14 +270,107 @@ export const useGroupSocket = () => {
 
     socket.on("memberAdded", (data) => {
       console.log("[useGroupSocket] Member added to group:", data);
-      // When a member is added to a group, refresh the group data
-      // The addedToGroup event will handle adding the group to the conversation list
-      refreshAllGroupData();
+
+      // Immediately update the selected group if this is the currently selected group
+      const selectedGroup = useChatStore.getState().selectedGroup;
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        console.log(
+          "[useGroupSocket] Refreshing selected group after member added",
+        );
+
+        // Refresh from API to get the new member's details
+        useChatStore.getState().refreshSelectedGroup();
+
+        // Wait a bit for the refresh to complete
+        setTimeout(() => {
+          const updatedGroup = useChatStore.getState().selectedGroup;
+          if (updatedGroup) {
+            console.log(
+              "[useGroupSocket] Successfully refreshed group with new member",
+            );
+            console.log(
+              "[useGroupSocket] New members count:",
+              updatedGroup.members?.length || 0,
+            );
+
+            // Force UI update
+            useConversationsStore.getState().forceUpdate();
+
+            // Trigger a global event to notify all components about the member change
+            if (typeof window !== "undefined" && window.triggerGroupsReload) {
+              console.log(
+                "[useGroupSocket] Triggering global group reload event after member added",
+              );
+              window.triggerGroupsReload();
+            }
+          }
+        }, 100);
+      } else {
+        // When a member is added to a group that's not currently selected, refresh all group data
+        refreshAllGroupData();
+
+        // Trigger a global event to notify all components about the member change
+        if (typeof window !== "undefined" && window.triggerGroupsReload) {
+          console.log(
+            "[useGroupSocket] Triggering global group reload event for member added",
+          );
+          window.triggerGroupsReload();
+        }
+      }
     });
 
     socket.on("memberRemoved", (data) => {
       console.log("[useGroupSocket] Member removed from group:", data);
+
+      // Immediately update the selected group if this is the currently selected group
+      const selectedGroup = useChatStore.getState().selectedGroup;
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        console.log(
+          "[useGroupSocket] Refreshing selected group after member removed",
+        );
+
+        // Immediately update the members list in the selected group
+        if (selectedGroup.members) {
+          console.log(
+            "[useGroupSocket] Current members count:",
+            selectedGroup.members.length,
+          );
+
+          // Filter out the removed member
+          const updatedMembers = selectedGroup.members.filter(
+            (member) => member.userId !== data.userId,
+          );
+          console.log(
+            "[useGroupSocket] Updated members count:",
+            updatedMembers.length,
+          );
+
+          // Update the selected group with the new members list
+          if (updatedMembers.length !== selectedGroup.members.length) {
+            console.log(
+              "[useGroupSocket] Updating selected group members list",
+            );
+            selectedGroup.members = updatedMembers;
+
+            // Update the selected group in the store
+            useChatStore.getState().setSelectedGroup({ ...selectedGroup });
+          }
+        }
+
+        // Also refresh from API to ensure we have the latest data
+        useChatStore.getState().refreshSelectedGroup();
+      }
+
+      // Refresh all group data
       refreshAllGroupData();
+
+      // Trigger a global event to notify all components about the member change
+      if (typeof window !== "undefined" && window.triggerGroupsReload) {
+        console.log(
+          "[useGroupSocket] Triggering global group reload event for member removed",
+        );
+        window.triggerGroupsReload();
+      }
     });
 
     // Listen for removedFromGroup event (when current user is removed from a group)

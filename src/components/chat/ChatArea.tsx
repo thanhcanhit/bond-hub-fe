@@ -779,6 +779,25 @@ export default function ChatArea({
     );
   };
 
+  // Kiểm tra xem nhóm có còn tồn tại không khi selectedGroup thay đổi
+  // Chỉ kiểm tra khi selectedGroup thay đổi, không phụ thuộc vào conversations để tránh render liên tục
+  useEffect(() => {
+    if (currentChatType === "GROUP" && selectedGroup) {
+      // Tìm nhóm trong danh sách cuộc trò chuyện
+      const groupExists = conversations.some(
+        (conv) => conv.type === "GROUP" && conv.group?.id === selectedGroup.id,
+      );
+
+      // Nếu nhóm không còn tồn tại trong danh sách cuộc trò chuyện, đóng chat
+      if (!groupExists) {
+        console.log(
+          `[ChatArea] Group ${selectedGroup.id} no longer exists in conversations, closing chat`,
+        );
+        useChatStore.getState().setSelectedGroup(null);
+      }
+    }
+  }, [currentChatType, selectedGroup?.id]); // Chỉ phụ thuộc vào selectedGroup.id, không phụ thuộc vào conversations
+
   // Check if current user is valid - this helps prevent errors when auth state changes
   const isUserValid = !!currentUser?.id;
 

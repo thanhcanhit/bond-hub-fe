@@ -1933,19 +1933,45 @@ export const useChatStore = create<ChatState>((set, get) => ({
         console.log(
           `[chatStore] Group data refreshed successfully for ${selectedGroup.id}`,
         );
+        console.log(
+          `[chatStore] New members count: ${result.group.members?.length || 0}`,
+        );
 
         // Update the selected group with new data
         set({ selectedGroup: result.group });
 
+        // Update the group in the conversations store as well
+        const conversationsStore = useConversationsStore.getState();
+        conversationsStore.updateConversation(selectedGroup.id, {
+          group: result.group,
+        });
+
+        // Force UI update
+        setTimeout(() => {
+          conversationsStore.forceUpdate();
+        }, 0);
+
         // Also reload messages to ensure everything is up to date
         await get().reloadConversationMessages(selectedGroup.id, "GROUP");
+
+        // Broadcast the update to all components
+        if (typeof window !== "undefined" && window.triggerGroupsReload) {
+          console.log(
+            `[chatStore] Broadcasting group update via triggerGroupsReload`,
+          );
+          window.triggerGroupsReload();
+        }
+
+        return result.group;
       } else {
         console.log(
           `[chatStore] Failed to refresh group data for ${selectedGroup.id}`,
         );
+        return null;
       }
     } catch (error) {
       console.error("Error refreshing group data:", error);
+      return null;
     }
   },
 }));

@@ -201,8 +201,8 @@ export default function GroupSocketHandler() {
           data.groupId,
         );
 
-        // Show toast notification
-        toast.info("Bạn đã được thêm vào một nhóm mới");
+        // Đã tắt toast thông báo khi được thêm vào nhóm mới
+        // toast.info("Bạn đã được thêm vào một nhóm mới");
 
         // Load the group data and add it to conversations
         import("@/actions/group.action").then(async ({ getGroupById }) => {
@@ -238,13 +238,25 @@ export default function GroupSocketHandler() {
 
       // Check if this is the currently selected group
       if (selectedGroup && selectedGroup.id === data.groupId) {
-        // Refresh the selected group data
+        console.log(
+          "[GroupSocketHandler] Refreshing selected group after member added",
+        );
+
+        // Refresh the selected group data immediately
         refreshSelectedGroup();
 
-        // Show toast notification
-        if (data.addedById !== currentUser?.id) {
-          toast.info("Thành viên mới đã được thêm vào nhóm");
+        // Trigger a global event to notify all components about the member change
+        if (typeof window !== "undefined") {
+          console.log(
+            "[GroupSocketHandler] Triggering global group reload event",
+          );
+          window.triggerGroupsReload?.();
         }
+
+        // Đã tắt toast thông báo khi thêm thành viên mới
+        // if (data.addedById !== currentUser?.id) {
+        //   toast.info("Thành viên mới đã được thêm vào nhóm");
+        // }
       } else {
         // Find the group in conversations
         const groupConversation = conversations.find(
@@ -252,8 +264,25 @@ export default function GroupSocketHandler() {
         );
 
         if (groupConversation) {
-          // Refresh this group's data in the conversations store
+          console.log(
+            "[GroupSocketHandler] Updating conversation with latest group data after member added",
+          );
+
+          // Refresh this group's data in the conversations store immediately
           updateConversationWithLatestGroupData(data.groupId);
+
+          // Force UI update to ensure changes are visible immediately
+          setTimeout(() => {
+            useConversationsStore.getState().forceUpdate();
+          }, 0);
+
+          // Trigger a global event to notify all components about the member change
+          if (typeof window !== "undefined") {
+            console.log(
+              "[GroupSocketHandler] Triggering global group reload event",
+            );
+            window.triggerGroupsReload?.();
+          }
         }
       }
     };
@@ -301,13 +330,25 @@ export default function GroupSocketHandler() {
       } else {
         // Check if this is the currently selected group
         if (selectedGroup && selectedGroup.id === data.groupId) {
+          console.log(
+            "[GroupSocketHandler] Refreshing selected group after member removed",
+          );
+
           // Refresh the selected group data immediately
           refreshSelectedGroup();
 
-          // Show toast notification
-          if (data.removedById !== currentUser?.id) {
-            toast.info("Một thành viên đã bị xóa khỏi nhóm");
+          // Trigger a global event to notify all components about the member change
+          if (typeof window !== "undefined") {
+            console.log(
+              "[GroupSocketHandler] Triggering global group reload event for member removal",
+            );
+            window.triggerGroupsReload?.();
           }
+
+          // Đã tắt toast thông báo khi xóa thành viên
+          // if (data.removedById !== currentUser?.id) {
+          //   toast.info("Một thành viên đã bị xóa khỏi nhóm");
+          // }
         } else {
           // Find the group in conversations
           const groupConversation = conversations.find(
@@ -315,6 +356,10 @@ export default function GroupSocketHandler() {
           );
 
           if (groupConversation) {
+            console.log(
+              "[GroupSocketHandler] Updating conversation with latest group data after member removed",
+            );
+
             // Refresh this group's data in the conversations store immediately
             updateConversationWithLatestGroupData(data.groupId);
 
@@ -322,6 +367,14 @@ export default function GroupSocketHandler() {
             setTimeout(() => {
               useConversationsStore.getState().forceUpdate();
             }, 0);
+
+            // Trigger a global event to notify all components about the member change
+            if (typeof window !== "undefined") {
+              console.log(
+                "[GroupSocketHandler] Triggering global group reload event for member removal",
+              );
+              window.triggerGroupsReload?.();
+            }
 
             // Also reload conversations to ensure we have the latest data
             if (currentUser?.id) {
@@ -593,9 +646,9 @@ export default function GroupSocketHandler() {
           "[GroupSocketHandler] Current user was added to a group, updating conversations",
         );
 
-        // Show notification
-        const groupName = data.group?.name || "mới";
-        toast.success(`Bạn đã được thêm vào nhóm ${groupName}`);
+        // Đã tắt toast thông báo khi được thêm vào nhóm
+        // const groupName = data.group?.name || "mới";
+        // toast.success(`Bạn đã được thêm vào nhóm ${groupName}`);
 
         // Reload conversations to get the new group
         useConversationsStore.getState().loadConversations(currentUser.id);

@@ -1193,38 +1193,71 @@ export const useConversationsStore = create<ConversationsState>()(
 
       // Check and remove groups that the user has been removed from
       checkAndRemoveGroups: (groupId: string, groupName?: string) => {
-        console.log(
-          `[conversationsStore] Checking if user has been removed from group ${groupId}`,
-        );
-
-        const conversations = get().conversations;
-        const groupConversation = conversations.find(
-          (conv) => conv.type === "GROUP" && conv.group?.id === groupId,
-        );
-
-        if (groupConversation) {
-          console.log(
-            `[conversationsStore] Found group ${groupId} in conversations, removing it`,
+        if (!groupId) {
+          console.error(
+            `[conversationsStore] Invalid groupId provided to checkAndRemoveGroups`,
           );
-
-          // Remove the group from conversations
-          get().removeConversation(groupId);
-          console.log(
-            `[conversationsStore] Removed group ${groupId} from conversations`,
-          );
-
-          // Force UI update immediately
-          setTimeout(() => {
-            get().forceUpdate();
-            console.log(
-              `[conversationsStore] Forced UI update after removal from group ${groupId}`,
-            );
-          }, 0);
-
-          return true;
+          return false;
         }
 
-        return false;
+        const groupNameLog = groupName ? ` (${groupName})` : "";
+        console.log(
+          `[conversationsStore] Checking if user has been removed from group ${groupId}${groupNameLog}`,
+        );
+
+        try {
+          const conversations = get().conversations;
+          const groupConversation = conversations.find(
+            (conv) => conv.type === "GROUP" && conv.group?.id === groupId,
+          );
+
+          if (groupConversation) {
+            const displayName =
+              groupName || groupConversation.group?.name || groupId;
+            console.log(
+              `[conversationsStore] Found group ${displayName} (${groupId}) in conversations, removing it`,
+            );
+
+            // Remove the group from conversations
+            get().removeConversation(groupId);
+            console.log(
+              `[conversationsStore] Removed group ${displayName} (${groupId}) from conversations`,
+            );
+
+            // Force UI update immediately
+            setTimeout(() => {
+              get().forceUpdate();
+              console.log(
+                `[conversationsStore] Forced UI update after removal from group ${displayName} (${groupId})`,
+              );
+            }, 0);
+
+            // Also reload conversations to ensure we have the latest data
+            const currentUser = useAuthStore.getState().user;
+            if (currentUser?.id) {
+              setTimeout(() => {
+                console.log(
+                  `[conversationsStore] Reloading conversations after removal from group ${displayName} (${groupId})`,
+                );
+                get().loadConversations(currentUser.id);
+              }, 100);
+            }
+
+            return true;
+          } else {
+            const displayName = groupName || groupId;
+            console.log(
+              `[conversationsStore] Group ${displayName} (${groupId}) not found in conversations, no action needed`,
+            );
+            return false;
+          }
+        } catch (error) {
+          console.error(
+            `[conversationsStore] Error in checkAndRemoveGroups:`,
+            error,
+          );
+          return false;
+        }
       },
 
       processNewMessage: (message, options = {}) => {

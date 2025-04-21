@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Group, User, UserInfo, Media, GroupRole } from "@/types/base";
 import { getLinkIcon, getLinkTitle } from "@/utils/link-utils";
 import MediaViewer from "@/components/media/MediaViewer";
+import { useGroupSocket } from "@/hooks/useGroupSocket";
 import {
   X,
   Users,
@@ -42,6 +43,7 @@ import {
 import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
+
 import { toast } from "sonner";
 import { getRelationship } from "@/actions/friend.action";
 import {
@@ -66,6 +68,7 @@ import {
   leaveGroup,
   removeGroupMember,
   updateMemberRole,
+  getGroupById,
 } from "@/actions/group.action";
 import AddMemberDialog from "../group/AddMemberDialog";
 
@@ -76,10 +79,38 @@ interface GroupInfoProps {
 }
 
 export default function GroupInfo({
-  group,
+  group: initialGroup,
   onClose,
   isOverlay = false,
 }: GroupInfoProps) {
+  // Lấy selectedGroup trực tiếp từ store để đảm bảo luôn có dữ liệu mới nhất
+  const selectedGroup = useChatStore((state) => state.selectedGroup);
+
+  // Sử dụng state để lưu trữ dữ liệu nhóm hiện tại
+  // Ưu tiên sử dụng selectedGroup từ store, nếu không có thì dùng initialGroup
+  const [group, setGroup] = useState<Group | null>(
+    selectedGroup || initialGroup,
+  );
+
+  // Cập nhật group state khi selectedGroup hoặc initialGroup thay đổi
+  useEffect(() => {
+    // Ưu tiên sử dụng selectedGroup từ store
+    if (selectedGroup) {
+      console.log("[GroupInfo] Updating group from selectedGroup in store");
+      console.log(
+        "[GroupInfo] Members count:",
+        selectedGroup.members?.length || 0,
+      );
+      setGroup(selectedGroup);
+    } else if (initialGroup) {
+      console.log("[GroupInfo] Updating group from initialGroup prop");
+      console.log(
+        "[GroupInfo] Members count:",
+        initialGroup.members?.length || 0,
+      );
+      setGroup(initialGroup);
+    }
+  }, [selectedGroup, initialGroup]);
   const [mediaFiles, setMediaFiles] = useState<(Media & { createdAt: Date })[]>(
     [],
   );
@@ -138,6 +169,405 @@ export default function GroupInfo({
 
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
+  const groupSocket = useGroupSocket();
+  const [forceUpdate, setForceUpdate] = useState(0);
+
+  // Hàm cập nhật danh sách thành viên (sử dụng useCallback để tránh tạo hàm mới mỗi khi render)
+  const updateMembersList = useCallback(
+    async (forceRefresh = false) => {
+      const groupId = group?.id || selectedGroup?.id || initialGroup?.id;
+      if (!groupId) return false;
+
+      console.log(
+        "[GroupInfo] Updating members list for group",
+        groupId,
+        "forceRefresh:",
+        forceRefresh,
+      );
+
+      try {
+        // Lấy dữ liệu nhóm mới trực tiếp từ API để đảm bảo dữ liệu mới nhất
+        console.log("[GroupInfo] Fetching fresh group data from API");
+        const result = await getGroupById(groupId);
+
+        if (result.success && result.group) {
+          console.log(
+            "[GroupInfo] Successfully fetched fresh group data from API",
+          );
+          console.log(
+            "[GroupInfo] Members count:",
+            result.group.members?.length || 0,
+          );
+          console.log(
+            "[GroupInfo] Current members count:",
+            group?.members?.length || 0,
+          );
+
+          // Kiểm tra xem số lượng thành viên có thay đổi không
+          const membersChanged =
+            group?.members?.length !== result.group.members?.length;
+          console.log("[GroupInfo] Members changed:", membersChanged);
+
+          // Cập nhật group state với dữ liệu mới từ API
+          setGroup(result.group);
+
+          // Cập nhật selectedGroup trong store
+          useChatStore.getState().setSelectedGroup(result.group);
+
+          // Cập nhật UI
+          setForceUpdate((prev) => prev + 1);
+
+          // Nếu số lượng thành viên thay đổi, hiển thị thông báo
+          if (membersChanged && !forceRefresh) {
+            if (
+              (group?.members?.length || 0) <
+              (result.group.members?.length || 0)
+            ) {
+              toast.info("Thành viên mới đã được thêm vào nhóm");
+            } else if (
+              (group?.members?.length || 0) >
+              (result.group.members?.length || 0)
+            ) {
+              toast.info("Một thành viên đã bị xóa khỏi nhóm");
+            }
+          }
+
+          return true;
+        }
+      } catch (error) {
+        console.error("[GroupInfo] Error fetching group data:", error);
+      }
+
+      // Nếu không thể lấy dữ liệu từ API, thử dùng dữ liệu từ store
+      const storeSelectedGroup = useChatStore.getState().selectedGroup;
+      if (storeSelectedGroup && storeSelectedGroup.id === groupId) {
+        console.log("[GroupInfo] Falling back to store data");
+        setGroup(storeSelectedGroup);
+        setForceUpdate((prev) => prev + 1);
+        return true;
+      }
+
+      return false;
+    },
+    [
+      group?.id,
+      group?.members?.length,
+      selectedGroup?.id,
+      initialGroup?.id,
+      setGroup,
+      setForceUpdate,
+    ],
+  );
+
+  // Hàm làm mới dữ liệu nhóm
+  const handleRefreshGroup = async () => {
+    toast.info("Đang làm mới dữ liệu nhóm...");
+
+    try {
+      // Sử dụng hàm updateMembersList để cập nhật danh sách thành viên
+      const success = await updateMembersList();
+
+      if (success) {
+        toast.success("Làm mới dữ liệu nhóm thành công");
+        return;
+      }
+
+      // Nếu không thể cập nhật qua updateMembersList, thử sử dụng refreshSelectedGroup
+      console.log("[GroupInfo] Trying refreshSelectedGroup as fallback");
+      await useChatStore.getState().refreshSelectedGroup();
+
+      // Kiểm tra xem selectedGroup đã được cập nhật chưa
+      const groupId = group?.id || selectedGroup?.id || initialGroup?.id;
+      const updatedSelectedGroup = useChatStore.getState().selectedGroup;
+
+      if (updatedSelectedGroup && updatedSelectedGroup.id === groupId) {
+        console.log("[GroupInfo] Successfully refreshed group data via store");
+        console.log(
+          "[GroupInfo] New members count:",
+          updatedSelectedGroup.members?.length || 0,
+        );
+
+        // Cập nhật group state
+        setGroup(updatedSelectedGroup);
+
+        // Cập nhật UI
+        setForceUpdate((prev) => prev + 1);
+
+        toast.success("Làm mới dữ liệu nhóm thành công");
+        return;
+      }
+
+      // Nếu không thể lấy dữ liệu từ API, thử dùng triggerGroupsReload
+      if (typeof window !== "undefined" && window.triggerGroupsReload) {
+        console.log("[GroupInfo] Triggering global group reload event");
+        window.triggerGroupsReload();
+        // Chỉ cập nhật một lần để tránh vòng lặp vô hạn
+        setForceUpdate((prev) => prev + 1);
+      } else {
+        toast.error("Không thể làm mới dữ liệu nhóm");
+      }
+    } catch (error) {
+      console.error("Error refreshing group data:", error);
+      toast.error("Không thể làm mới dữ liệu nhóm");
+    }
+  };
+
+  // Socket event listeners for real-time updates
+  // Đã tắt useEffect này để tránh render liên tục
+  // useEffect(() => {
+  //   if (!groupSocket || !initialGroup?.id) return;
+
+  //   const handleGroupUpdated = async (data: { groupId?: string }) => {
+  //     console.log("[GroupInfo] Group updated event received, refreshing data", data);
+
+  //     // Kiểm tra xem sự kiện có liên quan đến nhóm hiện tại không
+  //     const currentGroupId = group?.id || selectedGroup?.id || initialGroup?.id;
+
+  //     if (!data?.groupId || data.groupId === currentGroupId) {
+  //       console.log("[GroupInfo] Event is for current group, updating members list");
+
+  //       // Sử dụng hàm updateMembersList để cập nhật danh sách thành viên
+  //       const success = await updateMembersList();
+
+  //       if (!success) {
+  //         console.error("[GroupInfo] Failed to update members list after group updated");
+
+  //         // Nếu không thể cập nhật qua updateMembersList, thử sử dụng refreshSelectedGroup
+  //         try {
+  //           console.log("[GroupInfo] Trying refreshSelectedGroup as fallback");
+  //           await useChatStore.getState().refreshSelectedGroup();
+
+  //           // Cập nhật UI
+  //           setForceUpdate(prev => prev + 1);
+  //         } catch (error) {
+  //           console.error("[GroupInfo] Error refreshing group data after group updated:", error);
+  //         }
+  //       }
+  //     }
+  //   };
+
+  //   const handleMemberAdded = async (data: { groupId?: string; userId?: string; addedById?: string }) => {
+  //     console.log("[GroupInfo] Member added event received, refreshing data", data);
+
+  //     // Kiểm tra xem sự kiện có liên quan đến nhóm hiện tại không
+  //     const currentGroupId = group?.id || selectedGroup?.id || initialGroup?.id;
+
+  //     if (data.groupId === currentGroupId) {
+  //       console.log("[GroupInfo] Event is for current group, updating members list");
+
+  //       // Sử dụng hàm updateMembersList để cập nhật danh sách thành viên
+  //       const success = await updateMembersList();
+
+  //       if (!success) {
+  //         console.error("[GroupInfo] Failed to update members list after member added");
+
+  //         // Nếu không thể cập nhật qua updateMembersList, thử sử dụng refreshSelectedGroup
+  //         try {
+  //           console.log("[GroupInfo] Trying refreshSelectedGroup as fallback");
+  //           await useChatStore.getState().refreshSelectedGroup();
+
+  //           // Cập nhật UI
+  //           setForceUpdate(prev => prev + 1);
+  //         } catch (error) {
+  //           console.error("[GroupInfo] Error refreshing group data after member added:", error);
+  //         }
+  //       }
+  //     }
+  //   };
+
+  //   const handleMemberRemoved = async (data: { groupId?: string; userId?: string; removedById?: string }) => {
+  //     console.log("[GroupInfo] Member removed event received, refreshing data", data);
+
+  //     // Kiểm tra xem sự kiện có liên quan đến nhóm hiện tại không
+  //     const currentGroupId = group?.id || selectedGroup?.id || initialGroup?.id;
+
+  //     if (data.groupId === currentGroupId) {
+  //       console.log("[GroupInfo] Event is for current group, updating members list");
+
+  //       // Sử dụng hàm updateMembersList để cập nhật danh sách thành viên
+  //       const success = await updateMembersList();
+
+  //       if (!success) {
+  //         console.error("[GroupInfo] Failed to update members list after member removed");
+
+  //         // Nếu không thể cập nhật qua updateMembersList, thử sử dụng refreshSelectedGroup
+  //         try {
+  //           console.log("[GroupInfo] Trying refreshSelectedGroup as fallback");
+  //           await useChatStore.getState().refreshSelectedGroup();
+
+  //           // Cập nhật UI
+  //           setForceUpdate(prev => prev + 1);
+  //         } catch (error) {
+  //           console.error("[GroupInfo] Error refreshing group data after member removed:", error);
+
+  //           // Nếu vẫn không có dữ liệu mới, cập nhật trực tiếp danh sách thành viên
+  //           if (group && group.members && data.userId) {
+  //             console.log("[GroupInfo] Manually updating members list in UI as last resort");
+  //             console.log("[GroupInfo] Current members count:", group.members.length);
+
+  //             try {
+  //               // Tạo bản sao của group và cập nhật danh sách thành viên
+  //               const updatedGroup = {...group};
+  //               updatedGroup.members = [...group.members].filter(member => member.userId !== data.userId);
+
+  //               console.log("[GroupInfo] Updated members count:", updatedGroup.members.length);
+
+  //               // Cập nhật group state
+  //               setGroup(updatedGroup);
+
+  //               // Cập nhật selectedGroup trong store để đảm bảo đồng bộ
+  //               useChatStore.getState().setSelectedGroup(updatedGroup);
+
+  //               // Cập nhật UI
+  //               setForceUpdate(prev => prev + 1);
+  //             } catch (manualError) {
+  //               console.error("[GroupInfo] Error manually updating members list:", manualError);
+  //             }
+  //           }
+  //         }
+  //       }
+  //     }
+  //   };
+
+  //   const handleRoleChanged = async (data: { groupId?: string }) => {
+  //     console.log("[GroupInfo] Role changed event received, refreshing data", data);
+
+  //     // Kiểm tra xem sự kiện có liên quan đến nhóm hiện tại không
+  //     const currentGroupId = group?.id || selectedGroup?.id || initialGroup?.id;
+
+  //     if (!data?.groupId || data.groupId === currentGroupId) {
+  //       console.log("[GroupInfo] Event is for current group, updating members list");
+
+  //       // Sử dụng hàm updateMembersList để cập nhật danh sách thành viên
+  //       const success = await updateMembersList();
+
+  //       if (!success) {
+  //         console.error("[GroupInfo] Failed to update members list after role changed");
+
+  //         // Nếu không thể cập nhật qua updateMembersList, thử sử dụng refreshSelectedGroup
+  //         try {
+  //           console.log("[GroupInfo] Trying refreshSelectedGroup as fallback");
+  //           await useChatStore.getState().refreshSelectedGroup();
+
+  //           // Cập nhật UI
+  //           setForceUpdate(prev => prev + 1);
+  //         } catch (error) {
+  //           console.error("[GroupInfo] Error refreshing group data after role changed:", error);
+  //         }
+  //       }
+  //     }
+  //   };
+
+  //   // Register event listeners
+  //   groupSocket.on("groupUpdated", handleGroupUpdated);
+  //   groupSocket.on("memberAdded", handleMemberAdded);
+  //   groupSocket.on("memberRemoved", handleMemberRemoved);
+  //   groupSocket.on("roleChanged", handleRoleChanged);
+  //   groupSocket.on("memberRoleUpdated", handleRoleChanged); // Legacy event
+
+  //   // Cleanup on unmount
+  //   return () => {
+  //     groupSocket.off("groupUpdated", handleGroupUpdated);
+  //     groupSocket.off("memberAdded", handleMemberAdded);
+  //     groupSocket.off("memberRemoved", handleMemberRemoved);
+  //     groupSocket.off("roleChanged", handleRoleChanged);
+  //     groupSocket.off("memberRoleUpdated", handleRoleChanged);
+  //   };
+  // }, [groupSocket, initialGroup?.id, group, selectedGroup?.id, updateMembersList]);
+
+  // Lắng nghe sự kiện reload từ window.triggerGroupsReload
+  // Đã tắt useEffect này để tránh render liên tục
+  // useEffect(() => {
+  //   // Tạo một hàm xử lý sự kiện reload
+  //   const handleReload = async () => {
+  //     console.log("[GroupInfo] Received reload event from window.triggerGroupsReload");
+  //     await updateMembersList();
+  //   };
+
+  //   // Đăng ký sự kiện reload
+  //   if (typeof window !== "undefined") {
+  //     // Tạo một custom event listener cho triggerGroupsReload
+  //     const customEventName = "groupDataUpdated";
+
+  //     // Lưu trữ hàm gốc
+  //     const originalTriggerGroupsReload = window.triggerGroupsReload;
+
+  //     // Ghi đè hàm triggerGroupsReload để thêm xử lý sự kiện
+  //     window.triggerGroupsReload = () => {
+  //       // Gọi hàm gốc nếu có
+  //       if (originalTriggerGroupsReload) {
+  //         originalTriggerGroupsReload();
+  //       }
+
+  //       // Dispatch custom event
+  //       window.dispatchEvent(new CustomEvent(customEventName));
+  //     };
+
+  //     // Thêm event listener cho custom event
+  //     window.addEventListener(customEventName, handleReload);
+
+  //     // Thử gọi ngay lập tức để cập nhật dữ liệu ban đầu
+  //     setTimeout(() => {
+  //       handleReload();
+  //     }, 1000);
+
+  //     // Cleanup
+  //     return () => {
+  //       // Khôi phục hàm gốc
+  //       window.triggerGroupsReload = originalTriggerGroupsReload;
+  //       // Remove event listener
+  //       window.removeEventListener(customEventName, handleReload);
+  //     };
+  //   }
+  // }, [initialGroup?.id, updateMembersList]);
+
+  // Tự động cập nhật danh sách thành viên định kỳ
+  // Đã tắt useEffect này để tránh render liên tục
+  // useEffect(() => {
+  //   if (!initialGroup?.id) return;
+  //
+  //   console.log("[GroupInfo] Setting up auto-refresh interval");
+  //
+  //   // Cập nhật mỗi 30 giây
+  //   const intervalId = setInterval(async () => {
+  //     console.log("[GroupInfo] Auto-refreshing members list");
+  //     await updateMembersList(true);
+  //   }, 30000);
+  //
+  //   // Cleanup
+  //   return () => {
+  //     console.log("[GroupInfo] Clearing auto-refresh interval");
+  //     clearInterval(intervalId);
+  //   };
+  // }, [initialGroup?.id, updateMembersList]);
+
+  // Sử dụng cách tiếp cận giống với ChatHeader để lấy thông tin nhóm từ conversationsStore
+  // Lấy danh sách cuộc trò chuyện từ conversationsStore
+  const conversations = useConversationsStore((state) => state.conversations);
+
+  // Tìm thông tin nhóm từ conversationsStore
+  const groupConversation = useMemo(() => {
+    if (!initialGroup?.id) return null;
+    return conversations.find(
+      (conv) => conv.type === "GROUP" && conv.group?.id === initialGroup.id,
+    );
+  }, [conversations, initialGroup?.id]);
+
+  // Tính toán số lượng thành viên từ conversationsStore
+  const memberCount = useMemo(() => {
+    // Ưu tiên sử dụng thông tin từ conversationsStore
+    if (groupConversation?.group?.memberUsers) {
+      return groupConversation.group.memberUsers.length;
+    }
+    // Nếu không có, sử dụng thông tin từ group state
+    return group?.members?.length || 0;
+  }, [groupConversation, group]);
+
+  // Cập nhật UI khi memberCount thay đổi
+  useEffect(() => {
+    console.log("[GroupInfo] Member count updated:", memberCount);
+    setForceUpdate((prev) => prev + 1);
+  }, [memberCount]);
 
   // Lấy thông tin chi tiết của các thành viên và vai trò của người dùng hiện tại
   useEffect(() => {
@@ -272,7 +702,7 @@ export default function GroupInfo({
 
       fetchMemberDetails();
     }
-  }, [group?.id, group?.members, currentUser]);
+  }, [group?.id, group?.members, currentUser, forceUpdate]);
 
   // Lấy media từ tin nhắn
   useEffect(() => {
@@ -376,10 +806,28 @@ export default function GroupInfo({
 
       extractMediaFromMessages();
     }
-  }, [group?.id, messages]);
+  }, [group?.id, messages, forceUpdate]);
+
+  // Kiểm tra nếu không có dữ liệu nhóm
+  useEffect(() => {
+    if (!initialGroup && !group) {
+      console.log("[GroupInfo] No group data available");
+      // Đóng GroupInfo nếu không có dữ liệu nhóm
+      if (onClose) {
+        onClose();
+      }
+    }
+  }, [initialGroup, group, onClose]);
 
   if (!group) {
-    return null;
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center p-4">
+          <div className="animate-spin h-8 w-8 border-2 border-blue-500 rounded-full border-t-transparent mx-auto mb-4"></div>
+          <p>Đang tải thông tin nhóm...</p>
+        </div>
+      </div>
+    );
   }
 
   const handleMemberClick = async (memberId: string) => {
@@ -472,163 +920,318 @@ export default function GroupInfo({
         </div>
 
         <div className="p-4 flex justify-between items-center">
-          <span className="text-sm">
-            Danh sách thành viên ({group.members?.length || 0})
+          <span className="text-sm" key={`members-list-count-${forceUpdate}`}>
+            Danh sách thành viên ({memberCount})
           </span>
-          <Button variant="ghost" size="icon">
-            <MoreHorizontal className="h-5 w-5" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleRefreshGroup}
+            title="Làm mới danh sách thành viên"
+          >
+            <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {group.members?.map((member) => {
-            const memberData = memberDetails[member.userId];
-            const initials = memberData?.userInfo?.fullName
-              ? memberData.userInfo.fullName.slice(0, 2).toUpperCase()
-              : "??";
+          {/* Ưu tiên sử dụng memberUsers từ conversationsStore nếu có */}
+          {groupConversation?.group?.memberUsers
+            ? // Hiển thị danh sách thành viên từ conversationsStore
+              groupConversation.group.memberUsers.map((member) => {
+                const initials = member.fullName
+                  ? member.fullName.slice(0, 2).toUpperCase()
+                  : "??";
 
-            return (
-              <div
-                key={member.userId}
-                className="flex items-center p-4 hover:bg-gray-100 justify-between"
-              >
-                <div
-                  className="flex items-center cursor-pointer"
-                  onClick={() => handleMemberClick(member.userId)}
-                >
-                  <Avatar className="h-10 w-10 mr-3">
-                    <AvatarImage
-                      src={memberData?.userInfo?.profilePictureUrl || undefined}
-                      className="object-cover"
-                    />
-                    <AvatarFallback className="bg-gray-200 text-gray-600">
-                      {initials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-medium">
-                      {memberData?.userInfo?.fullName || "Thành viên"}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {member.role === "LEADER"
-                        ? "Trưởng nhóm"
-                        : member.role === "CO_LEADER"
-                          ? "Phó nhóm"
-                          : ""}
-                    </p>
-                    {/* Hiển thị thông tin người thêm */}
-                    {member.userId !== currentUser?.id && (
-                      <p className="text-xs text-gray-500">
-                        {member.addedBy && "fullName" in member.addedBy
-                          ? `Thêm bởi ${(member.addedBy as unknown as { fullName: string }).fullName}`
-                          : adderDetails[member.userId]?.userInfo?.fullName
-                            ? `Thêm bởi ${adderDetails[member.userId]?.userInfo?.fullName}`
-                            : ""}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center">
-                  {/* Show pending status */}
-                  {member.userId !== currentUser?.id &&
-                    relationships[member.userId] === "PENDING_SENT" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        disabled
-                        title="Đã gửi lời mời kết bạn"
-                      >
-                        <LinkIcon className="h-4 w-4 text-gray-400" />
-                      </Button>
-                    )}
-
-                  {/* Hiển thị menu tùy chọn cho thành viên (không hiển thị cho chính mình) */}
-                  {member.userId !== currentUser?.id && (
-                    <DropdownMenu
-                      open={openDropdownMemberId === member.userId}
-                      onOpenChange={(open) => {
-                        if (open) {
-                          setOpenDropdownMemberId(member.userId);
-                        } else if (openDropdownMemberId === member.userId) {
-                          setOpenDropdownMemberId(null);
-                        }
-                      }}
+                return (
+                  <div
+                    key={`${member.id}-${forceUpdate}`}
+                    className="flex items-center p-4 hover:bg-gray-100 justify-between"
+                  >
+                    <div
+                      className="flex items-center cursor-pointer"
+                      onClick={() => handleMemberClick(member.id)}
                     >
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-5 w-5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        onEscapeKeyDown={() => setOpenDropdownMemberId(null)}
-                      >
-                        {/* Add friend option if not already friends */}
-                        {relationships[member.userId] === "NONE" && (
-                          <DropdownMenuItem
-                            onClick={() =>
-                              handleSendFriendRequest(member.userId)
-                            }
-                            disabled={isSendingRequest[member.userId]}
+                      <Avatar className="h-10 w-10 mr-3">
+                        <AvatarImage
+                          src={member.profilePictureUrl || undefined}
+                          className="object-cover"
+                        />
+                        <AvatarFallback className="bg-gray-200 text-gray-600">
+                          {initials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">
+                          {member.fullName || "Thành viên"}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {member.role === "LEADER"
+                            ? "Trưởng nhóm"
+                            : member.role === "CO_LEADER"
+                              ? "Phó nhóm"
+                              : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center">
+                      {/* Show pending status */}
+                      {member.id !== currentUser?.id &&
+                        relationships[member.id] === "PENDING_SENT" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled
+                            title="Đã gửi lời mời kết bạn"
                           >
-                            {isSendingRequest[member.userId] ? (
+                            <LinkIcon className="h-4 w-4 text-gray-400" />
+                          </Button>
+                        )}
+
+                      {/* Hiển thị menu tùy chọn cho thành viên (không hiển thị cho chính mình) */}
+                      {member.id !== currentUser?.id && (
+                        <DropdownMenu
+                          open={openDropdownMemberId === member.id}
+                          onOpenChange={(open) => {
+                            if (open) {
+                              setOpenDropdownMemberId(member.id);
+                            } else if (openDropdownMemberId === member.id) {
+                              setOpenDropdownMemberId(null);
+                            }
+                          }}
+                        >
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-5 w-5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            onEscapeKeyDown={() =>
+                              setOpenDropdownMemberId(null)
+                            }
+                          >
+                            {/* Add friend option if not already friends */}
+                            {relationships[member.id] === "NONE" && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  handleSendFriendRequest(member.id)
+                                }
+                                disabled={isSendingRequest[member.id]}
+                              >
+                                {isSendingRequest[member.id] ? (
+                                  <>
+                                    <div className="h-4 w-4 mr-2 rounded-full border-2 border-gray-600 border-t-transparent animate-spin"></div>
+                                    Đang gửi...
+                                  </>
+                                ) : (
+                                  <>
+                                    <UserPlus className="h-4 w-4 mr-2 text-blue-500" />
+                                    Kết bạn
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                            )}
+
+                            {/* Leader/Co-leader management options */}
+                            {(currentUserRole === "LEADER" ||
+                              (currentUserRole === "CO_LEADER" &&
+                                member.role === "MEMBER")) && (
                               <>
-                                <div className="h-4 w-4 mr-2 rounded-full border-2 border-gray-600 border-t-transparent animate-spin"></div>
-                                Đang gửi...
-                              </>
-                            ) : (
-                              <>
-                                <UserPlus className="h-4 w-4 mr-2 text-blue-500" />
-                                Kết bạn
+                                {currentUserRole === "LEADER" &&
+                                  member.role === "MEMBER" && (
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        handlePromoteMember(member.id)
+                                      }
+                                    >
+                                      <Shield className="h-4 w-4 mr-2" />
+                                      Thăng phó nhóm
+                                    </DropdownMenuItem>
+                                  )}
+                                {currentUserRole === "LEADER" &&
+                                  member.role === "CO_LEADER" && (
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        handleDemoteMember(member.id)
+                                      }
+                                    >
+                                      <UserMinus className="h-4 w-4 mr-2" />
+                                      Hạ xuống thành viên
+                                    </DropdownMenuItem>
+                                  )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleKickMember(member.id)}
+                                  className="text-red-500 focus:text-red-500"
+                                >
+                                  <Ban className="h-4 w-4 mr-2" />
+                                  Xóa khỏi nhóm
+                                </DropdownMenuItem>
                               </>
                             )}
-                          </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            : // Fallback sử dụng group.members nếu không có dữ liệu từ conversationsStore
+              group.members?.map((member) => {
+                // Key bao gồm forceUpdate để đảm bảo danh sách được cập nhật khi có thay đổi
+                const memberData = memberDetails[member.userId];
+                const initials = memberData?.userInfo?.fullName
+                  ? memberData.userInfo.fullName.slice(0, 2).toUpperCase()
+                  : "??";
+
+                return (
+                  <div
+                    key={`${member.userId}-${forceUpdate}`}
+                    className="flex items-center p-4 hover:bg-gray-100 justify-between"
+                  >
+                    <div
+                      className="flex items-center cursor-pointer"
+                      onClick={() => handleMemberClick(member.userId)}
+                    >
+                      <Avatar className="h-10 w-10 mr-3">
+                        <AvatarImage
+                          src={
+                            memberData?.userInfo?.profilePictureUrl || undefined
+                          }
+                          className="object-cover"
+                        />
+                        <AvatarFallback className="bg-gray-200 text-gray-600">
+                          {initials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">
+                          {memberData?.userInfo?.fullName || "Thành viên"}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {member.role === "LEADER"
+                            ? "Trưởng nhóm"
+                            : member.role === "CO_LEADER"
+                              ? "Phó nhóm"
+                              : ""}
+                        </p>
+                        {/* Hiển thị thông tin người thêm */}
+                        {member.userId !== currentUser?.id && (
+                          <p className="text-xs text-gray-500">
+                            {member.addedBy && "fullName" in member.addedBy
+                              ? `Thêm bởi ${(member.addedBy as unknown as { fullName: string }).fullName}`
+                              : adderDetails[member.userId]?.userInfo?.fullName
+                                ? `Thêm bởi ${adderDetails[member.userId]?.userInfo?.fullName}`
+                                : ""}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center">
+                      {/* Show pending status */}
+                      {member.userId !== currentUser?.id &&
+                        relationships[member.userId] === "PENDING_SENT" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled
+                            title="Đã gửi lời mời kết bạn"
+                          >
+                            <LinkIcon className="h-4 w-4 text-gray-400" />
+                          </Button>
                         )}
 
-                        {/* Leader/Co-leader management options */}
-                        {(currentUserRole === "LEADER" ||
-                          (currentUserRole === "CO_LEADER" &&
-                            member.role === "MEMBER")) && (
-                          <>
-                            {currentUserRole === "LEADER" &&
-                              member.role === "MEMBER" && (
+                      {/* Hiển thị menu tùy chọn cho thành viên (không hiển thị cho chính mình) */}
+                      {member.userId !== currentUser?.id && (
+                        <DropdownMenu
+                          open={openDropdownMemberId === member.userId}
+                          onOpenChange={(open) => {
+                            if (open) {
+                              setOpenDropdownMemberId(member.userId);
+                            } else if (openDropdownMemberId === member.userId) {
+                              setOpenDropdownMemberId(null);
+                            }
+                          }}
+                        >
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-5 w-5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            onEscapeKeyDown={() =>
+                              setOpenDropdownMemberId(null)
+                            }
+                          >
+                            {/* Add friend option if not already friends */}
+                            {relationships[member.userId] === "NONE" && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  handleSendFriendRequest(member.userId)
+                                }
+                                disabled={isSendingRequest[member.userId]}
+                              >
+                                {isSendingRequest[member.userId] ? (
+                                  <>
+                                    <div className="h-4 w-4 mr-2 rounded-full border-2 border-gray-600 border-t-transparent animate-spin"></div>
+                                    Đang gửi...
+                                  </>
+                                ) : (
+                                  <>
+                                    <UserPlus className="h-4 w-4 mr-2 text-blue-500" />
+                                    Kết bạn
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                            )}
+
+                            {/* Leader/Co-leader management options */}
+                            {(currentUserRole === "LEADER" ||
+                              (currentUserRole === "CO_LEADER" &&
+                                member.role === "MEMBER")) && (
+                              <>
+                                {currentUserRole === "LEADER" &&
+                                  member.role === "MEMBER" && (
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        handlePromoteMember(member.userId)
+                                      }
+                                    >
+                                      <Shield className="h-4 w-4 mr-2" />
+                                      Thăng phó nhóm
+                                    </DropdownMenuItem>
+                                  )}
+                                {currentUserRole === "LEADER" &&
+                                  member.role === "CO_LEADER" && (
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        handleDemoteMember(member.userId)
+                                      }
+                                    >
+                                      <UserMinus className="h-4 w-4 mr-2" />
+                                      Hạ xuống thành viên
+                                    </DropdownMenuItem>
+                                  )}
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onClick={() =>
-                                    handlePromoteMember(member.userId)
+                                    handleKickMember(member.userId)
                                   }
+                                  className="text-red-500 focus:text-red-500"
                                 >
-                                  <Shield className="h-4 w-4 mr-2" />
-                                  Thăng phó nhóm
+                                  <Ban className="h-4 w-4 mr-2" />
+                                  Xóa khỏi nhóm
                                 </DropdownMenuItem>
-                              )}
-                            {currentUserRole === "LEADER" &&
-                              member.role === "CO_LEADER" && (
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    handleDemoteMember(member.userId)
-                                  }
-                                >
-                                  <UserMinus className="h-4 w-4 mr-2" />
-                                  Hạ xuống thành viên
-                                </DropdownMenuItem>
-                              )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleKickMember(member.userId)}
-                              className="text-red-500 focus:text-red-500"
-                            >
-                              <Ban className="h-4 w-4 mr-2" />
-                              Xóa khỏi nhóm
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
         </div>
 
         {showProfileDialog && selectedMember && (
@@ -742,16 +1345,6 @@ export default function GroupInfo({
       </div>
     );
   }
-
-  // Hàm làm mới dữ liệu nhóm
-  const handleRefreshGroup = () => {
-    if (typeof window !== "undefined" && window.triggerGroupsReload) {
-      toast.info("Đang làm mới dữ liệu nhóm...");
-      window.triggerGroupsReload();
-    } else {
-      toast.error("Không thể làm mới dữ liệu nhóm");
-    }
-  };
 
   return (
     <div
@@ -867,6 +1460,12 @@ export default function GroupInfo({
             <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50">
               <div className="flex items-center">
                 <span className="font-semibold">Thành viên nhóm</span>
+                <span
+                  className="text-xs text-gray-500 ml-2"
+                  key={`members-header-count-${forceUpdate}`}
+                >
+                  ({memberCount})
+                </span>
               </div>
               <ChevronDown className="h-5 w-5 text-gray-500" />
             </CollapsibleTrigger>
@@ -876,8 +1475,8 @@ export default function GroupInfo({
                 onClick={() => setShowMembersList(true)}
               >
                 <Users className="h-5 w-5 mr-2 text-gray-500" />
-                <span className="text-sm">
-                  {group.members?.length || 0} thành viên
+                <span className="text-sm" key={`members-count-${forceUpdate}`}>
+                  {memberCount} thành viên
                 </span>
               </div>
             </CollapsibleContent>
@@ -1237,7 +1836,7 @@ export default function GroupInfo({
 
                 return (
                   <div
-                    key={member.userId}
+                    key={`transfer-${member.userId}-${forceUpdate}`}
                     className="flex items-center p-3 hover:bg-gray-100 cursor-pointer"
                     onClick={() => handleSelectNewLeader(member.userId)}
                   >
@@ -1510,6 +2109,9 @@ export default function GroupInfo({
           group.members = updatedMembers;
         }
 
+        // Force UI update
+        setForceUpdate((prev) => prev + 1);
+
         toast.success("Đã thăng cấp thành viên thành phó nhóm");
       } else {
         toast.error(`Lỗi: ${result.error}`);
@@ -1554,6 +2156,9 @@ export default function GroupInfo({
           group.members = updatedMembers;
         }
 
+        // Force UI update
+        setForceUpdate((prev) => prev + 1);
+
         toast.success("Đã hạ cấp thành viên xuống thành viên thường");
       } else {
         toast.error(`Lỗi: ${result.error}`);
@@ -1584,6 +2189,19 @@ export default function GroupInfo({
       if (result.success) {
         // Cập nhật UI hoặc reload dữ liệu nhóm
         setShowKickDialog(false);
+
+        // Cập nhật danh sách thành viên trong state để UI hiển thị đúng
+        if (group.members) {
+          const updatedMembers = group.members.filter(
+            (member) => member.userId !== selectedMemberId,
+          );
+          group.members = updatedMembers;
+        }
+
+        // Force UI update
+        setForceUpdate((prev) => prev + 1);
+
+        toast.success("Đã xóa thành viên khỏi nhóm");
       } else {
         toast.error(`Lỗi: ${result.error}`);
       }
@@ -1656,6 +2274,26 @@ export default function GroupInfo({
         // Đóng các dialog
         setShowConfirmTransferDialog(false);
         setShowTransferLeadershipDialog(false);
+
+        // Cập nhật vai trò trong state để UI hiển thị đúng
+        if (group.members && currentUser) {
+          const updatedMembers = group.members.map((member) => {
+            if (member.userId === newLeaderId) {
+              return { ...member, role: GroupRole.LEADER };
+            }
+            if (member.userId === currentUser.id) {
+              return { ...member, role: GroupRole.MEMBER };
+            }
+            return member;
+          });
+          group.members = updatedMembers;
+
+          // Cập nhật vai trò của người dùng hiện tại
+          setCurrentUserRole(GroupRole.MEMBER);
+        }
+
+        // Force UI update
+        setForceUpdate((prev) => prev + 1);
 
         // Thông báo cho người dùng
         toast.success("Đã chuyển quyền trưởng nhóm thành công");
