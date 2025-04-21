@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Group, GroupMember } from "@/types/base";
@@ -34,14 +34,11 @@ export default function GroupChatHeader({
   const [isCheckingMembership, setIsCheckingMembership] = useState(false);
   const [membershipCheckInterval, setMembershipCheckInterval] =
     useState<NodeJS.Timeout | null>(null);
+  const lastCheckTimestampRef = useRef<number>(0);
+  const API_THROTTLE_MS = 10000; // 10 giây
 
-  const {
-    searchText,
-    setSearchText,
-    searchMessages,
-    clearSearch,
-    setSelectedGroup,
-  } = useChatStore();
+  const { searchText, setSearchText, searchMessages, clearSearch } =
+    useChatStore();
   const currentUser = useAuthStore((state) => state.user);
 
   // Lấy danh sách cuộc trò chuyện từ conversationsStore
@@ -69,11 +66,23 @@ export default function GroupChatHeader({
   const checkGroupMembership = useCallback(async () => {
     if (!group?.id || !currentUser?.id || isCheckingMembership) return;
 
+    // Kiểm tra throttle để giảm số lượng request API
+    const now = Date.now();
+    if (now - lastCheckTimestampRef.current < API_THROTTLE_MS) {
+      console.log(
+        `[GroupChatHeader] Skipping membership check due to throttling. Last check was ${(now - lastCheckTimestampRef.current) / 1000}s ago`,
+      );
+      return;
+    }
+
     try {
       setIsCheckingMembership(true);
       console.log(
         `[GroupChatHeader] Checking if user ${currentUser.id} is still a member of group ${group.id}`,
       );
+
+      // Cập nhật timestamp trước khi gọi API
+      lastCheckTimestampRef.current = now;
 
       const result = await getGroupById(group.id);
 
@@ -103,7 +112,8 @@ export default function GroupChatHeader({
           useChatStore.getState().clearChatCache("GROUP", group.id);
 
           // Chuyển về trạng thái không chọn nhóm
-          setSelectedGroup(null);
+          // Sử dụng getState() để tránh gây ra vòng lặp vô hạn
+          useChatStore.getState().setSelectedGroup(null);
 
           // Tải lại danh sách cuộc trò chuyện
           if (currentUser?.id) {
@@ -129,7 +139,12 @@ export default function GroupChatHeader({
     } finally {
       setIsCheckingMembership(false);
     }
-  }, [group?.id, currentUser?.id, isCheckingMembership]);
+  }, [
+    group?.id,
+    currentUser?.id,
+    isCheckingMembership,
+    membershipCheckInterval,
+  ]);
 
   // Thiết lập interval kiểm tra thành viên nhóm
   useEffect(() => {
@@ -139,11 +154,18 @@ export default function GroupChatHeader({
         `[GroupChatHeader] Setting up membership check interval for group ${group.id}`,
       );
 
-      // Kiểm tra ngay lập tức
-      checkGroupMembership();
+      // Kiểm tra ngay lập tức, nhưng chỉ nếu đã quá thời gian throttle
+      const now = Date.now();
+      if (now - lastCheckTimestampRef.current >= API_THROTTLE_MS) {
+        checkGroupMembership();
+      } else {
+        console.log(
+          `[GroupChatHeader] Skipping initial membership check due to throttling. Last check was ${(now - lastCheckTimestampRef.current) / 1000}s ago`,
+        );
+      }
 
-      // Thiết lập interval kiểm tra mỗi 30 giây
-      const intervalId = setInterval(checkGroupMembership, 30000);
+      // Thiết lập interval kiểm tra mỗi 60 giây thay vì 30 giây
+      const intervalId = setInterval(checkGroupMembership, 60000);
       setMembershipCheckInterval(intervalId);
 
       // Cleanup khi component unmount hoặc nhóm thay đổi
@@ -155,7 +177,7 @@ export default function GroupChatHeader({
         setMembershipCheckInterval(null);
       };
     }
-  }, [group?.id, currentUser?.id, checkGroupMembership]);
+  }, [group?.id, currentUser?.id]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
