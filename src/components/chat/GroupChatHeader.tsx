@@ -1,13 +1,23 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Group } from "@/types/base";
-import { Info, Search, X, Users, ChevronLeft } from "lucide-react";
+import {
+  Info,
+  Search,
+  X,
+  Users,
+  ChevronLeft,
+  AlertTriangle,
+} from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
+import { useAuthStore } from "@/stores/authStore";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { getGroupById } from "@/actions/group.action";
 
 interface GroupChatHeaderProps {
   group: Group | null;
@@ -21,8 +31,18 @@ export default function GroupChatHeader({
   onBackToList,
 }: GroupChatHeaderProps) {
   const [isSearching, setIsSearching] = useState(false);
-  const { searchText, setSearchText, searchMessages, clearSearch } =
-    useChatStore();
+  const [isCheckingMembership, setIsCheckingMembership] = useState(false);
+  const [membershipCheckInterval, setMembershipCheckInterval] =
+    useState<NodeJS.Timeout | null>(null);
+
+  const {
+    searchText,
+    setSearchText,
+    searchMessages,
+    clearSearch,
+    setSelectedGroup,
+  } = useChatStore();
+  const currentUser = useAuthStore((state) => state.user);
 
   // Lấy danh sách cuộc trò chuyện từ conversationsStore
   const conversations = useConversationsStore((state) => state.conversations);
@@ -44,6 +64,98 @@ export default function GroupChatHeader({
     // Nếu không có, sử dụng thông tin từ group prop
     return group?.members?.length || 0;
   }, [groupConversation, group]);
+
+  // Hàm kiểm tra xem người dùng hiện tại có còn là thành viên của nhóm không
+  const checkGroupMembership = async () => {
+    if (!group || !currentUser || isCheckingMembership) return;
+
+    try {
+      setIsCheckingMembership(true);
+      console.log(
+        `[GroupChatHeader] Checking if user ${currentUser.id} is still a member of group ${group.id}`,
+      );
+
+      const result = await getGroupById(group.id);
+
+      if (result.success && result.group) {
+        // Kiểm tra xem người dùng hiện tại có trong danh sách thành viên không
+        const isMember = result.group.members?.some(
+          (member) => member.userId === currentUser.id,
+        );
+
+        if (!isMember) {
+          console.log(
+            `[GroupChatHeader] User ${currentUser.id} is no longer a member of group ${group.id}`,
+          );
+
+          // Hiển thị thông báo
+          toast.error("Bạn không còn là thành viên của nhóm này", {
+            description: "Bạn đã bị xóa khỏi nhóm hoặc nhóm đã bị giải tán",
+            icon: <AlertTriangle className="h-5 w-5" />,
+            duration: 5000,
+          });
+
+          // Xóa nhóm khỏi danh sách cuộc trò chuyện
+          const conversationsStore = useConversationsStore.getState();
+          conversationsStore.checkAndRemoveGroups(group.id, group.name);
+
+          // Xóa tin nhắn của nhóm khỏi cache
+          useChatStore.getState().clearChatCache("GROUP", group.id);
+
+          // Chuyển về trạng thái không chọn nhóm
+          setSelectedGroup(null);
+
+          // Tải lại danh sách cuộc trò chuyện
+          if (currentUser?.id) {
+            conversationsStore.loadConversations(currentUser.id);
+          }
+
+          // Xóa interval kiểm tra
+          if (membershipCheckInterval) {
+            clearInterval(membershipCheckInterval);
+            setMembershipCheckInterval(null);
+          }
+        } else {
+          console.log(
+            `[GroupChatHeader] User ${currentUser.id} is still a member of group ${group.id}`,
+          );
+        }
+      }
+    } catch (error) {
+      console.error(
+        `[GroupChatHeader] Error checking group membership:`,
+        error,
+      );
+    } finally {
+      setIsCheckingMembership(false);
+    }
+  };
+
+  // Thiết lập interval kiểm tra thành viên nhóm
+  useEffect(() => {
+    // Chỉ thiết lập interval nếu có nhóm được chọn
+    if (group && currentUser) {
+      console.log(
+        `[GroupChatHeader] Setting up membership check interval for group ${group.id}`,
+      );
+
+      // Kiểm tra ngay lập tức
+      checkGroupMembership();
+
+      // Thiết lập interval kiểm tra mỗi 30 giây
+      const intervalId = setInterval(checkGroupMembership, 30000);
+      setMembershipCheckInterval(intervalId);
+
+      // Cleanup khi component unmount hoặc nhóm thay đổi
+      return () => {
+        console.log(
+          `[GroupChatHeader] Cleaning up membership check interval for group ${group.id}`,
+        );
+        clearInterval(intervalId);
+        setMembershipCheckInterval(null);
+      };
+    }
+  }, [group?.id, currentUser?.id]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

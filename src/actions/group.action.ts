@@ -265,6 +265,17 @@ export async function updateGroup(
  */
 export async function deleteGroup(groupId: string, deletedById?: string) {
   try {
+    // Get group info to include group name in the event
+    let groupName = "chat";
+    try {
+      const groupResult = await getGroupById(groupId);
+      if (groupResult.success && groupResult.group) {
+        groupName = groupResult.group.name || "chat";
+      }
+    } catch (groupError) {
+      console.error(`Error getting group info for ${groupId}:`, groupError);
+    }
+
     await axiosInstance.delete(`/groups/${groupId}`);
 
     // Emit group deleted event - use both our custom event name and backend event name
@@ -272,6 +283,7 @@ export async function deleteGroup(groupId: string, deletedById?: string) {
       groupId,
       deletedById: deletedById || "unknown",
       timestamp: new Date(),
+      groupName, // Include group name in the event
     });
 
     // Also emit the backend event name with đúng cấu trúc dữ liệu
@@ -279,7 +291,20 @@ export async function deleteGroup(groupId: string, deletedById?: string) {
       groupId,
       dissolvedBy: deletedById || "unknown", // Backend sử dụng dissolvedBy thay vì deletedById
       timestamp: new Date(),
+      groupName, // Include group name in the event
     });
+
+    // Emit additional events for better UI handling
+    // Emit updateConversationList event to ensure frontend updates the conversation list
+    if (deletedById) {
+      emitGroupEvent("updateConversationList", {
+        action: "group_dissolved",
+        groupId,
+        groupName,
+        dissolvedBy: deletedById,
+        timestamp: new Date(),
+      });
+    }
 
     return { success: true };
   } catch (error) {
@@ -351,6 +376,18 @@ export async function removeGroupMember(
   removedById?: string,
 ) {
   try {
+    // Get group info to include group name in the event
+    let groupName = "chat";
+    try {
+      const groupResult = await getGroupById(groupId);
+      if (groupResult.success && groupResult.group) {
+        groupName = groupResult.group.name || "chat";
+      }
+    } catch (groupError) {
+      console.error(`Error getting group info for ${groupId}:`, groupError);
+    }
+
+    // Call API to remove member
     await axiosInstance.delete(`/groups/${groupId}/members/${userId}`);
 
     // Emit member removed event
@@ -359,6 +396,35 @@ export async function removeGroupMember(
       userId,
       removedById: removedById || "unknown",
       timestamp: new Date(),
+      groupName, // Include group name in the event
+    });
+
+    // Emit direct event to the removed user
+    // This is a backup in case the server doesn't send the event
+    emitGroupEvent("directUserEvent", {
+      targetUserId: userId,
+      eventName: "removedFromGroup",
+      eventData: {
+        groupId,
+        userId,
+        removedById: removedById || "unknown",
+        timestamp: new Date(),
+        groupName,
+        action: "removed_from_group",
+      },
+    });
+
+    // Also emit updateGroupList event directly to the removed user
+    emitGroupEvent("directUserEvent", {
+      targetUserId: userId,
+      eventName: "updateGroupList",
+      eventData: {
+        action: "removed_from_group",
+        groupId,
+        removedById: removedById || "unknown",
+        timestamp: new Date(),
+        groupName,
+      },
     });
 
     return { success: true };
@@ -431,6 +497,17 @@ export async function updateMemberRole(
  */
 export async function leaveGroup(groupId: string, userId?: string) {
   try {
+    // Get group info to include group name in the event
+    let groupName = "chat";
+    try {
+      const groupResult = await getGroupById(groupId);
+      if (groupResult.success && groupResult.group) {
+        groupName = groupResult.group.name || "chat";
+      }
+    } catch (groupError) {
+      console.error(`Error getting group info for ${groupId}:`, groupError);
+    }
+
     await axiosInstance.post(`/groups/${groupId}/leave`);
 
     // Emit member removed event (self-removal)
@@ -440,6 +517,25 @@ export async function leaveGroup(groupId: string, userId?: string) {
         userId,
         removedById: userId, // Self-removal
         timestamp: new Date(),
+        groupName, // Include group name in the event
+        left: true, // Indicate this is a voluntary leave
+      });
+    }
+
+    // Emit additional events for better UI handling
+    if (userId) {
+      // Emit updateGroupList event to ensure frontend updates the group list
+      emitGroupEvent("directUserEvent", {
+        targetUserId: userId,
+        eventName: "updateGroupList",
+        eventData: {
+          action: "removed_from_group",
+          groupId,
+          removedById: userId, // Self-removal
+          timestamp: new Date(),
+          groupName,
+          left: true, // Indicate this is a voluntary leave
+        },
       });
     }
 
@@ -482,6 +578,69 @@ export async function getPublicGroupInfo(groupId: string) {
     return { success: true, groupInfo: response.data };
   } catch (error) {
     console.error(`Get public group info for ${groupId} failed:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Create a new group with avatar
+ * @param name Group name
+ * @param creatorId Creator ID
+ * @param initialMembers Initial group members
+ * @param avatarFile Optional avatar file
+ * @returns Created group
+ */
+export async function createGroupWithAvatar(
+  name: string,
+  creatorId: string,
+  initialMembers: GroupMemberDto[],
+  avatarFile?: File,
+) {
+  try {
+    // First create the group
+    const createResult = await createGroup({
+      name,
+      creatorId,
+      initialMembers,
+    });
+
+    if (!createResult.success || !createResult.group) {
+      return createResult;
+    }
+
+    // If no avatar file, return the created group
+    if (!avatarFile) {
+      return createResult;
+    }
+
+    // If avatar file exists, upload it
+    const groupId = createResult.group.id;
+    const formData = new FormData();
+    formData.append("file", avatarFile);
+
+    try {
+      const avatarResult = await updateGroupAvatar(groupId, formData);
+      if (avatarResult.success) {
+        // Return the updated group with avatar
+        return avatarResult;
+      } else {
+        // Avatar upload failed, but group was created successfully
+        console.warn(
+          "Group created but avatar upload failed:",
+          avatarResult.error,
+        );
+        return createResult;
+      }
+    } catch (avatarError) {
+      // Avatar upload failed, but group was created successfully
+      console.error("Error uploading group avatar:", avatarError);
+      return createResult;
+    }
+  } catch (error) {
+    console.error("Create group with avatar failed:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

@@ -146,6 +146,8 @@ interface ConversationsState {
     userId: string,
     isTyping: boolean,
   ) => void;
+  forceUpdate: () => void; // Force UI update
+  checkAndRemoveGroups: (groupId: string, groupName?: string) => boolean; // Check and remove groups
 
   // New utility functions for better message handling
   processNewMessage: (
@@ -631,8 +633,14 @@ export const useConversationsStore = create<ConversationsState>()(
           return { conversations: filteredConversations };
         });
 
-        // Force UI update by notifying subscribers
-        set((state) => ({ ...state }));
+        // Force UI update by notifying subscribers with a new object reference
+        // This ensures React detects the state change and re-renders components
+        setTimeout(() => {
+          console.log(
+            `[conversationsStore] Forcing UI update after removing conversation ${contactId}`,
+          );
+          get().forceUpdate();
+        }, 0);
       },
 
       updateLastMessage: (contactId, message) => {
@@ -893,7 +901,7 @@ export const useConversationsStore = create<ConversationsState>()(
         if (!currentUser) return undefined;
 
         // Đảm bảo tin nhắn có messageType được đặt chính xác
-        let processedMessage = { ...message };
+        const processedMessage = { ...message };
 
         // Nếu không có messageType, hãy xác định dựa trên các trường khác
         if (!processedMessage.messageType) {
@@ -1001,7 +1009,7 @@ export const useConversationsStore = create<ConversationsState>()(
         if (!currentUser) return;
 
         // Đảm bảo tin nhắn có messageType được đặt chính xác
-        let processedMessage = { ...message };
+        const processedMessage = { ...message };
 
         // Nếu không có messageType, hãy xác định dựa trên các trường khác
         if (!processedMessage.messageType) {
@@ -1174,6 +1182,51 @@ export const useConversationsStore = create<ConversationsState>()(
       },
 
       // Main function to process new messages
+      // Force UI update by creating a new reference to the conversations array
+      forceUpdate: () => {
+        console.log("[conversationsStore] Forcing UI update");
+        set((state) => ({
+          ...state,
+          conversations: [...state.conversations],
+        }));
+      },
+
+      // Check and remove groups that the user has been removed from
+      checkAndRemoveGroups: (groupId: string, groupName?: string) => {
+        console.log(
+          `[conversationsStore] Checking if user has been removed from group ${groupId}`,
+        );
+
+        const conversations = get().conversations;
+        const groupConversation = conversations.find(
+          (conv) => conv.type === "GROUP" && conv.group?.id === groupId,
+        );
+
+        if (groupConversation) {
+          console.log(
+            `[conversationsStore] Found group ${groupId} in conversations, removing it`,
+          );
+
+          // Remove the group from conversations
+          get().removeConversation(groupId);
+          console.log(
+            `[conversationsStore] Removed group ${groupId} from conversations`,
+          );
+
+          // Force UI update immediately
+          setTimeout(() => {
+            get().forceUpdate();
+            console.log(
+              `[conversationsStore] Forced UI update after removal from group ${groupId}`,
+            );
+          }, 0);
+
+          return true;
+        }
+
+        return false;
+      },
+
       processNewMessage: (message, options = {}) => {
         const {
           incrementUnreadCount = true,

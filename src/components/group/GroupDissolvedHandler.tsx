@@ -33,14 +33,6 @@ export default function GroupDissolvedHandler() {
         "[GroupDissolvedHandler] Group dissolved event received:",
         data,
       );
-      console.log(
-        "[GroupDissolvedHandler] Group dissolved data type:",
-        typeof data,
-      );
-      console.log(
-        "[GroupDissolvedHandler] Group dissolved data keys:",
-        Object.keys(data),
-      );
 
       // Make sure we have a groupId
       const groupId = data.groupId as string;
@@ -68,21 +60,19 @@ export default function GroupDissolvedHandler() {
         setSelectedGroup(null);
       }
 
+      // Clear chat messages for this group
+      useChatStore.getState().clearChatCache("GROUP", groupId);
+
       // Remove this group from conversations
       console.log(
         `[GroupDissolvedHandler] Removing dissolved group ${groupId} from conversations`,
       );
       removeConversation(groupId);
 
-      // Force reload conversations to ensure UI is updated
-      console.log(
-        `[GroupDissolvedHandler] Forcing reload of conversations after group dissolution`,
-      );
+      // Đảm bảo UI được cập nhật ngay lập tức
       setTimeout(() => {
-        if (currentUser?.id) {
-          loadConversations(currentUser.id);
-        }
-      }, 500);
+        useConversationsStore.getState().forceUpdate();
+      }, 0);
     };
 
     // Handler for removedFromGroup event
@@ -120,30 +110,140 @@ export default function GroupDissolvedHandler() {
         setSelectedGroup(null);
       }
 
+      // Clear chat messages for this group
+      useChatStore.getState().clearChatCache("GROUP", groupId);
+
       // Remove this group from conversations
       console.log(
         `[GroupDissolvedHandler] Removing group ${groupId} from conversations after being removed`,
       );
       removeConversation(groupId);
 
-      // Force reload conversations to ensure UI is updated
+      // Đảm bảo UI được cập nhật ngay lập tức
       setTimeout(() => {
-        if (currentUser?.id) {
-          loadConversations(currentUser.id);
+        useConversationsStore.getState().forceUpdate();
+      }, 0);
+    };
+
+    // Handler for updateConversationList event
+    const handleUpdateConversationList = (data: Record<string, unknown>) => {
+      console.log(
+        "[GroupDissolvedHandler] Update conversation list event received:",
+        data,
+      );
+
+      const action = data.action as string;
+      const groupId = data.groupId as string;
+
+      if (!groupId) {
+        console.error(
+          "[GroupDissolvedHandler] Invalid updateConversationList event data:",
+          data,
+        );
+        return;
+      }
+
+      if (action === "group_dissolved") {
+        console.log(
+          `[GroupDissolvedHandler] Group ${groupId} was dissolved, updating conversation list`,
+        );
+
+        // If this is the currently selected group, clear selection
+        if (selectedGroup && selectedGroup.id === groupId) {
+          setSelectedGroup(null);
         }
-      }, 500);
+
+        // Clear chat messages for this group
+        useChatStore.getState().clearChatCache("GROUP", groupId);
+
+        // Remove this group from conversations
+        removeConversation(groupId);
+
+        // Đảm bảo UI được cập nhật ngay lập tức
+        setTimeout(() => {
+          useConversationsStore.getState().forceUpdate();
+        }, 0);
+      } else if (
+        action === "member_removed" &&
+        data.userId === currentUser.id
+      ) {
+        console.log(
+          `[GroupDissolvedHandler] User was removed from group ${groupId}, updating conversation list`,
+        );
+
+        // If this is the currently selected group, clear selection
+        if (selectedGroup && selectedGroup.id === groupId) {
+          setSelectedGroup(null);
+        }
+
+        // Clear chat messages for this group
+        useChatStore.getState().clearChatCache("GROUP", groupId);
+
+        // Remove this group from conversations
+        removeConversation(groupId);
+
+        // Đảm bảo UI được cập nhật ngay lập tức
+        setTimeout(() => {
+          useConversationsStore.getState().forceUpdate();
+        }, 0);
+      }
+    };
+
+    // Handler for forceUpdateConversations event
+    const handleForceUpdateConversations = (data: Record<string, unknown>) => {
+      console.log(
+        "[GroupDissolvedHandler] Force update conversations event received:",
+        data,
+      );
+
+      // Force reload conversations immediately
+      if (currentUser?.id) {
+        console.log(
+          "[GroupDissolvedHandler] Forcing immediate reload of conversations",
+        );
+        loadConversations(currentUser.id);
+
+        // Also force UI update
+        setTimeout(() => {
+          useConversationsStore.getState().forceUpdate();
+        }, 0);
+
+        // If this is related to a group removal, check if we need to clear selection
+        if (data && data.groupId) {
+          const groupId = data.groupId as string;
+          if (selectedGroup && selectedGroup.id === groupId) {
+            console.log(
+              `[GroupDissolvedHandler] Clearing selected group ${groupId} via forceUpdateConversations`,
+            );
+            setSelectedGroup(null);
+          }
+
+          // Clear chat messages for this group
+          useChatStore.getState().clearChatCache("GROUP", groupId);
+
+          // Remove this group from conversations
+          removeConversation(groupId);
+        }
+      }
     };
 
     // Register event handlers
     console.log("[GroupDissolvedHandler] Registering group event handlers");
     groupSocket.on("groupDissolved", handleGroupDissolved);
     groupSocket.on("removedFromGroup", handleRemovedFromGroup);
+    groupSocket.on("updateConversationList", handleUpdateConversationList);
+    groupSocket.on("forceUpdateConversations", handleForceUpdateConversations);
 
     // Cleanup
     return () => {
       console.log("[GroupDissolvedHandler] Cleaning up group event handlers");
       groupSocket.off("groupDissolved", handleGroupDissolved);
       groupSocket.off("removedFromGroup", handleRemovedFromGroup);
+      groupSocket.off("updateConversationList", handleUpdateConversationList);
+      groupSocket.off(
+        "forceUpdateConversations",
+        handleForceUpdateConversations,
+      );
     };
   }, [
     currentUser,
