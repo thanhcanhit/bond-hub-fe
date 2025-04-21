@@ -9,6 +9,7 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { Message, Reaction } from "@/types/base";
 import { useSocket } from "@/providers/SocketChatProvider";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
+import { toast } from "sonner";
 
 // Extend Window interface to include our socket
 declare global {
@@ -27,6 +28,22 @@ export function getMessageSocket(): Socket | null {
 interface MessageEventData {
   type: "user" | "group";
   message: Message;
+  timestamp: Date;
+}
+
+// Define types for updateGroupList event
+interface UpdateGroupListEventData {
+  action: "added_to_group" | "removed_from_group" | "group_dissolved";
+  groupId: string;
+  addedById?: string;
+  timestamp: Date;
+}
+
+// Define types for updateConversationList event
+interface UpdateConversationListEventData {
+  action: "group_dissolved" | "group_created" | "member_removed";
+  groupId: string;
+  userId?: string;
   timestamp: Date;
 }
 
@@ -654,6 +671,97 @@ export default function ChatSocketHandler() {
     [conversations],
   );
 
+  // Handle updateGroupList event
+  const handleUpdateGroupList = useCallback(
+    (data: UpdateGroupListEventData) => {
+      console.log(
+        "[ChatSocketHandler] Update group list event received:",
+        data,
+      );
+
+      if (data.action === "added_to_group") {
+        console.log(
+          "[ChatSocketHandler] User was added to a group, updating group list",
+        );
+
+        // Reload conversations to get the new group
+        if (currentUser?.id) {
+          useConversationsStore.getState().loadConversations(currentUser.id);
+        }
+      } else if (data.action === "removed_from_group") {
+        console.log(
+          "[ChatSocketHandler] User was removed from a group, updating group list",
+        );
+
+        // Remove the group from conversations
+        useConversationsStore.getState().removeConversation(data.groupId);
+
+        // If this is the currently selected group, navigate away
+        if (selectedGroup && selectedGroup.id === data.groupId) {
+          useChatStore.getState().setSelectedGroup(null);
+        }
+
+        // Clear chat messages for this group
+        useChatStore.getState().clearChatCache("GROUP", data.groupId);
+
+        // Show notification
+        toast.info("Bạn đã bị xóa khỏi nhóm hoặc đã rời nhóm");
+      } else if (data.action === "group_dissolved") {
+        console.log(
+          "[ChatSocketHandler] Group was dissolved, updating group list",
+        );
+
+        // Remove the group from conversations
+        useConversationsStore.getState().removeConversation(data.groupId);
+
+        // If this is the currently selected group, navigate away
+        if (selectedGroup && selectedGroup.id === data.groupId) {
+          useChatStore.getState().setSelectedGroup(null);
+        }
+
+        // Clear chat messages for this group
+        useChatStore.getState().clearChatCache("GROUP", data.groupId);
+
+        // Show notification
+        toast.info("Nhóm đã bị giải tán bởi quản trị viên");
+      }
+    },
+    [currentUser, selectedGroup],
+  );
+
+  // Handle updateConversationList event
+  const handleUpdateConversationList = useCallback(
+    (data: UpdateConversationListEventData) => {
+      console.log(
+        "[ChatSocketHandler] Update conversation list event received:",
+        data,
+      );
+
+      if (data.action === "group_dissolved") {
+        console.log(
+          "[ChatSocketHandler] Group was dissolved, updating conversation list",
+        );
+
+        // Remove the group from conversations
+        useConversationsStore.getState().removeConversation(data.groupId);
+
+        // If this is the currently selected group, navigate away
+        if (selectedGroup && selectedGroup.id === data.groupId) {
+          useChatStore.getState().setSelectedGroup(null);
+        }
+      } else if (
+        data.action === "group_created" ||
+        data.action === "member_removed"
+      ) {
+        // Reload conversations to get updated list
+        if (currentUser?.id) {
+          useConversationsStore.getState().loadConversations(currentUser.id);
+        }
+      }
+    },
+    [currentUser, selectedGroup],
+  );
+
   // Send typing indicator
   const sendTypingIndicator = useCallback(
     (isTyping: boolean) => {
@@ -772,6 +880,13 @@ export default function ChatSocketHandler() {
         messageSocket.on("userTypingStopped", handleUserTypingStopped);
         messageSocket.on("userStatus", handleUserStatus);
 
+        // Register group-related event handlers
+        messageSocket.on("updateGroupList", handleUpdateGroupList);
+        messageSocket.on(
+          "updateConversationList",
+          handleUpdateConversationList,
+        );
+
         // Log all registered listeners for debugging
         console.log(
           "[ChatSocketHandler] Current listeners:",
@@ -828,6 +943,13 @@ export default function ChatSocketHandler() {
         messageSocket.off("userTypingStopped", handleUserTypingStopped);
         messageSocket.off("userStatus", handleUserStatus);
 
+        // Remove group-related event handlers
+        messageSocket.off("updateGroupList", handleUpdateGroupList);
+        messageSocket.off(
+          "updateConversationList",
+          handleUpdateConversationList,
+        );
+
         // Reset the ref
         eventListenersSetupRef.current = false;
 
@@ -859,6 +981,8 @@ export default function ChatSocketHandler() {
     handleUserTyping,
     handleUserTypingStopped,
     handleUserStatus,
+    handleUpdateGroupList,
+    handleUpdateConversationList,
   ]);
 
   // Export typing indicator function to chat store
