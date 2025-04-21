@@ -19,19 +19,36 @@ const emitGroupEvent = (event: string, data: Record<string, unknown>) => {
     console.log(`[group.action] Emitting ${event} event:`, data);
     socket.emit(event, data);
 
+    // Emit broadcastReload to ensure all clients get updated
+    console.log(`[group.action] Emitting broadcastReload event to server`);
+    socket.emit("broadcastReload");
+
     // Trigger a manual reload after a short delay to ensure all clients get updated
     setTimeout(() => {
-      if (typeof window !== "undefined" && window.triggerGroupsReload) {
-        console.log(
-          `[group.action] Triggering manual reload after ${event} event`,
-        );
-        window.triggerGroupsReload();
+      if (typeof window !== "undefined") {
+        if (window.groupSocket && window.groupSocket.connected) {
+          console.log(`[group.action] Emitting requestReload event to server`);
+          window.groupSocket.emit("requestReload");
+        } else if (window.triggerGroupsReload) {
+          console.log(
+            `[group.action] Triggering manual reload after ${event} event`,
+          );
+          window.triggerGroupsReload();
+        }
       }
     }, 500);
   } else {
     console.log(
       `[group.action] Socket not available or not connected, skipping ${event} event`,
     );
+
+    // Even if socket is not available, try to trigger reload
+    if (typeof window !== "undefined" && window.triggerGroupsReload) {
+      console.log(
+        `[group.action] Triggering manual reload after ${event} event (fallback)`,
+      );
+      window.triggerGroupsReload();
+    }
   }
 };
 

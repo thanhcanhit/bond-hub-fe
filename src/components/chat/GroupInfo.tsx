@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Group, User, UserInfo, Media, GroupRole } from "@/types/base";
 import { getLinkIcon, getLinkTitle } from "@/utils/link-utils";
 import MediaViewer from "@/components/media/MediaViewer";
-//import { useGroupSocket } from "@/hooks/useGroupSocket";
+import GroupInfoSocketHandler from "../group/GroupInfoSocketHandler";
 import {
   X,
   Users,
@@ -217,6 +217,16 @@ export default function GroupInfo({
           // Cập nhật UI
           setForceUpdate((prev) => prev + 1);
 
+          // Cập nhật conversations store để đảm bảo UI được cập nhật đồng bộ
+          useConversationsStore.getState().updateConversation(groupId, {
+            group: result.group,
+          });
+
+          // Force update conversations để đảm bảo UI được cập nhật
+          setTimeout(() => {
+            useConversationsStore.getState().forceUpdate();
+          }, 100);
+
           // Nếu số lượng thành viên thay đổi, hiển thị thông báo
           if (membersChanged && !forceRefresh) {
             if (
@@ -292,6 +302,19 @@ export default function GroupInfo({
 
         // Cập nhật UI
         setForceUpdate((prev) => prev + 1);
+
+        // Cập nhật conversations store để đảm bảo UI được cập nhật đồng bộ
+        const groupId = group?.id || selectedGroup?.id || initialGroup?.id;
+        if (groupId && updatedSelectedGroup) {
+          useConversationsStore.getState().updateConversation(groupId, {
+            group: updatedSelectedGroup,
+          });
+
+          // Force update conversations để đảm bảo UI được cập nhật
+          setTimeout(() => {
+            useConversationsStore.getState().forceUpdate();
+          }, 100);
+        }
 
         toast.success("Làm mới dữ liệu nhóm thành công");
         return;
@@ -1350,6 +1373,13 @@ export default function GroupInfo({
     <div
       className={`h-full flex flex-col bg-white ${!isOverlay ? "border-l" : ""}`}
     >
+      {/* Socket handler for real-time updates */}
+      {group && (
+        <GroupInfoSocketHandler
+          groupId={group.id}
+          onGroupUpdated={updateMembersList}
+        />
+      )}
       <div className="p-4 flex items-center justify-between border-b">
         <h2 className="font-semibold">Thông tin nhóm</h2>
         <div className="flex items-center gap-2">

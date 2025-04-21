@@ -3,15 +3,16 @@ import { Socket, io } from "socket.io-client";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
-import { getGroupById } from "@/actions/group.action";
-import { toast } from "sonner";
+// import { getGroupById } from "@/actions/group.action";
 
 /**
  * Hook to connect to the groups WebSocket namespace and handle group events
  */
 export const useGroupSocket = () => {
   const socketRef = useRef<Socket | null>(null);
-  const { isAuthenticated, accessToken, currentUser } = useAuthStore();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const currentUser = useAuthStore((state) => state.user);
 
   const joinGroupRoom = useCallback(
     (groupId: string) => {
@@ -36,70 +37,19 @@ export const useGroupSocket = () => {
   const refreshSelectedGroup = useChatStore(
     (state) => state.refreshSelectedGroup,
   );
-  const updateConversation = useConversationsStore(
-    (state) => state.updateConversation,
-  );
-  const conversations = useConversationsStore((state) => state.conversations);
 
   const refreshAllGroupData = useCallback(async () => {
     console.log("[useGroupSocket] Refreshing all group data");
 
-    // Refresh the currently selected group if any
-    await refreshSelectedGroup();
+    // Refresh the selected group
+    refreshSelectedGroup();
 
-    // Refresh all group conversations
-    const groupConversations = conversations.filter(
-      (conv) => conv.type === "GROUP",
-    );
-
-    console.log(
-      `[useGroupSocket] Refreshing ${groupConversations.length} group conversations`,
-    );
-
-    for (const conv of groupConversations) {
-      if (conv.group?.id) {
-        try {
-          console.log(`[useGroupSocket] Refreshing group ${conv.group.id}`);
-          const result = await getGroupById(conv.group.id);
-          if (result.success && result.group) {
-            console.log(
-              `[useGroupSocket] Successfully refreshed group ${conv.group.id}`,
-            );
-            // Update the conversation with new group data
-            updateConversation(conv.group.id, {
-              group: {
-                ...conv.group,
-                name: result.group.name,
-                avatarUrl: result.group.avatarUrl,
-                memberUsers: result.group.memberUsers,
-                memberIds: result.group.memberIds, // Ensure member IDs are updated
-              },
-            });
-
-            // Force UI update
-            setTimeout(() => {
-              useConversationsStore.getState().forceUpdate();
-            }, 0);
-          }
-        } catch (error) {
-          console.error(
-            `[useGroupSocket] Error refreshing group ${conv.group.id}:`,
-            error,
-          );
-        }
-      }
+    // Refresh conversations list
+    if (currentUser?.id) {
+      const conversationsStore = useConversationsStore.getState();
+      await conversationsStore.loadConversations(currentUser.id);
     }
-
-    // Trigger a global event to notify all components about the data refresh
-    if (typeof window !== "undefined" && window.triggerGroupsReload) {
-      console.log(
-        "[useGroupSocket] Triggering global group reload event after refreshAllGroupData",
-      );
-      setTimeout(() => {
-        window.triggerGroupsReload?.();
-      }, 100);
-    }
-  }, [conversations, refreshSelectedGroup, updateConversation]);
+  }, [refreshSelectedGroup, currentUser?.id]);
 
   const triggerGroupsReload = () => {
     if (socketRef.current && socketRef.current.connected) {
@@ -115,6 +65,7 @@ export const useGroupSocket = () => {
 
   if (typeof window !== "undefined") {
     window.triggerGroupsReload = triggerGroupsReload;
+    window.groupSocket = socketRef.current;
   }
 
   useEffect(() => {
@@ -130,6 +81,12 @@ export const useGroupSocket = () => {
     });
 
     socketRef.current = socket;
+
+    // Expose socket to window for other components to use
+    if (typeof window !== "undefined") {
+      window.groupSocket = socket;
+      console.log("[GroupSocket] Socket exposed to window.groupSocket");
+    }
 
     // Join personal room immediately after connection
     socket.on("connect", () => {
@@ -169,7 +126,6 @@ export const useGroupSocket = () => {
         setTimeout(() => {
           useConversationsStore.getState().forceUpdate();
         }, 0);
-        // toast.success(`Bạn đã được thêm vào nhóm ${data.group?.name || "mới"}`);
       }
     });
 
@@ -196,193 +152,60 @@ export const useGroupSocket = () => {
         console.log(
           "[useGroupSocket] Refreshing selected group after member added",
         );
-
-        useChatStore.getState().refreshSelectedGroup();
-
-        setTimeout(() => {
-          const updatedGroup = useChatStore.getState().selectedGroup;
-          if (updatedGroup) {
-            console.log(
-              "[useGroupSocket] Successfully refreshed group with new member",
-            );
-            console.log(
-              "[useGroupSocket] New members count:",
-              updatedGroup.members?.length || 0,
-            );
-
-            useConversationsStore.getState().forceUpdate();
-
-            if (typeof window !== "undefined" && window.triggerGroupsReload) {
-              console.log(
-                "[useGroupSocket] Triggering global group reload event after member added",
-              );
-              window.triggerGroupsReload();
-            }
-          }
-        }, 100);
-      } else {
-        refreshAllGroupData();
-
-        if (typeof window !== "undefined" && window.triggerGroupsReload) {
-          console.log(
-            "[useGroupSocket] Triggering global group reload event for member added",
-          );
-          window.triggerGroupsReload();
-        }
+        refreshSelectedGroup();
       }
     });
 
     socket.on("memberRemoved", (data) => {
       console.log("[useGroupSocket] Member removed from group:", data);
-      const selectedGroup = useChatStore.getState().selectedGroup;
-      if (selectedGroup && selectedGroup.id === data.groupId) {
-        console.log(
-          "[useGroupSocket] Refreshing selected group after member removed",
-        );
-        useChatStore.getState().refreshSelectedGroup();
-        setTimeout(() => {
-          const updatedGroup = useChatStore.getState().selectedGroup;
-          if (updatedGroup) {
-            console.log(
-              "[useGroupSocket] Updated members count:",
-              updatedGroup.members.length,
-            );
-          }
-        }, 0);
-      }
-    });
 
-    socket.on("groupDissolved", (data) => {
-      console.log("[useGroupSocket] Group dissolved event received:", data);
-      const selectedGroup = useChatStore.getState().selectedGroup;
-      if (selectedGroup && selectedGroup.id === data.groupId) {
-        console.log(
-          `[useGroupSocket] Leaving group room: group:${data.groupId} via groupDissolved`,
-        );
-        socket.emit("leaveGroup", { groupId: data.groupId });
-        useChatStore.getState().setSelectedGroup(null);
-      }
-    });
+      // Check if the current user was removed
+      if (data.userId === currentUser?.id) {
+        console.log("[useGroupSocket] Current user was removed from group");
 
-    socket.on("removedFromGroup", (data) => {
-      console.log(
-        "[useGroupSocket] User removed from group event received:",
-        data,
-      );
-      console.log(
-        "[useGroupSocket] Removed from group data type:",
-        typeof data,
-      );
-      console.log(
-        "[useGroupSocket] Removed from group data keys:",
-        Object.keys(data),
-      );
-
-      if (data && data.groupId) {
-        console.log(
-          `[useGroupSocket] Processing removal from group ${data.groupId}`,
-        );
-
+        // If this is the currently selected group, clear it
         const selectedGroup = useChatStore.getState().selectedGroup;
         if (selectedGroup && selectedGroup.id === data.groupId) {
-          console.log(
-            `[useGroupSocket] Currently selected group was left, clearing selection`,
-          );
           useChatStore.getState().setSelectedGroup(null);
         }
 
-        useChatStore.getState().clearChatCache("GROUP", data.groupId);
-
-        const groupName = data.groupName || "chat";
-        if (data.kicked) {
-          toast.info(`Bạn đã bị xóa khỏi nhóm ${groupName}`);
-        } else if (data.left) {
-          toast.info(`Bạn đã rời khỏi nhóm ${groupName}`);
-        } else {
-          toast.info(`Bạn không còn là thành viên của nhóm ${groupName}`);
-        }
-
-        const conversationsStore = useConversationsStore.getState();
-        const removed = conversationsStore.checkAndRemoveGroups(
-          data.groupId,
-          groupName,
-        );
-
-        if (removed) {
-          console.log(
-            `[useGroupSocket] Successfully removed group ${data.groupId} from conversations`,
-          );
-        } else {
-          console.log(
-            `[useGroupSocket] Group ${data.groupId} not found in conversations`,
-          );
-        }
-
-        setTimeout(() => {
-          console.log(
-            `[useGroupSocket] Forcing UI update after removal from group ${data.groupId}`,
-          );
-          conversationsStore.forceUpdate();
-        }, 0);
-
-        console.log(
-          `[useGroupSocket] Leaving group room: group:${data.groupId}`,
-        );
-        socket.emit("leaveGroup", {
-          groupId: data.groupId,
-          userId: currentUser?.id,
-        });
+        // Remove the group from conversations
+        useConversationsStore.getState().removeConversation(data.groupId);
       } else {
-        console.error(
-          "[useGroupSocket] Invalid removedFromGroup event data:",
-          data,
-        );
+        // If another member was removed, refresh the group data
+        refreshAllGroupData();
       }
     });
 
-    socket.on("roleChanged", (data) => {
-      console.log("[useGroupSocket] Member role changed:", data);
-      refreshAllGroupData();
-    });
-
-    socket.on("avatarUpdated", (data) => {
-      console.log("[useGroupSocket] Group avatar updated:", data);
-      refreshAllGroupData();
-    });
-
     socket.on("memberRoleUpdated", (data) => {
-      console.log("[useGroupSocket] Member role updated (legacy event):", data);
-      refreshAllGroupData();
-    });
-
-    socket.on("groupAvatarUpdated", (data) => {
-      console.log(
-        "[useGroupSocket] Group avatar updated (legacy event):",
-        data,
-      );
-      refreshAllGroupData();
-    });
-
-    socket.on("groupNameUpdated", (data) => {
-      console.log("[useGroupSocket] Group name updated (legacy event):", data);
+      console.log("[useGroupSocket] Member role updated:", data);
       refreshAllGroupData();
     });
 
     socket.on("groupDeleted", (data) => {
-      console.log(
-        "[useGroupSocket] Group deleted (legacy event) received:",
-        data,
-      );
+      console.log("[useGroupSocket] Group deleted:", data);
 
-      if (data && data.groupId) {
-        console.log(
-          `[useGroupSocket] Leaving group room: group:${data.groupId} via groupDeleted`,
-        );
-        socket.emit("leaveGroup", {
-          groupId: data.groupId,
-          userId: currentUser?.id,
-        });
+      // If this is the currently selected group, clear it
+      const selectedGroup = useChatStore.getState().selectedGroup;
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        useChatStore.getState().setSelectedGroup(null);
       }
+
+      // Remove the group from conversations
+      useConversationsStore.getState().removeConversation(data.groupId);
+    });
+
+    socket.on("removedFromGroup", (data) => {
+      console.log("[useGroupSocket] Removed from group event received:", data);
+
+      // If this is the currently selected group, clear it
+      const selectedGroup = useChatStore.getState().selectedGroup;
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        useChatStore.getState().setSelectedGroup(null);
+      }
+
+      // Remove the group from conversations
+      useConversationsStore.getState().removeConversation(data.groupId);
     });
 
     socket.on("updateGroupList", (data) => {
@@ -401,65 +224,6 @@ export const useGroupSocket = () => {
         setTimeout(() => {
           useConversationsStore.getState().forceUpdate();
         }, 0);
-      }
-    });
-
-    socket.on("updateConversationList", (data) => {
-      console.log(
-        "[useGroupSocket] Update conversation list event received:",
-        data,
-      );
-
-      if (data.action === "group_dissolved" && data.groupId) {
-        console.log(
-          `[useGroupSocket] Leaving group room: group:${data.groupId} via updateConversationList`,
-        );
-        socket.emit("leaveGroup", {
-          groupId: data.groupId,
-          userId: currentUser?.id,
-        });
-      } else if (
-        data.action === "member_removed" &&
-        data.userId === currentUser?.id
-      ) {
-        console.log(
-          `[useGroupSocket] Leaving group room: group:${data.groupId} via updateConversationList`,
-        );
-        socket.emit("leaveGroup", {
-          groupId: data.groupId,
-          userId: currentUser?.id,
-        });
-      }
-    });
-
-    socket.on("directUserEvent", (data) => {
-      console.log("[useGroupSocket] Direct user event received:", data);
-
-      if (
-        data &&
-        data.targetUserId === currentUser?.id &&
-        data.eventName &&
-        data.eventData
-      ) {
-        console.log(
-          `[useGroupSocket] Processing direct event ${data.eventName} for current user`,
-        );
-
-        if (
-          data.eventName === "removedFromGroup" ||
-          (data.eventName === "updateGroupList" &&
-            data.eventData.action === "removed_from_group") ||
-          (data.eventName === "updateConversationList" &&
-            data.eventData.action === "member_removed")
-        ) {
-          const eventData = data.eventData as Record<string, unknown>;
-          const groupId = eventData.groupId as string;
-
-          console.log(
-            `[useGroupSocket] Leaving group room: group:${groupId} via directUserEvent`,
-          );
-          socket.emit("leaveGroup", { groupId, userId: currentUser?.id });
-        }
       }
     });
 
@@ -527,21 +291,34 @@ export const useGroupSocket = () => {
     return () => {
       socket.disconnect();
       socketRef.current = null;
+
+      // Clean up window reference
+      if (typeof window !== "undefined" && window.groupSocket === socket) {
+        window.groupSocket = null;
+        console.log("[GroupSocket] Cleaned up window.groupSocket reference");
+      }
     };
   }, [
-    accessToken,
     isAuthenticated,
+    accessToken,
     currentUser,
-    refreshSelectedGroup,
-    updateConversation,
-    conversations,
-    refreshAllGroupData,
     joinUserRoom,
+    refreshSelectedGroup,
+    refreshAllGroupData,
   ]);
 
+  // Expose the socket and joinGroupRoom function
   return {
     socket: socketRef.current,
     joinGroupRoom,
-    joinUserRoom,
+    triggerGroupsReload,
   };
 };
+
+// Declare the window interface to include our socket and helper functions
+declare global {
+  interface Window {
+    groupSocket: Socket | null;
+    triggerGroupsReload?: () => void;
+  }
+}

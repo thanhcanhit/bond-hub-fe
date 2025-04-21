@@ -22,9 +22,6 @@ function SocketProvider({ children }: { children: React.ReactNode }) {
   // Khởi tạo kết nối socket cho namespace /groups để lắng nghe sự kiện nhóm
   useGroupSocket();
 
-  // Tạm thời tắt đồng bộ dữ liệu người dùng để tránh gọi API quá nhiều
-  // Đã xóa useUserDataSync để giảm số lượng API calls
-
   // Trả về các socket handlers và children
   return (
     <>
