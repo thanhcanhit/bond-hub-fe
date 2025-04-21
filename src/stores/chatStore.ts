@@ -136,6 +136,12 @@ interface ChatState {
     type: "USER" | "GROUP",
   ) => Promise<void>;
   refreshSelectedGroup: () => Promise<void>;
+
+  // Handle group dissolved event
+  handleGroupDissolved: (groupId: string) => void;
+
+  // Handle member removed event
+  handleMemberRemoved: (groupId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -2004,5 +2010,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.error("Error refreshing group data:", error);
       return null;
     }
+  },
+
+  // Handle group dissolved event
+  handleGroupDissolved: (groupId: string) => {
+    set((state) => {
+      if (state.selectedGroup?.id === groupId) {
+        state.setSelectedGroup(null);
+      }
+      state.clearChatCache("GROUP", groupId);
+      return state;
+    });
+  },
+
+  // Handle member removed event
+  handleMemberRemoved: (groupId: string) => {
+    set((state) => {
+      if (state.selectedGroup?.id === groupId) {
+        state.setSelectedGroup(null);
+      }
+      state.clearChatCache("GROUP", groupId);
+      return state;
+    });
   },
 }));

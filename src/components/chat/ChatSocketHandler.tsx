@@ -1037,6 +1037,42 @@ export default function ChatSocketHandler() {
     }
   }, [sendTypingIndicator, currentUser]);
 
+  // Add event listeners for group-related events
+  useEffect(() => {
+    if (!messageSocket) return;
+
+    const handleGroupDissolved = (data: UpdateGroupListEventData) => {
+      console.log("[ChatSocketHandler] Group dissolved event received:", data);
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        console.log(
+          `[ChatSocketHandler] Leaving group room: group:${data.groupId} via groupDissolved`,
+        );
+        messageSocket.emit("leaveGroup", { groupId: data.groupId });
+        useChatStore.getState().setSelectedGroup(null);
+      }
+      useConversationsStore.getState().removeConversation(data.groupId);
+    };
+
+    const handleMemberRemoved = (data: UpdateGroupListEventData) => {
+      console.log("[ChatSocketHandler] Member removed event received:", data);
+      if (selectedGroup && selectedGroup.id === data.groupId) {
+        console.log(
+          `[ChatSocketHandler] Refreshing selected group after member removed`,
+        );
+        useChatStore.getState().refreshSelectedGroup();
+      }
+      useConversationsStore.getState().removeConversation(data.groupId);
+    };
+
+    messageSocket.on("groupDissolved", handleGroupDissolved);
+    messageSocket.on("memberRemoved", handleMemberRemoved);
+
+    return () => {
+      messageSocket.off("groupDissolved", handleGroupDissolved);
+      messageSocket.off("memberRemoved", handleMemberRemoved);
+    };
+  }, [messageSocket, selectedGroup]);
+
   // This component doesn't render anything
   return null;
 }

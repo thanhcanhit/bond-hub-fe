@@ -724,3 +724,48 @@ export async function updateGroupAvatar(groupId: string, formData: FormData) {
     };
   }
 }
+
+// Ensure correct emission of group-related events
+
+// Emit group dissolved event
+export async function dissolveGroup(groupId: string, dissolvedById: string) {
+  try {
+    await axiosInstance.delete(`/groups/${groupId}`);
+    emitGroupEvent("groupDissolved", {
+      groupId,
+      dissolvedBy: dissolvedById,
+      timestamp: new Date(),
+    });
+    return { success: true };
+  } catch (error) {
+    console.error(`Dissolve group ${groupId} failed:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// Emit member removed event
+export async function removeMemberFromGroup(
+  groupId: string,
+  userId: string,
+  removedById: string,
+) {
+  try {
+    await axiosInstance.delete(`/groups/${groupId}/members/${userId}`);
+    emitGroupEvent("memberRemoved", {
+      groupId,
+      userId,
+      removedById,
+      timestamp: new Date(),
+    });
+    return { success: true };
+  } catch (error) {
+    console.error(`Remove member from group ${groupId} failed:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
