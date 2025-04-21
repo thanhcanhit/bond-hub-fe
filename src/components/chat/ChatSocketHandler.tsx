@@ -6,7 +6,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useNotificationStore } from "@/stores/notificationStore";
-import { Message, Reaction } from "@/types/base";
+import { Message, Reaction, MessageType } from "@/types/base";
 import { useSocket } from "@/providers/SocketChatProvider";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { toast } from "sonner";
@@ -215,7 +215,30 @@ export default function ChatSocketHandler() {
     (data: MessageEventData) => {
       console.log("[ChatSocketHandler] New message received:", data);
 
-      const message = ensureMessageHasUserInfo(data.message);
+      // Ensure the message has the correct messageType set
+      let message = ensureMessageHasUserInfo(data.message);
+
+      // Make sure messageType is correctly set based on the message properties
+      if (message.groupId && !message.messageType) {
+        message = {
+          ...message,
+          messageType: MessageType.GROUP,
+        };
+        console.log(
+          "[ChatSocketHandler] Set messageType to GROUP for message with groupId",
+          message.id,
+        );
+      } else if (message.receiverId && !message.messageType) {
+        message = {
+          ...message,
+          messageType: MessageType.USER,
+        };
+        console.log(
+          "[ChatSocketHandler] Set messageType to USER for message with receiverId",
+          message.id,
+        );
+      }
+
       const conversationsStore = useConversationsStore.getState();
       const chatStore = useChatStore.getState();
 
