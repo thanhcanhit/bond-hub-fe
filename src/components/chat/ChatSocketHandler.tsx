@@ -338,13 +338,18 @@ export default function ChatSocketHandler() {
       }
 
       // Kiểm tra xem tin nhắn có thuộc cuộc trò chuyện đang mở không
+      // Đồng thời kiểm tra loại tin nhắn để đảm bảo tin nhắn nhóm chỉ hiển thị trong nhóm và tin nhắn trực tiếp chỉ hiển thị trong cuộc trò chuyện trực tiếp
       const isFromCurrentChat =
+        // Tin nhắn trực tiếp chỉ hiển thị trong cuộc trò chuyện trực tiếp
         (currentChatType === "USER" &&
           selectedContact &&
+          (message.messageType === MessageType.USER || !message.messageType) && // Đảm bảo là tin nhắn trực tiếp
           (message.senderId === selectedContact.id ||
             message.receiverId === selectedContact.id)) ||
+        // Tin nhắn nhóm chỉ hiển thị trong cuộc trò chuyện nhóm
         (currentChatType === "GROUP" &&
           selectedGroup &&
+          (message.messageType === MessageType.GROUP || message.groupId) && // Đảm bảo là tin nhắn nhóm
           message.groupId === selectedGroup.id);
 
       // Thông tin người gửi đã được cập nhật trong ensureMessageHasUserInfo

@@ -22,6 +22,7 @@ export default function AudioVisualizer({
   const [currentTime, setCurrentTime] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Create audio element for playback control
   useEffect(() => {
@@ -88,18 +89,64 @@ export default function AudioVisualizer({
       }
     };
 
-    const handleError = () => {
-      // Access error information from the audio element itself
-      console.error("Audio loading error:", audio.error);
+    const handleError = (event?: Event) => {
+      // Xử lý an toàn khi truy cập thông tin lỗi
+      let errorInfo = {};
+
+      try {
+        // Kiểm tra xem audio.error có tồn tại không
+        if (audio.error) {
+          errorInfo = {
+            code: audio.error.code || "unknown",
+            message: audio.error.message || "Unknown error",
+          };
+        } else {
+          errorInfo = { message: "Audio error object is null or undefined" };
+        }
+      } catch (err) {
+        errorInfo = {
+          message: "Error accessing audio.error",
+          error: String(err),
+        };
+      }
+
+      // Log detailed error information
+      console.error("Audio loading error:", {
+        ...errorInfo,
+        url: url,
+        fileName: fileName,
+        eventType: event ? event.type : "unknown",
+        audioState: audio
+          ? {
+              paused: audio.paused,
+              ended: audio.ended,
+              networkState: audio.networkState,
+              readyState: audio.readyState,
+            }
+          : "audio object unavailable",
+      });
+
+      // Implement exponential backoff for retries
       if (loadAttempts < maxAttempts) {
         loadAttempts++;
-        // Try loading again with a slight delay
+        // Exponential backoff: 1s, 2s, 4s...
+        const delay = Math.pow(2, loadAttempts - 1) * 1000;
+        console.log(
+          `Retry attempt ${loadAttempts}/${maxAttempts} in ${delay}ms`,
+        );
+
         setTimeout(() => {
           if (isMounted) {
-            audio.src = url;
+            // Try with a different approach on subsequent attempts
+            if (loadAttempts > 1) {
+              // On second attempt, try with a cache-busting parameter
+              audio.src = `${url}${url.includes("?") ? "&" : "?"}_cb=${Date.now()}`;
+            } else {
+              audio.src = url;
+            }
             audio.load();
           }
-        }, 1000);
+        }, delay);
       } else {
         // If we've tried multiple times and failed, try to extract duration from filename
         const extractedDuration = extractDurationFromFileName();
@@ -116,6 +163,50 @@ export default function AudioVisualizer({
           );
           setDuration(0);
         }
+
+        // Create a fallback audio element as a last resort
+        try {
+          // Try with a different audio constructor approach
+          const fallbackAudio = new window.Audio(url);
+          audioRef.current = fallbackAudio;
+
+          // Set up minimal event listeners for the fallback
+          fallbackAudio.addEventListener("loadedmetadata", () => {
+            if (
+              isMounted &&
+              isFinite(fallbackAudio.duration) &&
+              fallbackAudio.duration > 0
+            ) {
+              setDuration(fallbackAudio.duration);
+            }
+          });
+
+          fallbackAudio.addEventListener("timeupdate", () => {
+            if (isMounted) {
+              setCurrentTime(fallbackAudio.currentTime);
+            }
+          });
+
+          fallbackAudio.addEventListener("ended", () => {
+            if (isMounted) {
+              setIsPlaying(false);
+              setCurrentTime(0);
+            }
+          });
+
+          // Set a specific error for the fallback attempt
+          fallbackAudio.addEventListener("error", () => {
+            if (isMounted) {
+              setLoadError("Không thể tải tệp âm thanh. Vui lòng thử lại sau.");
+            }
+          });
+        } catch (fallbackError) {
+          console.error("Fallback audio creation failed:", fallbackError);
+          if (isMounted) {
+            setLoadError("Không thể tải tệp âm thanh. Vui lòng thử lại sau.");
+          }
+        }
+
         setIsLoading(false);
       }
     };
@@ -125,6 +216,21 @@ export default function AudioVisualizer({
     audio.addEventListener("timeupdate", handleTimeUpdate);
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("error", handleError);
+
+    // Tạo các hàm xử lý riêng biệt để có thể gỡ bỏ đăng ký sau này
+    const handleStalled = () => {
+      console.warn("Audio playback stalled");
+      handleError();
+    };
+
+    const handleAbort = (event: Event) => {
+      console.warn("Audio loading aborted");
+      handleError(event);
+    };
+
+    // Add additional error listeners for more comprehensive error catching
+    audio.addEventListener("stalled", handleStalled);
+    audio.addEventListener("abort", handleAbort);
 
     // Set audio source and load
     audio.preload = "metadata";
@@ -138,11 +244,17 @@ export default function AudioVisualizer({
     return () => {
       isMounted = false;
 
-      // Remove event listeners
-      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audio.removeEventListener("timeupdate", handleTimeUpdate);
-      audio.removeEventListener("ended", handleEnded);
-      audio.removeEventListener("error", handleError);
+      try {
+        // Remove event listeners
+        audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+        audio.removeEventListener("timeupdate", handleTimeUpdate);
+        audio.removeEventListener("ended", handleEnded);
+        audio.removeEventListener("error", handleError);
+        audio.removeEventListener("stalled", handleStalled);
+        audio.removeEventListener("abort", handleAbort);
+      } catch (cleanupError) {
+        console.error("Error during audio cleanup:", cleanupError);
+      }
 
       // Stop playback and clean up resources
       audio.pause();
@@ -153,6 +265,15 @@ export default function AudioVisualizer({
 
   // Progress bar component with click to seek functionality
   const renderProgressBar = () => {
+    // If we have a load error, show error message
+    if (loadError) {
+      return (
+        <div className="w-full h-3 flex items-center justify-center">
+          <div className="text-xs text-red-500">{loadError}</div>
+        </div>
+      );
+    }
+
     // If duration is 0 or invalid, show only sound wave visualization
     if (duration <= 0) {
       return (
@@ -225,8 +346,25 @@ export default function AudioVisualizer({
         })
         .catch((error) => {
           console.error("Error playing audio:", error);
+
+          // Check if it's a user interaction error (common in browsers)
+          if (error.name === "NotAllowedError") {
+            console.warn("Audio playback requires user interaction first");
+            // We could show a UI message here if needed
+          }
+
           // Try to reload the audio if play fails
-          audioRef.current?.load();
+          try {
+            audioRef.current?.load();
+            // Try playing again after a short delay
+            setTimeout(() => {
+              audioRef.current?.play().catch((e) => {
+                console.error("Second play attempt failed:", e);
+              });
+            }, 500);
+          } catch (reloadError) {
+            console.error("Error reloading audio:", reloadError);
+          }
         });
     }
   };
@@ -277,7 +415,7 @@ export default function AudioVisualizer({
             e.stopPropagation();
             togglePlayPause();
           }}
-          disabled={isLoading}
+          disabled={isLoading || !!loadError}
         >
           {isPlaying ? (
             <Pause className="h-4 w-4" />
@@ -356,7 +494,7 @@ export default function AudioVisualizer({
             size="icon"
             className="h-10 w-10 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 hover:text-blue-700"
             onClick={togglePlayPause}
-            disabled={isLoading}
+            disabled={isLoading || !!loadError}
           >
             {isPlaying ? (
               <Pause className="h-5 w-5" />
