@@ -39,7 +39,8 @@ export async function getUserDataById(id: string) {
     console.error(`Get user by ID failed for ID ${id}:`, error);
 
     // Tạo user giả nếu không tìm thấy (chỉ cho mục đích hiển thị UI)
-    if (error.response && error.response.status === 404) {
+    const axiosError = error as AxiosError;
+    if (axiosError.response && axiosError.response.status === 404) {
       console.log(`Creating placeholder user for ID ${id}`);
       const placeholderUser: User = {
         id: id,
@@ -56,7 +57,7 @@ export async function getUserDataById(id: string) {
           blockStrangers: false,
           createdAt: new Date(),
           updatedAt: new Date(),
-          userAuth: null as any,
+          userAuth: null as unknown as User,
         },
         refreshTokens: [],
         qrCodes: [],

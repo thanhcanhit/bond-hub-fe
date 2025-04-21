@@ -257,10 +257,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     console.log(`[chatStore] Processing new message ${message.id}`);
 
     // Kiểm tra xem tin nhắn có phù hợp với loại cuộc trò chuyện hiện tại không
-    const { currentChatType, selectedContact, selectedGroup } = get();
+    const { currentChatType } = get();
 
     // Đảm bảo tin nhắn có messageType được đặt chính xác
-    let processedMessage = { ...message };
+    const processedMessage = { ...message };
 
     // Nếu không có messageType, hãy xác định dựa trên các trường khác
     if (!processedMessage.messageType) {

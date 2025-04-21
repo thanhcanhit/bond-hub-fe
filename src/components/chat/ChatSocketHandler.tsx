@@ -9,7 +9,6 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { Message, Reaction, MessageType } from "@/types/base";
 import { useSocket } from "@/providers/SocketChatProvider";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
-import { toast } from "sonner";
 
 // Extend Window interface to include our socket
 declare global {
@@ -237,7 +236,7 @@ export default function ChatSocketHandler() {
       console.log("[ChatSocketHandler] New message received:", data);
 
       // Ensure the message has the correct messageType set and user info
-      let message = ensureMessageHasUserInfo(data.message);
+      const message = ensureMessageHasUserInfo(data.message);
 
       // Log message details for debugging
       console.log(
@@ -349,20 +348,22 @@ export default function ChatSocketHandler() {
       // Kiểm tra chi tiết dựa trên loại tin nhắn
       if (message.messageType === MessageType.GROUP || message.groupId) {
         // Đây là tin nhắn nhóm
-        isFromCurrentChat =
+        isFromCurrentChat = Boolean(
           currentChatType === "GROUP" &&
-          selectedGroup &&
-          message.groupId === selectedGroup.id;
+            selectedGroup &&
+            message.groupId === selectedGroup.id,
+        );
         console.log(
           `[ChatSocketHandler] Group message check: message.groupId=${message.groupId}, selectedGroup.id=${selectedGroup?.id}, isFromCurrentChat=${isFromCurrentChat}`,
         );
       } else {
         // Đây là tin nhắn trực tiếp
-        isFromCurrentChat =
+        isFromCurrentChat = Boolean(
           currentChatType === "USER" &&
-          selectedContact &&
-          (message.senderId === selectedContact.id ||
-            message.receiverId === selectedContact.id);
+            selectedContact &&
+            (message.senderId === selectedContact.id ||
+              message.receiverId === selectedContact.id),
+        );
         console.log(
           `[ChatSocketHandler] Direct message check: message.senderId=${message.senderId}, message.receiverId=${message.receiverId}, selectedContact.id=${selectedContact?.id}, isFromCurrentChat=${isFromCurrentChat}`,
         );
@@ -620,17 +621,19 @@ export default function ChatSocketHandler() {
             messageToUpdate.groupId
           ) {
             // Đây là tin nhắn nhóm
-            isFromCurrentChat =
+            isFromCurrentChat = Boolean(
               currentChatType === "GROUP" &&
-              selectedGroup &&
-              messageToUpdate.groupId === selectedGroup.id;
+                selectedGroup &&
+                messageToUpdate.groupId === selectedGroup.id,
+            );
           } else {
             // Đây là tin nhắn trực tiếp
-            isFromCurrentChat =
+            isFromCurrentChat = Boolean(
               currentChatType === "USER" &&
-              selectedContact &&
-              (messageToUpdate.senderId === selectedContact.id ||
-                messageToUpdate.receiverId === selectedContact.id);
+                selectedContact &&
+                (messageToUpdate.senderId === selectedContact.id ||
+                  messageToUpdate.receiverId === selectedContact.id),
+            );
           }
 
           // Chỉ phát âm thanh nếu không phải cuộc trò chuyện hiện tại
@@ -774,7 +777,7 @@ export default function ChatSocketHandler() {
       // Không xử lý các sự kiện removed_from_group và group_dissolved ở đây
       // vì đã được xử lý trong GroupSocketHandler
     },
-    [currentUser],
+    [],
   );
 
   // Handle updateConversationList event
@@ -793,7 +796,7 @@ export default function ChatSocketHandler() {
         }, 0);
       }
     },
-    [currentUser],
+    [],
   );
 
   // Send typing indicator

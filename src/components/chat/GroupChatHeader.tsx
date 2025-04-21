@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Group } from "@/types/base";
+import { Group, GroupMember } from "@/types/base";
 import {
   Info,
   Search,
@@ -66,7 +66,7 @@ export default function GroupChatHeader({
   }, [groupConversation, group]);
 
   // Hàm kiểm tra xem người dùng hiện tại có còn là thành viên của nhóm không
-  const checkGroupMembership = async () => {
+  const checkGroupMembership = useCallback(async () => {
     if (!group || !currentUser || isCheckingMembership) return;
 
     try {
@@ -80,7 +80,7 @@ export default function GroupChatHeader({
       if (result.success && result.group) {
         // Kiểm tra xem người dùng hiện tại có trong danh sách thành viên không
         const isMember = result.group.members?.some(
-          (member) => member.userId === currentUser.id,
+          (member: GroupMember) => member.userId === currentUser.id,
         );
 
         if (!isMember) {
@@ -129,7 +129,13 @@ export default function GroupChatHeader({
     } finally {
       setIsCheckingMembership(false);
     }
-  };
+  }, [
+    group,
+    currentUser,
+    isCheckingMembership,
+    membershipCheckInterval,
+    setSelectedGroup,
+  ]);
 
   // Thiết lập interval kiểm tra thành viên nhóm
   useEffect(() => {
@@ -155,7 +161,7 @@ export default function GroupChatHeader({
         setMembershipCheckInterval(null);
       };
     }
-  }, [group?.id, currentUser?.id]);
+  }, [checkGroupMembership, group, currentUser]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

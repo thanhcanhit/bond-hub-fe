@@ -61,6 +61,20 @@ export default function ChatArea({
   // Keep track of previous messages to detect what changed
   const prevMessagesRef = useRef<Message[]>([]);
 
+  // Use a ref to track the last message count to avoid unnecessary scrolling
+  const lastMessageCountRef = useRef<number>(0);
+  // Use a ref to track the last conversation ID
+  const lastConversationIdRef = useRef<string | null>(null);
+  // Use a ref to track if we've already scrolled for this conversation
+  const hasScrolledForConversationRef = useRef<boolean>(false);
+
+  // Function to scroll to bottom - extracted to avoid creating in render
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior });
+    }
+  }, []);
+
   useEffect(() => {
     // Skip if no messages or no selected conversation
     if (!messages.length || (!selectedContact && !selectedGroup)) {
@@ -138,21 +152,8 @@ export default function ChatArea({
     currentChatType,
     updateLastMessage,
     messagesEndRef,
+    scrollToBottom,
   ]);
-
-  // Use a ref to track the last message count to avoid unnecessary scrolling
-  const lastMessageCountRef = useRef<number>(0);
-  // Use a ref to track the last conversation ID
-  const lastConversationIdRef = useRef<string | null>(null);
-  // Use a ref to track if we've already scrolled for this conversation
-  const hasScrolledForConversationRef = useRef<boolean>(false);
-
-  // Function to scroll to bottom - extracted to avoid creating in render
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior });
-    }
-  }, []);
 
   // Effect for scrolling when messages change
   useEffect(() => {
@@ -209,6 +210,8 @@ export default function ChatArea({
     currentChatType,
     messages.length,
     scrollToBottom,
+    selectedContact,
+    selectedGroup,
   ]);
 
   // Handle scroll event to load older messages
@@ -495,6 +498,8 @@ export default function ChatArea({
     currentChatType,
     conversations,
     updateTypingStatus,
+    selectedContact,
+    selectedGroup,
   ]);
 
   const handleReply = (message: Message) => {
@@ -808,7 +813,13 @@ export default function ChatArea({
         useChatStore.getState().setSelectedGroup(null);
       }
     }
-  }, [currentChatType, selectedGroup?.id, conversations.length]); // Phụ thuộc vào conversations.length để kiểm tra khi danh sách cuộc trò chuyện thay đổi
+  }, [
+    currentChatType,
+    selectedGroup?.id,
+    conversations.length,
+    conversations,
+    selectedGroup,
+  ]); // Phụ thuộc vào conversations.length để kiểm tra khi danh sách cuộc trò chuyện thay đổi
 
   // Check if current user is valid - this helps prevent errors when auth state changes
   const isUserValid = !!currentUser?.id;
