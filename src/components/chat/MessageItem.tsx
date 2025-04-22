@@ -189,8 +189,26 @@ function MediaItem({ media, onClick }: MediaItemProps) {
   }
 }
 
+// Extend the Message type to include senderName which might be present in API responses
+interface ExtendedMessage extends Message {
+  senderName?: string;
+}
+
+// Helper function to get the sender name from a message
+function getSenderName(
+  message: Message | ExtendedMessage,
+  userInfo?: UserInfo,
+): string {
+  return (
+    message.sender?.userInfo?.fullName ||
+    userInfo?.fullName ||
+    (message as ExtendedMessage).senderName ||
+    "Thành viên nhóm"
+  );
+}
+
 interface MessageItemProps {
-  message: Message;
+  message: Message | ExtendedMessage;
   isCurrentUser: boolean;
   showAvatar?: boolean;
   onReply?: (message: Message) => void;
@@ -558,9 +576,7 @@ export default function MessageItem({
           {/* Display sender name for group messages */}
           {isGroup && !isCurrentUser && !message.recalled && (
             <div className="text-xs font-medium text-blue-600 mb-1">
-              {message.sender?.userInfo?.fullName ||
-                userInfo?.fullName ||
-                "Thành viên nhóm"}
+              {getSenderName(message, userInfo)}
             </div>
           )}
 
@@ -588,7 +604,7 @@ export default function MessageItem({
                   : message.recalled
                     ? "bg-gray-100 text-gray-500 italic"
                     : "bg-gray-200 text-gray-800"
-              } ${!message.recalled ? "cursor-pointer hover:opacity-90" : ""} ${
+              } ${!message.recalled ? "cursor-pFointer hover:opacity-90" : ""} ${
                 message.content.media?.length ||
                 message.content.image ||
                 message.content.video

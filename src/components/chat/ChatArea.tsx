@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Message, User, UserInfo, GroupRole } from "@/types/base";
+import { Message, User, UserInfo, GroupMember } from "@/types/base";
 import ChatHeader from "./ChatHeader";
 import GroupChatHeader from "./GroupChatHeader";
 import MessageItem from "./MessageItem";
@@ -314,6 +314,25 @@ export default function ChatArea({
       // Fetch complete user data to ensure we have userInfo
       const fetchCompleteUserData = async () => {
         try {
+          // Check if we already have complete user data in conversations store
+          const existingConversation = conversations.find(
+            (conv) =>
+              conv.type === "USER" && conv.contact.id === selectedContact.id,
+          );
+
+          // If we already have complete user data, use it instead of making an API call
+          if (existingConversation?.contact?.userInfo?.fullName) {
+            console.log(
+              `[ChatArea] Using existing user data for ${selectedContact.id} from conversations store`,
+            );
+            const { setSelectedContact } = useChatStore.getState();
+            setSelectedContact(
+              existingConversation.contact as User & { userInfo: UserInfo },
+            );
+            return;
+          }
+
+          // Otherwise, fetch from API
           const result = await getUserDataById(selectedContact.id);
           if (result.success && result.user) {
             // Get the current selected contact to make sure it hasn't changed
@@ -361,8 +380,17 @@ export default function ChatArea({
 
       // Reset global unread count
       resetUnread();
+
+      // No need to fetch user data for group members - we already have this information
+      // in the group object from the conversations store
     }
-  }, [selectedContact?.id, selectedGroup?.id, currentChatType, resetUnread]);
+  }, [
+    selectedContact?.id,
+    selectedGroup?.id,
+    currentChatType,
+    resetUnread,
+    conversations,
+  ]);
 
   // Track typing status from conversationsStore
   // Use a ref to track the subscription
@@ -603,32 +631,84 @@ export default function ChatArea({
             );
 
             // Tìm thông tin người gửi từ danh sách thành viên nhóm
-            const senderMember = groupConversation?.group?.memberUsers?.find(
-              (member: {
+            // Ưu tiên tìm theo userId vì đó là ID thực của người dùng
+            let memberInfo = null;
+
+            // 1. Tìm trong API response của conversation
+            if (groupConversation?.group) {
+              // API response có thể có trường members khác với Group interface
+              // Định nghĩa interface cho member từ API response
+              interface ApiGroupMember {
                 id: string;
+                userId: string;
                 fullName: string;
                 profilePictureUrl?: string | null;
-                role: GroupRole;
-              }) => member?.id === message.senderId,
-            );
+                role: string;
+              }
 
-            // Nếu không tìm thấy trong conversationsStore, thử tìm trong selectedGroup
-            const fallbackSenderMember =
-              !senderMember && selectedGroup && selectedGroup.memberUsers
-                ? selectedGroup.memberUsers.find(
-                    (member: {
-                      id: string;
-                      fullName: string;
-                      profilePictureUrl?: string | null;
-                      role: GroupRole;
-                    }) => member?.id === message.senderId,
-                  )
-                : null;
+              const apiMembers = (
+                groupConversation.group as { members?: ApiGroupMember[] }
+              ).members;
+              if (apiMembers && Array.isArray(apiMembers)) {
+                const member = apiMembers.find(
+                  (m: ApiGroupMember) => m.userId === message.senderId,
+                );
 
-            // Sử dụng thông tin người gửi từ conversationsStore hoặc selectedGroup
-            const memberInfo = senderMember || fallbackSenderMember;
+                if (member) {
+                  memberInfo = {
+                    id: member.userId,
+                    fullName: member.fullName,
+                    profilePictureUrl: member.profilePictureUrl,
+                    role: member.role,
+                  };
+                }
+              }
+            }
 
-            if (memberInfo && memberInfo.id) {
+            // 2. Nếu không tìm thấy, thử tìm trong memberUsers
+            if (!memberInfo && groupConversation?.group?.memberUsers) {
+              const memberUser = groupConversation.group.memberUsers.find(
+                (m) => m.id === message.senderId,
+              );
+
+              if (memberUser) {
+                memberInfo = memberUser;
+              }
+            }
+
+            // 3. Nếu vẫn không tìm thấy, thử tìm trong selectedGroup
+            if (!memberInfo && selectedGroup) {
+              // Tìm trong members
+              if (selectedGroup.members) {
+                const member = selectedGroup.members.find(
+                  (m: GroupMember) => m.userId === message.senderId,
+                );
+
+                if (member) {
+                  // Lấy thông tin từ user object của member
+                  memberInfo = {
+                    id: member.userId,
+                    fullName: member.user?.userInfo?.fullName || "Unknown",
+                    profilePictureUrl: member.user?.userInfo?.profilePictureUrl,
+                    role: member.role,
+                  };
+                }
+              }
+
+              // Tìm trong memberUsers
+              if (!memberInfo && selectedGroup.memberUsers) {
+                const memberUser = selectedGroup.memberUsers.find(
+                  (m) => m.id === message.senderId,
+                );
+
+                if (memberUser) {
+                  memberInfo = memberUser;
+                }
+              }
+            }
+
+            // Nếu tìm thấy thông tin thành viên, tạo userInfo
+            if (memberInfo) {
               userInfo = {
                 id: memberInfo.id,
                 fullName: memberInfo.fullName || "Unknown",

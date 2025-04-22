@@ -3,6 +3,12 @@ import axiosInstance from "@/lib/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { User } from "@/types/base";
 import { AxiosError } from "axios";
+import {
+  getCachedUserData,
+  cacheUserData,
+  removeCachedUserData,
+  clearUserCache,
+} from "@/utils/userCache";
 
 // Lấy danh sách tất cả users
 export async function getAllUsers() {
@@ -31,9 +37,20 @@ export async function getUserDataById(id: string) {
       };
     }
 
+    // Check if user data is in cache and still valid
+    const cachedUser = getCachedUserData(id);
+    if (cachedUser) {
+      console.log(`Using cached user data for ID: ${id}`);
+      return { success: true, user: cachedUser };
+    }
+
     console.log(`Fetching user data for ID: ${id}`);
     const response = await axiosInstance.get(`/users/${id}`);
     const user: User = response.data;
+
+    // Store user data in cache
+    cacheUserData(id, user);
+
     return { success: true, user };
   } catch (error) {
     console.error(`Get user by ID failed for ID ${id}:`, error);
@@ -79,12 +96,66 @@ export async function getUserDataById(id: string) {
         receivedMessages: [],
         comments: [],
       };
+
+      // Cache the placeholder user too
+      cacheUserData(id, placeholderUser);
+
       return { success: true, user: placeholderUser };
     }
 
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// Batch fetch multiple users at once
+export async function batchGetUserData(userIds: string[]) {
+  // Filter out duplicate IDs
+  const uniqueIds = [...new Set(userIds)];
+
+  // Check which users are already in cache
+  const cachedUsers: User[] = [];
+  const idsToFetch: string[] = [];
+
+  uniqueIds.forEach((id) => {
+    const cachedUser = getCachedUserData(id);
+    if (cachedUser) {
+      cachedUsers.push(cachedUser);
+    } else {
+      idsToFetch.push(id);
+    }
+  });
+
+  // If all users are in cache, return immediately
+  if (idsToFetch.length === 0) {
+    console.log(`All ${uniqueIds.length} users found in cache`);
+    return { success: true, users: cachedUsers };
+  }
+
+  // Otherwise, fetch the remaining users
+  try {
+    console.log(`Batch fetching ${idsToFetch.length} users`);
+
+    // Fetch each user individually (could be optimized with a batch API endpoint)
+    const fetchPromises = idsToFetch.map((id) => getUserDataById(id));
+    const results = await Promise.all(fetchPromises);
+
+    // Combine cached and newly fetched users
+    const fetchedUsers = results
+      .filter((result) => result.success && result.user)
+      .map((result) => result.user as User);
+
+    const allUsers = [...cachedUsers, ...fetchedUsers];
+
+    return { success: true, users: allUsers };
+  } catch (error) {
+    console.error("Batch get users failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+      users: cachedUsers, // Return any cached users we did find
     };
   }
 }
@@ -116,6 +187,9 @@ export async function updateUser(id: string, userData: Partial<User>) {
       useAuthStore.getState().updateUser(updatedUser);
     }
 
+    // Update the cache with the new user data
+    cacheUserData(id, updatedUser);
+
     return { success: true, user: updatedUser };
   } catch (error) {
     console.error("Update user failed:", error);
@@ -136,6 +210,9 @@ export async function deleteUser(id: string) {
     if (currentUser && currentUser.id === id) {
       useAuthStore.getState().logout();
     }
+
+    // Remove from cache if exists
+    removeCachedUserData(id);
 
     return { success: true };
   } catch (error) {
@@ -195,6 +272,10 @@ export async function updateProfilePicture(file: File) {
               },
             };
             useAuthStore.getState().updateUser(updatedUser);
+
+            // Update cache
+            cacheUserData(currentUser.id, updatedUser);
+
             console.log("Only profile picture URL updated in store");
           }
         }
@@ -210,6 +291,9 @@ export async function updateProfilePicture(file: File) {
             },
           };
           useAuthStore.getState().updateUser(updatedUser);
+
+          // Update cache
+          cacheUserData(currentUser.id, updatedUser);
         }
       }
     }
@@ -272,6 +356,10 @@ export async function updateCoverImage(file: File) {
               },
             };
             useAuthStore.getState().updateUser(updatedUser);
+
+            // Update cache
+            cacheUserData(currentUser.id, updatedUser);
+
             console.log("Only cover image URL updated in store");
           }
         }
@@ -287,6 +375,9 @@ export async function updateCoverImage(file: File) {
             },
           };
           useAuthStore.getState().updateUser(updatedUser);
+
+          // Update cache
+          cacheUserData(currentUser.id, updatedUser);
         }
       }
     }
@@ -348,9 +439,16 @@ export async function updateUserBasicInfo(userData: {
           };
 
           useAuthStore.getState().updateUser(userToUpdate);
+
+          // Update cache
+          cacheUserData(currentUser.id, userToUpdate);
+
           console.log("Basic info updated in store using local data");
         } else {
           useAuthStore.getState().updateUser(updatedUser);
+
+          // Update cache
+          cacheUserData(currentUser.id, updatedUser);
         }
       }
     } catch (fetchError) {
@@ -371,8 +469,14 @@ export async function updateUserBasicInfo(userData: {
         };
 
         useAuthStore.getState().updateUser(userToUpdate);
+
+        // Update cache
+        cacheUserData(currentUser.id, userToUpdate);
       } else {
         useAuthStore.getState().updateUser(updatedUser);
+
+        // Update cache
+        cacheUserData(currentUser.id, updatedUser);
       }
     }
 
@@ -398,6 +502,12 @@ export async function searchUser(searchValue: string) {
       : { phoneNumber: searchValue };
 
     const response = await axiosInstance.post("/users/search", payload);
+
+    // Cache the found user
+    if (response.data && response.data.id) {
+      cacheUserData(response.data.id, response.data);
+    }
+
     return { success: true, user: response.data };
   } catch (error) {
     // Kiểm tra nếu là lỗi 404 (không tìm thấy)

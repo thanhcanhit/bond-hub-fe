@@ -45,7 +45,7 @@ import ProfileDialog from "@/components/profile/ProfileDialog";
 import GroupMemberList from "./GroupMemberList";
 import AddMemberDialog from "./AddMemberDialog";
 import EditGroupNameDialog from "./EditGroupNameDialog";
-import { getUserDataById } from "@/actions/user.action";
+import { getUserDataById, batchGetUserData } from "@/actions/user.action";
 
 interface GroupDialogProps {
   group: Group | null;
@@ -94,25 +94,31 @@ export default function GroupDialog({
       const fetchMemberDetails = async () => {
         const newMemberDetails: { [key: string]: User } = {};
 
-        // Get detailed information for each member
-        for (const member of group.members) {
-          try {
-            // If member already has user info, use it
+        try {
+          // Collect all user IDs that need to be fetched
+          const memberIds: string[] = [];
+
+          // First, use any existing user data
+          for (const member of group.members) {
             if (member.user?.userInfo) {
               newMemberDetails[member.userId] = member.user;
             } else {
-              // Otherwise fetch from API
-              const result = await getUserDataById(member.userId);
-              if (result.success && result.user) {
-                newMemberDetails[member.userId] = result.user;
-              }
+              memberIds.push(member.userId);
             }
-          } catch (error) {
-            console.error(
-              `Error fetching details for member ${member.userId}:`,
-              error,
-            );
           }
+
+          // Batch fetch any missing user data
+          if (memberIds.length > 0) {
+            console.log(`Batch fetching ${memberIds.length} member details`);
+            const userResult = await batchGetUserData(memberIds);
+            if (userResult.success && userResult.users) {
+              userResult.users.forEach((user) => {
+                newMemberDetails[user.id] = user;
+              });
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching member details:", error);
         }
 
         setMemberDetails(newMemberDetails);

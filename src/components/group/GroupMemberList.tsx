@@ -26,9 +26,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ProfileDialog from "@/components/profile/ProfileDialog";
-import { getUserDataById } from "@/actions/user.action";
+import { getUserDataById, batchGetUserData } from "@/actions/user.action";
 import { useAuthStore } from "@/stores/authStore";
-import { getRelationship } from "@/actions/friend.action";
+import {
+  getRelationship,
+  batchGetRelationships,
+} from "@/actions/friend.action";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -91,22 +94,23 @@ export default function GroupMemberList({
         const newAdderDetails: { [key: string]: User } = {};
         const newRelationships: { [key: string]: string } = {};
 
-        // Get detailed information for each member
-        for (const member of group.members) {
-          try {
-            // If member already has user info, use it
-            if (member.user?.userInfo) {
-              newMemberDetails[member.userId] = member.user;
+        try {
+          // Collect all user IDs that need to be fetched
+          const memberIds: string[] = [];
+          const adderIds: string[] = [];
+          const relationshipIds: string[] = [];
+
+          // Prepare lists of IDs to fetch
+          for (const member of group.members) {
+            // Check if we need to fetch user data
+            if (!member.user?.userInfo) {
+              memberIds.push(member.userId);
             } else {
-              // Otherwise fetch from API
-              const result = await getUserDataById(member.userId);
-              if (result.success && result.user) {
-                newMemberDetails[member.userId] = result.user;
-              }
+              // If we already have the data, store it
+              newMemberDetails[member.userId] = member.user;
             }
 
-            // Store information about who added this member
-            // If addedBy is directly available in the API response as an object with id and fullName
+            // Check if we need to fetch adder data
             if (
               member.addedBy &&
               typeof member.addedBy === "object" &&
@@ -129,75 +133,108 @@ export default function GroupMemberList({
                   userAuth: { id: adderInfo.id } as User,
                 },
               } as unknown as User;
+            } else if (
+              member.addedById &&
+              member.addedById !== currentUser?.id &&
+              !member.addedBy
+            ) {
+              adderIds.push(member.addedById);
+            } else if (member.addedBy && "userInfo" in member.addedBy) {
+              newAdderDetails[member.userId] = member.addedBy as User;
             }
-            // Fallback to the old method if needed
-            else if (member.addedById && member.addedById !== currentUser?.id) {
-              if (member.addedBy && "userInfo" in member.addedBy) {
-                newAdderDetails[member.userId] = member.addedBy as User;
-              } else {
-                const result = await getUserDataById(member.addedById);
-                if (result.success && result.user) {
-                  newAdderDetails[member.userId] = result.user;
+
+            // Check if we need to fetch relationship data
+            if (member.userId !== currentUser?.id) {
+              relationshipIds.push(member.userId);
+            }
+          }
+
+          // Batch fetch user data
+          if (memberIds.length > 0) {
+            console.log(`Batch fetching ${memberIds.length} member details`);
+            const userResult = await batchGetUserData(memberIds);
+            if (userResult.success && userResult.users) {
+              userResult.users.forEach((user) => {
+                newMemberDetails[user.id] = user;
+              });
+            }
+          }
+
+          // Batch fetch adder data
+          if (adderIds.length > 0) {
+            console.log(`Batch fetching ${adderIds.length} adder details`);
+            const adderResult = await batchGetUserData(adderIds);
+            if (adderResult.success && adderResult.users) {
+              // Match adders to members
+              for (const member of group.members) {
+                if (member.addedById) {
+                  const adder = adderResult.users.find(
+                    (u) => u.id === member.addedById,
+                  );
+                  if (adder) {
+                    newAdderDetails[member.userId] = adder;
+                  }
                 }
               }
             }
+          }
 
-            // Check relationship with this member if it's not the current user
-            if (member.userId !== currentUser?.id) {
-              try {
-                // Lấy accessToken từ authStore để tránh lỗi 401
-                const accessToken =
-                  useAuthStore.getState().accessToken || undefined;
-                const result = await getRelationship(
-                  member.userId,
-                  accessToken,
-                );
-                console.log(`Relationship with ${member.userId}:`, result.data);
-                if (result.success && result.data) {
-                  // API có thể trả về các giá trị khác nhau như "ACCEPTED", "FRIEND", v.v.
-                  // Chuẩn hóa các giá trị để đảm bảo tính nhất quán
-                  const status = result.data.status || "NONE";
+          // Batch fetch relationship data
+          if (relationshipIds.length > 0) {
+            console.log(
+              `Batch fetching ${relationshipIds.length} relationships`,
+            );
+            const accessToken =
+              useAuthStore.getState().accessToken || undefined;
+            const relationshipResult = await batchGetRelationships(
+              relationshipIds,
+              accessToken,
+            );
 
-                  // Nếu đã là bạn bè (ACCEPTED hoặc FRIEND), đặt thành "ACCEPTED"
+            if (
+              relationshipResult.success &&
+              relationshipResult.relationships
+            ) {
+              // Process relationships
+              Object.entries(relationshipResult.relationships).forEach(
+                ([userId, data]) => {
+                  // Normalize relationship status
+                  const status = data.status || "NONE";
+
+                  // Standardize relationship values
                   if (status === "ACCEPTED" || status === "FRIEND") {
-                    newRelationships[member.userId] = "ACCEPTED";
-                  }
-                  // Nếu đã gửi lời mời kết bạn, đặt thành "PENDING_SENT"
-                  else if (status === "PENDING_SENT") {
-                    newRelationships[member.userId] = "PENDING_SENT";
-                  }
-                  // Nếu đã nhận lời mời kết bạn, đặt thành "PENDING_RECEIVED"
-                  else if (status === "PENDING_RECEIVED") {
-                    newRelationships[member.userId] = "PENDING_RECEIVED";
-                  }
-                  // Các trường hợp khác, giữ nguyên giá trị
-                  else {
-                    newRelationships[member.userId] = status;
+                    newRelationships[userId] = "ACCEPTED";
+                  } else if (status === "PENDING_SENT") {
+                    newRelationships[userId] = "PENDING_SENT";
+                  } else if (status === "PENDING_RECEIVED") {
+                    newRelationships[userId] = "PENDING_RECEIVED";
+                  } else {
+                    newRelationships[userId] = status;
                   }
 
                   console.log(
-                    `Normalized relationship with ${member.userId}:`,
-                    newRelationships[member.userId],
+                    `Normalized relationship with ${userId}:`,
+                    newRelationships[userId],
                   );
-                } else {
-                  newRelationships[member.userId] = "NONE";
-                }
-              } catch (error) {
-                console.error(
-                  `Error checking relationship with member ${member.userId}:`,
-                  error,
-                );
-                newRelationships[member.userId] = "NONE";
-              }
+                },
+              );
             }
-          } catch (error) {
-            console.error(
-              `Error fetching details for member ${member.userId}:`,
-              error,
-            );
           }
+
+          // Set default relationship status for any members without data
+          for (const member of group.members) {
+            if (
+              member.userId !== currentUser?.id &&
+              !newRelationships[member.userId]
+            ) {
+              newRelationships[member.userId] = "NONE";
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching member details:", error);
         }
 
+        // Update state with all the data we collected
         setMemberDetails(newMemberDetails);
         setAdderDetails(newAdderDetails);
         setRelationships(newRelationships);

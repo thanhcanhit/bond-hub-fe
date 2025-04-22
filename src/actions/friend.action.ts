@@ -1,6 +1,13 @@
 "use server";
 import axios from "axios";
 import { createAxiosInstance } from "@/lib/axios";
+// No need to import Friend from @/types/base
+import {
+  getCachedRelationship,
+  cacheRelationship,
+  removeCachedRelationship,
+  clearRelationshipCache,
+} from "@/utils/relationshipCache";
 
 // Define types based on the API response
 interface UserInfo {
@@ -12,6 +19,47 @@ interface UserInfo {
   bio?: string;
   dateOfBirth?: string;
 }
+
+interface FriendInfo {
+  id: string;
+  email: string;
+  phoneNumber: string;
+  userInfo: UserInfo;
+}
+
+interface FriendshipResponse {
+  friendshipId: string;
+  friend: FriendInfo;
+  since: string;
+}
+
+interface FriendRequest {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  sender: FriendInfo;
+  receiver: FriendInfo;
+  introduce?: string;
+}
+
+// Simplified Friend type for UI components
+export interface SimpleFriend {
+  id: string;
+  fullName: string;
+  profilePictureUrl: string;
+  statusMessage?: string;
+  lastSeen?: string;
+  email?: string;
+  phoneNumber?: string;
+  gender?: string;
+  bio?: string;
+  dateOfBirth?: string;
+}
+
+// Define types based on the API response
 
 interface FriendInfo {
   id: string;
@@ -176,6 +224,10 @@ export async function sendFriendRequest(
     console.log("Friend request payload:", payload);
     const response = await serverAxios.post("/friends/request", payload);
     console.log("Friend request response:", response.data);
+
+    // Update relationship cache to reflect the new pending status
+    removeCachedRelationship(userId);
+
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Send friend request failed:", error);
@@ -251,6 +303,11 @@ export async function respondToFriendRequest(
     console.log("Request payload:", payload);
     const response = await serverAxios.put("/friends/respond", payload);
     console.log("API response:", response.data);
+
+    // Clear all relationship caches since we don't know which user this affects
+    // This is a simple approach - a more sophisticated one would track which user's request this is
+    clearRelationshipCache();
+
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Respond to friend request failed:", error);
@@ -323,6 +380,10 @@ export async function removeFriend(friendId: string, token?: string) {
   try {
     const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.delete(`/friends/${friendId}`);
+
+    // Update relationship cache
+    removeCachedRelationship(friendId);
+
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Remove friend failed:", error);
@@ -385,6 +446,10 @@ export async function cancelFriendRequest(requestId: string, token?: string) {
   try {
     const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.delete(`/friends/request/${requestId}`);
+
+    // Clear all relationship caches since we don't know which user this affects
+    clearRelationshipCache();
+
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Cancel friend request failed:", error);
@@ -400,6 +465,10 @@ export async function blockUser(userId: string, token?: string) {
   try {
     const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.post(`/friends/block/${userId}`);
+
+    // Update relationship cache
+    removeCachedRelationship(userId);
+
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Block user failed:", error);
@@ -415,6 +484,10 @@ export async function unblockUser(userId: string, token?: string) {
   try {
     const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.delete(`/friends/block/${userId}`);
+
+    // Update relationship cache
+    removeCachedRelationship(userId);
+
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Unblock user failed:", error);
@@ -463,13 +536,78 @@ export async function getBlockedUsers(token?: string) {
   }
 }
 
+// Batch fetch relationships for multiple users is implemented here
+// The cache functions are imported from utils/relationshipCache.ts
+
+// Batch fetch relationships for multiple users
+export async function batchGetRelationships(userIds: string[], token?: string) {
+  // Filter out duplicate IDs
+  const uniqueIds = [...new Set(userIds)];
+
+  // Check which relationships are already in cache
+  const cachedRelationships: Record<string, { status: string }> = {};
+  const idsToFetch: string[] = [];
+
+  uniqueIds.forEach((id) => {
+    const cachedData = getCachedRelationship(id);
+    if (cachedData) {
+      cachedRelationships[id] = cachedData;
+    } else {
+      idsToFetch.push(id);
+    }
+  });
+
+  // If all relationships are in cache, return immediately
+  if (idsToFetch.length === 0) {
+    console.log(`All ${uniqueIds.length} relationships found in cache`);
+    return { success: true, relationships: cachedRelationships };
+  }
+
+  // Otherwise, fetch the remaining relationships
+  try {
+    console.log(`Batch fetching ${idsToFetch.length} relationships`);
+
+    // Fetch each relationship individually (could be optimized with a batch API endpoint)
+    const fetchPromises = idsToFetch.map((id) => getRelationship(id, token));
+    const results = await Promise.all(fetchPromises);
+
+    // Process results
+    results.forEach((result, index) => {
+      if (result.success && result.data) {
+        const userId = idsToFetch[index];
+        cachedRelationships[userId] = result.data;
+      }
+    });
+
+    return { success: true, relationships: cachedRelationships };
+  } catch (error) {
+    console.error("Batch get relationships failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+      relationships: cachedRelationships, // Return any cached relationships we did find
+    };
+  }
+}
+
 // Lấy mối quan hệ với một người dùng cụ thể
 export async function getRelationship(targetId: string, token?: string) {
   try {
+    // Check if relationship data is in cache and still valid
+    const cachedData = getCachedRelationship(targetId);
+    if (cachedData) {
+      console.log(`Using cached relationship data for user ID: ${targetId}`);
+      return { success: true, data: cachedData };
+    }
+
     // Sử dụng serverAxios để gửi token xác thực
     const serverAxios = createAxiosInstance(token);
     const response = await serverAxios.get(`/friends/relationship/${targetId}`);
     console.log("Relationship response:", response.data);
+
+    // Store relationship data in cache
+    cacheRelationship(targetId, response.data);
+
     return { success: true, data: response.data };
   } catch (error) {
     console.error("Get relationship failed:", error);
