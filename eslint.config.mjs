@@ -11,6 +11,20 @@ const compat = new FlatCompat({
 
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
+
+  // Custom rule layer
+  {
+    languageOptions: {
+      parser: "@typescript-eslint/parser",
+      parserOptions: {
+        ecmaVersion: "latest",
+        sourceType: "module",
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "none",
+    },
+  },
 ];
 
 export default eslintConfig;

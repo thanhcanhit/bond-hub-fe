@@ -7,7 +7,6 @@ import {
   getCachedUserData,
   cacheUserData,
   removeCachedUserData,
-  clearUserCache,
 } from "@/utils/userCache";
 
 // Lấy danh sách tất cả users

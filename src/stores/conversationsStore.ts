@@ -226,7 +226,10 @@ export const useConversationsStore = create<ConversationsState>()(
                   if (!apiMessage) return undefined;
 
                   // Tìm thông tin người gửi từ danh sách thành viên nhóm nếu là tin nhắn nhóm
-                  let senderInfo = null;
+                  let senderInfo: Pick<
+                    UserInfo,
+                    "id" | "fullName" | "profilePictureUrl"
+                  > | null = null;
                   if (!isUserConversation && conv.group?.members) {
                     const memberInfo = conv.group.members.find(
                       (m) => m.userId === apiMessage.senderId,

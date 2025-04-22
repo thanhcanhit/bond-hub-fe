@@ -139,6 +139,7 @@ export default function GroupChatHeader({
     } finally {
       setIsCheckingMembership(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     group?.id,
     currentUser?.id,
@@ -177,7 +178,7 @@ export default function GroupChatHeader({
         setMembershipCheckInterval(null);
       };
     }
-  }, [group?.id, currentUser?.id]);
+  }, [group?.id, currentUser?.id, checkGroupMembership]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

@@ -4,6 +4,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { getGroupById } from "@/actions/group.action";
+import { GroupRole } from "@/types/base";
 
 /**
  * Hook to connect to the groups WebSocket namespace and handle group events
@@ -15,6 +16,21 @@ const API_THROTTLE_MS = 2000; // 2 giây
 // Biến để theo dõi thời gian forceUpdate gần nhất
 let lastForceUpdateTimestamp = 0;
 const FORCE_UPDATE_THROTTLE_MS = 1000; // 1 giây
+
+// Define interface for group info returned from API
+interface GroupInfo {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  createdAt: Date;
+  members?: Array<{
+    id: string;
+    userId: string;
+    role: GroupRole;
+    fullName?: string;
+    profilePictureUrl?: string | null;
+  }>;
+}
 
 // Declare global type for timeout and socket
 declare global {
@@ -306,13 +322,13 @@ export const useGroupSocket = () => {
                 );
 
                 // Nếu có thông tin nhóm trong data, sử dụng nó thay vì gọi API
-                let groupInfo = null;
+                let groupInfo: GroupInfo | null = null;
 
                 if (groupData) {
                   console.log(
                     `[useGroupSocket] Using group data from socket event for ${data.groupId}`,
                   );
-                  groupInfo = groupData;
+                  groupInfo = groupData as GroupInfo;
                 } else {
                   // Chỉ gọi API nếu đã quá thời gian throttle
                   const now = Date.now();
@@ -322,7 +338,7 @@ export const useGroupSocket = () => {
                     );
                     const result = await getGroupById(data.groupId);
                     if (result.success && result.group) {
-                      groupInfo = result.group;
+                      groupInfo = result.group as GroupInfo;
                       lastApiCallTimestamp = now;
                     }
                   } else {
@@ -473,13 +489,13 @@ export const useGroupSocket = () => {
                 );
 
                 // Nếu có thông tin nhóm trong data, sử dụng nó thay vì gọi API
-                let groupInfo = null;
+                let groupInfo: GroupInfo | null = null;
 
                 if (groupData) {
                   console.log(
                     `[useGroupSocket] Using group data from socket event for ${data.groupId}`,
                   );
-                  groupInfo = groupData;
+                  groupInfo = groupData as GroupInfo;
                 } else {
                   // Chỉ gọi API nếu đã quá thời gian throttle
                   const now = Date.now();
@@ -489,7 +505,7 @@ export const useGroupSocket = () => {
                     );
                     const result = await getGroupById(data.groupId);
                     if (result.success && result.group) {
-                      groupInfo = result.group;
+                      groupInfo = result.group as GroupInfo;
                       lastApiCallTimestamp = now;
                     }
                   } else {
@@ -859,13 +875,13 @@ export const useGroupSocket = () => {
                 );
 
                 // Nếu có thông tin nhóm trong data, sử dụng nó thay vì gọi API
-                let groupInfo = null;
+                let groupInfo: GroupInfo | null = null;
 
                 if (groupData) {
                   console.log(
                     `[useGroupSocket] Using group data from socket event for ${data.groupId}`,
                   );
-                  groupInfo = groupData;
+                  groupInfo = groupData as GroupInfo;
                 } else {
                   // Chỉ gọi API nếu đã quá thời gian throttle
                   const now = Date.now();
@@ -875,7 +891,7 @@ export const useGroupSocket = () => {
                     );
                     const result = await getGroupById(data.groupId);
                     if (result.success && result.group) {
-                      groupInfo = result.group;
+                      groupInfo = result.group as GroupInfo;
                       lastApiCallTimestamp = now;
                     }
                   } else {

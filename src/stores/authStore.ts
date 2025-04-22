@@ -238,7 +238,7 @@ export const useAuthStore = create<AuthState>()(
         // Lưu refreshToken vào localStorage nhưng được mã hóa đơn giản
         // Lưu ý: Đây không phải là mã hóa an toàn, chỉ là giải pháp tạm thời
         // Trong môi trường sản xuất, nên sử dụng cookie httpOnly hoặc các giải pháp bảo mật hơn
-        let encodedRefreshToken = null;
+        let encodedRefreshToken: string | null = null;
         if (state.refreshToken) {
           try {
             // Mã hóa đơn giản bằng cách đảo ngược và base64

@@ -26,12 +26,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ProfileDialog from "@/components/profile/ProfileDialog";
-import { getUserDataById, batchGetUserData } from "@/actions/user.action";
+import { batchGetUserData } from "@/actions/user.action";
 import { useAuthStore } from "@/stores/authStore";
-import {
-  getRelationship,
-  batchGetRelationships,
-} from "@/actions/friend.action";
+import { batchGetRelationships } from "@/actions/friend.action";
 import {
   DropdownMenu,
   DropdownMenuContent,

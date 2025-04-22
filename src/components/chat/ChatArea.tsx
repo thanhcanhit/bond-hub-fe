@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Message, User, UserInfo, GroupMember } from "@/types/base";
+import { Message, User, UserInfo, GroupMember, GroupRole } from "@/types/base";
 import ChatHeader from "./ChatHeader";
 import GroupChatHeader from "./GroupChatHeader";
 import MessageItem from "./MessageItem";
@@ -507,7 +507,7 @@ export default function ChatArea({
       }
 
       // Find the updated conversation
-      let updatedConversation;
+      let updatedConversation: (typeof state.conversations)[0] | undefined;
       if (stableType === "USER") {
         updatedConversation = state.conversations.find(
           (conv) => conv.type === "USER" && conv.contact.id === stableId,
@@ -660,7 +660,15 @@ export default function ChatArea({
 
             // Tìm thông tin người gửi từ danh sách thành viên nhóm
             // Ưu tiên tìm theo userId vì đó là ID thực của người dùng
-            let memberInfo = null;
+            // Define a type for memberInfo to fix TypeScript errors
+            type MemberInfo = {
+              id: string;
+              fullName: string;
+              profilePictureUrl?: string | null;
+              role: GroupRole;
+            };
+
+            let memberInfo: MemberInfo | null = null;
 
             // 1. Tìm trong API response của conversation
             if (groupConversation?.group) {
@@ -687,7 +695,7 @@ export default function ChatArea({
                     id: member.userId,
                     fullName: member.fullName,
                     profilePictureUrl: member.profilePictureUrl,
-                    role: member.role,
+                    role: member.role as GroupRole,
                   };
                 }
               }
@@ -718,7 +726,7 @@ export default function ChatArea({
                     id: member.userId,
                     fullName: member.user?.userInfo?.fullName || "Unknown",
                     profilePictureUrl: member.user?.userInfo?.profilePictureUrl,
-                    role: member.role,
+                    role: member.role as GroupRole,
                   };
                 }
               }
@@ -942,6 +950,7 @@ export default function ChatArea({
 
     // Clean up the timeout
     return () => clearTimeout(checkGroupExistence);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     currentChatType,
     selectedGroup?.id,

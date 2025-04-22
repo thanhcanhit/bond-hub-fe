@@ -42,6 +42,15 @@ interface UpdateConversationListEventData {
   timestamp: Date;
 }
 
+// Define types for forceUpdateConversations event
+interface ForceUpdateConversationsEventData {
+  action?: "removed_from_group" | "group_dissolved" | "group_deleted";
+  groupId?: string;
+  userId?: string;
+  timestamp?: Date;
+  [key: string]: unknown; // Allow for additional properties
+}
+
 interface GroupCreatedEventData {
   groupId: string;
   createdBy: string;
@@ -601,7 +610,9 @@ export default function GroupSocketHandler() {
     };
 
     // Handler for forceUpdateConversations event
-    const handleForceUpdateConversations = (data: any) => {
+    const handleForceUpdateConversations = (
+      data: ForceUpdateConversationsEventData,
+    ) => {
       console.log(
         "[GroupSocketHandler] Force update conversations event received:",
         data,

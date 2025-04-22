@@ -842,7 +842,7 @@ export default function SearchHeader({ className }: { className?: string }) {
                       e.stopPropagation();
 
                       // Lưu ID người dùng trước khi đóng giao diện tìm kiếm
-                      let userIdToOpen = null;
+                      let userIdToOpen: string | null = null;
 
                       // Get the correct user ID to open the chat
                       // If the search context has a userId, use that (this is the conversation partner ID)

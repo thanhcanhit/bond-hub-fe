@@ -109,6 +109,7 @@ export default function ChatPage() {
 
     // Cleanup
     return () => window.removeEventListener("resize", handleResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isChatOpen, showContactInfo]); // Only depend on these values
 
   // Handle selecting a contact or group

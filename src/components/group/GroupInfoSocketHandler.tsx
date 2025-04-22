@@ -6,6 +6,42 @@ import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { useGroupSocket } from "@/hooks/useGroupSocket";
 
+// Define interfaces for socket event data
+interface GroupUpdatedEventData {
+  groupId: string;
+  updatedBy?: string;
+  timestamp?: Date;
+  [key: string]: any; // Allow for additional properties
+}
+
+interface MemberEventData {
+  groupId: string;
+  userId: string;
+  addedById?: string;
+  removedById?: string;
+  timestamp?: Date;
+  [key: string]: any; // Allow for additional properties
+}
+
+interface RoleChangedEventData {
+  groupId: string;
+  userId: string;
+  newRole?: string;
+  oldRole?: string;
+  updatedBy?: string;
+  timestamp?: Date;
+  [key: string]: any; // Allow for additional properties
+}
+
+interface AvatarUpdatedEventData {
+  groupId: string;
+  updatedBy?: string;
+  avatarUrl?: string;
+  newAvatarUrl?: string;
+  timestamp?: Date;
+  [key: string]: any; // Allow for additional properties
+}
+
 /**
  * GroupInfoSocketHandler component
  *
@@ -43,7 +79,7 @@ const GroupInfoSocketHandler = ({
   useEffect(() => {
     if (!socket || !groupId) return;
 
-    const handleGroupUpdated = (data: any) => {
+    const handleGroupUpdated = (data: GroupUpdatedEventData) => {
       if (data.groupId === groupId) {
         console.log(
           `[GroupInfoSocketHandler] Group ${groupId} updated, refreshing data`,
@@ -67,7 +103,7 @@ const GroupInfoSocketHandler = ({
       }
     };
 
-    const handleMemberAdded = (data: any) => {
+    const handleMemberAdded = (data: MemberEventData) => {
       if (data.groupId === groupId) {
         console.log(
           `[GroupInfoSocketHandler] Member added to group ${groupId}, refreshing data`,
@@ -91,7 +127,7 @@ const GroupInfoSocketHandler = ({
       }
     };
 
-    const handleMemberRemoved = (data: any) => {
+    const handleMemberRemoved = (data: MemberEventData) => {
       if (data.groupId === groupId) {
         console.log(
           `[GroupInfoSocketHandler] Member removed from group ${groupId}, refreshing data`,
@@ -135,7 +171,7 @@ const GroupInfoSocketHandler = ({
       }
     };
 
-    const handleRoleChanged = (data: any) => {
+    const handleRoleChanged = (data: RoleChangedEventData) => {
       if (data.groupId === groupId) {
         console.log(
           `[GroupInfoSocketHandler] Role changed in group ${groupId}, refreshing data`,
@@ -159,7 +195,7 @@ const GroupInfoSocketHandler = ({
       }
     };
 
-    const handleAvatarUpdated = (data: any) => {
+    const handleAvatarUpdated = (data: AvatarUpdatedEventData) => {
       if (data.groupId === groupId) {
         console.log(
           `[GroupInfoSocketHandler] Avatar updated for group ${groupId}, refreshing data`,

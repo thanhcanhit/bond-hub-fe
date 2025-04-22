@@ -45,7 +45,7 @@ import ProfileDialog from "@/components/profile/ProfileDialog";
 import GroupMemberList from "./GroupMemberList";
 import AddMemberDialog from "./AddMemberDialog";
 import EditGroupNameDialog from "./EditGroupNameDialog";
-import { getUserDataById, batchGetUserData } from "@/actions/user.action";
+import { batchGetUserData } from "@/actions/user.action";
 
 interface GroupDialogProps {
   group: Group | null;
