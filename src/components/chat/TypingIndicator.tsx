@@ -29,6 +29,18 @@ export default function TypingIndicator({
   if (group && typingUsers && typingUsers.length > 0) {
     const firstUser = typingUsers[0];
 
+    // Đảm bảo có tên người dùng hợp lệ
+    const displayName =
+      firstUser.fullName && firstUser.fullName.trim()
+        ? firstUser.fullName
+        : "Thành viên nhóm";
+
+    // Log for debugging
+    console.log(
+      `[TypingIndicator] Showing typing indicator for group member: ${displayName} (${firstUser.userId})`,
+    );
+    console.log(`[TypingIndicator] Typing users:`, typingUsers);
+
     return (
       <div className="flex items-start gap-2 mb-2 px-3">
         <Avatar className="h-8 w-8 mt-1">
@@ -36,11 +48,11 @@ export default function TypingIndicator({
             src={firstUser.profilePictureUrl || ""}
             className="object-cover"
           />
-          <AvatarFallback>{firstUser.fullName.charAt(0)}</AvatarFallback>
+          <AvatarFallback>{displayName.charAt(0).toUpperCase()}</AvatarFallback>
         </Avatar>
         <div className="bg-gray-200 text-gray-800 rounded-2xl px-3 py-2 text-sm flex items-center">
           <span className="mr-1">
-            {firstUser.fullName} đang nhập
+            <span className="font-medium">{displayName}</span> đang nhập
             {typingUsers.length > 1 &&
               ` và ${typingUsers.length - 1} người khác`}
           </span>
@@ -59,7 +71,7 @@ export default function TypingIndicator({
     <div className="flex items-start gap-2 mb-2 px-3">
       <Avatar className="h-8 w-8 mt-1">
         <AvatarImage
-          src={contact?.userInfo?.profilePictureUrl || ""}
+          src={contact?.userInfo?.profilePictureUrl || undefined}
           className="object-cover"
         />
         <AvatarFallback>

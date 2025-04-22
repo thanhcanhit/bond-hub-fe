@@ -162,6 +162,13 @@ interface ConversationsState {
   ) => boolean;
 }
 
+// Add TypeScript declaration for window property
+declare global {
+  interface Window {
+    _conversationsForceUpdateTimeout: NodeJS.Timeout | null;
+  }
+}
+
 // Custom storage that handles SSR
 const storage = {
   getItem: (name: string): string | null => {
@@ -832,6 +839,16 @@ export const useConversationsStore = create<ConversationsState>()(
               (member) => member.id === userId,
             );
 
+            // Đảm bảo có tên người dùng hợp lệ
+            const userFullName =
+              typingUserInfo?.fullName && typingUserInfo.fullName.trim()
+                ? typingUserInfo.fullName
+                : "Thành viên nhóm";
+
+            console.log(
+              `[conversationsStore] Group typing: User ${userId} (${userFullName}) is ${isTyping ? "typing" : "stopped typing"} in group ${groupId}`,
+            );
+
             // Nếu đang nhập, thêm vào danh sách người đang nhập
             if (isTyping) {
               // Tạo một danh sách người đang nhập mới hoặc sử dụng danh sách hiện tại
@@ -844,10 +861,12 @@ export const useConversationsStore = create<ConversationsState>()(
 
               let updatedTypingUsers;
               if (userIndex >= 0) {
-                // Cập nhật thời gian nếu người dùng đã có trong danh sách
+                // Cập nhật thời gian và thông tin người dùng nếu người dùng đã có trong danh sách
                 updatedTypingUsers = [...currentTypingUsers];
                 updatedTypingUsers[userIndex] = {
                   ...updatedTypingUsers[userIndex],
+                  fullName: userFullName, // Cập nhật tên người dùng
+                  profilePictureUrl: typingUserInfo?.profilePictureUrl || null,
                   timestamp: new Date(),
                 };
               } else {
@@ -856,7 +875,7 @@ export const useConversationsStore = create<ConversationsState>()(
                   ...currentTypingUsers,
                   {
                     userId,
-                    fullName: typingUserInfo?.fullName || "Thành viên nhóm",
+                    fullName: userFullName,
                     profilePictureUrl:
                       typingUserInfo?.profilePictureUrl || null,
                     timestamp: new Date(),
@@ -1183,12 +1202,32 @@ export const useConversationsStore = create<ConversationsState>()(
 
       // Main function to process new messages
       // Force UI update by creating a new reference to the conversations array
+      // Optimized to prevent infinite update loops
       forceUpdate: () => {
         console.log("[conversationsStore] Forcing UI update");
-        set((state) => ({
-          ...state,
-          conversations: [...state.conversations],
-        }));
+
+        // Use a debounced version to prevent multiple calls in quick succession
+        if (typeof window !== "undefined") {
+          // Clear any existing timeout
+          if (window._conversationsForceUpdateTimeout) {
+            clearTimeout(window._conversationsForceUpdateTimeout);
+          }
+
+          // Set a new timeout
+          window._conversationsForceUpdateTimeout = setTimeout(() => {
+            set((state) => ({
+              ...state,
+              conversations: [...state.conversations],
+            }));
+            window._conversationsForceUpdateTimeout = null;
+          }, 50); // Small delay to batch multiple calls
+        } else {
+          // Fallback for SSR
+          set((state) => ({
+            ...state,
+            conversations: [...state.conversations],
+          }));
+        }
       },
 
       // Check and remove groups that the user has been removed from

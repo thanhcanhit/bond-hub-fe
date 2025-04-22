@@ -17,12 +17,37 @@ const API_THROTTLE_MS = 2000; // 2 giây
 let lastForceUpdateTimestamp = 0;
 const FORCE_UPDATE_THROTTLE_MS = 1000; // 1 giây
 
+// Declare global type for timeout
+declare global {
+  interface Window {
+    _groupSocketForceUpdateTimeout: NodeJS.Timeout | null;
+  }
+}
+
 // Hàm throttle forceUpdate để tránh gọi quá nhiều lần
+// Optimized to prevent infinite update loops
 const throttledForceUpdate = () => {
   const now = Date.now();
   if (now - lastForceUpdateTimestamp > FORCE_UPDATE_THROTTLE_MS) {
     console.log("[useGroupSocket] Throttled forceUpdate");
-    useConversationsStore.getState().forceUpdate();
+
+    // Use a debounced version to prevent multiple calls in quick succession
+    if (typeof window !== "undefined") {
+      // Clear any existing timeout
+      if (window._groupSocketForceUpdateTimeout) {
+        clearTimeout(window._groupSocketForceUpdateTimeout);
+      }
+
+      // Set a new timeout
+      window._groupSocketForceUpdateTimeout = setTimeout(() => {
+        useConversationsStore.getState().forceUpdate();
+        window._groupSocketForceUpdateTimeout = null;
+      }, 50); // Small delay to batch multiple calls
+    } else {
+      // Fallback for SSR
+      useConversationsStore.getState().forceUpdate();
+    }
+
     lastForceUpdateTimestamp = now;
   } else {
     console.log("[useGroupSocket] Skipping forceUpdate due to throttling");

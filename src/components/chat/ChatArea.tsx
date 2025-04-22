@@ -143,8 +143,8 @@ export default function ChatArea({
       }
     }
 
-    // Update the previous messages reference
-    prevMessagesRef.current = [...messages];
+    // Update the previous messages reference - use a shallow copy to avoid excessive memory usage
+    prevMessagesRef.current = messages.slice();
   }, [
     messages,
     selectedContact,
@@ -401,25 +401,30 @@ export default function ChatArea({
   const typingConversationIdRef = useRef<string | null>(null);
 
   // Function to update typing status - extracted to avoid creating in render
+  // Optimized to prevent infinite update loops
   const updateTypingStatus = useCallback(
     (newStatus: boolean) => {
       // Only update state if status has changed
       if (currentTypingStatusRef.current !== newStatus) {
+        // Update the ref first
         currentTypingStatusRef.current = newStatus;
+
+        // Then update the state
         setIsTyping(newStatus);
 
         // Scroll to bottom when typing status changes to true
         if (newStatus) {
-          requestAnimationFrame(() => {
+          // Use setTimeout with 0 delay to ensure this happens after state updates
+          setTimeout(() => {
             scrollToBottom("smooth");
-          });
+          }, 0);
         }
       }
     },
     [scrollToBottom],
   );
 
-  // Effect for typing indicator
+  // Effect for typing indicator - optimized to prevent infinite updates
   useEffect(() => {
     // Skip if no selected conversation
     if ((!selectedContact && !selectedGroup) || !currentChatType) {
@@ -453,28 +458,38 @@ export default function ChatArea({
       typingSubscriptionRef.current = null;
     }
 
-    // Check initial typing status
-    let conversation;
+    // Check initial typing status - use a local variable to avoid closure issues
+    let initialTypingStatus = false;
     if (currentChatType === "USER") {
-      conversation = conversations.find(
+      const conversation = conversations.find(
         (conv) =>
           conv.type === "USER" && conv.contact.id === selectedContact?.id,
       );
+      initialTypingStatus = !!conversation?.isTyping;
     } else {
-      conversation = conversations.find(
+      const conversation = conversations.find(
         (conv) => conv.type === "GROUP" && conv.group?.id === selectedGroup?.id,
       );
+      initialTypingStatus = !!conversation?.isTyping;
     }
 
     // Update initial typing status
-    updateTypingStatus(!!conversation?.isTyping);
+    updateTypingStatus(initialTypingStatus);
 
     // Create a stable reference to the conversation type and ID
     const stableType = currentChatType;
     const stableId = conversationId;
 
+    // Use a local variable to track the last typing status to avoid unnecessary updates
+    let lastTypingStatus = initialTypingStatus;
+
     // Subscribe to changes
     const unsubscribe = useConversationsStore.subscribe((state) => {
+      // Skip processing if component is unmounted or conversation changed
+      if (typingConversationIdRef.current !== stableId) {
+        return;
+      }
+
       // Get the current state to make sure the conversation hasn't changed
       const currentState = useChatStore.getState();
       const currentId =
@@ -491,6 +506,7 @@ export default function ChatArea({
         return;
       }
 
+      // Find the updated conversation
       let updatedConversation;
       if (stableType === "USER") {
         updatedConversation = state.conversations.find(
@@ -502,8 +518,20 @@ export default function ChatArea({
         );
       }
 
-      // Update typing status based on conversation
-      updateTypingStatus(!!updatedConversation?.isTyping);
+      // Get the new typing status
+      const newTypingStatus = !!updatedConversation?.isTyping;
+
+      // Only update if the status has changed
+      if (newTypingStatus !== lastTypingStatus) {
+        lastTypingStatus = newTypingStatus;
+        // Use requestAnimationFrame to batch updates and avoid React render cycles
+        requestAnimationFrame(() => {
+          // Double-check that the conversation hasn't changed before updating
+          if (typingConversationIdRef.current === stableId) {
+            updateTypingStatus(newTypingStatus);
+          }
+        });
+      }
     });
 
     // Store the unsubscribe function in the ref
@@ -878,28 +906,47 @@ export default function ChatArea({
   };
 
   // Kiểm tra xem nhóm có còn tồn tại không khi selectedGroup thay đổi hoặc danh sách cuộc trò chuyện thay đổi
+  // Optimized to prevent infinite update loops
   useEffect(() => {
-    if (currentChatType === "GROUP" && selectedGroup) {
-      // Tìm nhóm trong danh sách cuộc trò chuyện
-      const groupExists = conversations.some(
-        (conv) => conv.type === "GROUP" && conv.group?.id === selectedGroup.id,
+    // Skip if no group selected
+    if (currentChatType !== "GROUP" || !selectedGroup || !selectedGroup.id) {
+      return;
+    }
+
+    // Store the current group ID to avoid closure issues
+    const currentGroupId = selectedGroup.id;
+
+    // Use setTimeout to ensure this check happens after other state updates
+    const checkGroupExistence = setTimeout(() => {
+      // Get the latest conversations state
+      const currentConversations =
+        useConversationsStore.getState().conversations;
+
+      // Check if the group still exists
+      const groupExists = currentConversations.some(
+        (conv) => conv.type === "GROUP" && conv.group?.id === currentGroupId,
       );
 
-      // Nếu nhóm không còn tồn tại trong danh sách cuộc trò chuyện, đóng chat
+      // If group doesn't exist, close the chat
       if (!groupExists) {
         console.log(
-          `[ChatArea] Group ${selectedGroup.id} no longer exists in conversations, closing chat`,
+          `[ChatArea] Group ${currentGroupId} no longer exists in conversations, closing chat`,
         );
-        useChatStore.getState().setSelectedGroup(null);
+        // Get the current chat state to ensure we're still looking at the same group
+        const currentChatState = useChatStore.getState();
+        if (currentChatState.selectedGroup?.id === currentGroupId) {
+          useChatStore.getState().setSelectedGroup(null);
+        }
       }
-    }
+    }, 100); // Small delay to avoid race conditions
+
+    // Clean up the timeout
+    return () => clearTimeout(checkGroupExistence);
   }, [
     currentChatType,
     selectedGroup?.id,
-    conversations.length,
-    conversations,
-    selectedGroup,
-  ]); // Phụ thuộc vào conversations.length để kiểm tra khi danh sách cuộc trò chuyện thay đổi
+    // Remove conversations and conversations.length from dependencies to prevent excessive re-renders
+  ]);
 
   // Check if current user is valid - this helps prevent errors when auth state changes
   const isUserValid = !!currentUser?.id;

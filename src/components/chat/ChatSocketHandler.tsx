@@ -680,11 +680,38 @@ export default function ChatSocketHandler() {
 
         if (isGroupChat) {
           // Đối với nhóm, cập nhật trạng thái typing cho nhóm với thông tin người đang nhập
-          conversationsStore.setGroupTypingStatus(
-            data.groupId!,
-            data.userId,
-            true,
+          console.log(
+            `[ChatSocketHandler] Group typing: User ${data.userId} is typing in group ${data.groupId}`,
           );
+
+          // Kiểm tra xem nhóm có tồn tại trong danh sách cuộc trò chuyện không
+          const groupConversation = conversationsStore.conversations.find(
+            (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+          );
+
+          if (groupConversation) {
+            // Tìm thông tin người dùng đang nhập từ danh sách thành viên nhóm
+            const typingUserInfo = groupConversation.group?.memberUsers?.find(
+              (member) => member.id === data.userId,
+            );
+
+            if (typingUserInfo) {
+              console.log(
+                `[ChatSocketHandler] Found user info for typing user: ${typingUserInfo.fullName}`,
+              );
+            }
+
+            // Cập nhật trạng thái typing cho nhóm
+            conversationsStore.setGroupTypingStatus(
+              data.groupId!,
+              data.userId,
+              true,
+            );
+          } else {
+            console.log(
+              `[ChatSocketHandler] Group ${data.groupId} not found in conversations, cannot update typing status`,
+            );
+          }
         } else {
           // Đối với chat cá nhân, cập nhật trạng thái typing cho người dùng
           conversationsStore.setTypingStatus(data.userId, true);
@@ -716,11 +743,27 @@ export default function ChatSocketHandler() {
 
         if (isGroupChat) {
           // Đối với nhóm, cập nhật trạng thái typing cho nhóm với thông tin người đang nhập
-          conversationsStore.setGroupTypingStatus(
-            data.groupId!,
-            data.userId,
-            false,
+          console.log(
+            `[ChatSocketHandler] Group typing stopped: User ${data.userId} stopped typing in group ${data.groupId}`,
           );
+
+          // Kiểm tra xem nhóm có tồn tại trong danh sách cuộc trò chuyện không
+          const groupConversation = conversationsStore.conversations.find(
+            (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+          );
+
+          if (groupConversation) {
+            // Cập nhật trạng thái typing cho nhóm
+            conversationsStore.setGroupTypingStatus(
+              data.groupId!,
+              data.userId,
+              false,
+            );
+          } else {
+            console.log(
+              `[ChatSocketHandler] Group ${data.groupId} not found in conversations, cannot update typing status`,
+            );
+          }
         } else {
           // Đối với chat cá nhân, cập nhật trạng thái typing cho người dùng
           conversationsStore.setTypingStatus(data.userId, false);
