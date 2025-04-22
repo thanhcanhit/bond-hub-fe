@@ -4,7 +4,6 @@ import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { getGroupById } from "@/actions/group.action";
-import { GroupRole } from "@/types/base";
 
 /**
  * Hook to connect to the groups WebSocket namespace and handle group events
@@ -17,10 +16,12 @@ const API_THROTTLE_MS = 2000; // 2 giây
 let lastForceUpdateTimestamp = 0;
 const FORCE_UPDATE_THROTTLE_MS = 1000; // 1 giây
 
-// Declare global type for timeout
+// Declare global type for timeout and socket
 declare global {
   interface Window {
     _groupSocketForceUpdateTimeout: NodeJS.Timeout | null;
+    groupSocket: Socket | null;
+    triggerGroupsReload?: () => void;
   }
 }
 
@@ -62,12 +63,53 @@ export const useGroupSocket = () => {
 
   const joinGroupRoom = useCallback(
     (groupId: string) => {
-      if (!socketRef.current) return;
+      if (!socketRef.current) {
+        console.log(
+          `[useGroupSocket] Socket not available, cannot join group room: ${groupId}`,
+        );
+        return;
+      }
 
+      if (!currentUser?.id) {
+        console.log(
+          `[useGroupSocket] Current user ID not available, cannot join group room: ${groupId}`,
+        );
+        return;
+      }
+
+      console.log(
+        `[useGroupSocket] Joining group room: ${groupId} for user: ${currentUser.id}`,
+      );
+
+      // Emit join event
       socketRef.current.emit("joinGroup", {
-        userId: currentUser?.id,
+        userId: currentUser.id,
         groupId,
       });
+
+      // Also emit a direct join request to ensure server processes it
+      socketRef.current.emit("directJoinGroup", {
+        userId: currentUser.id,
+        groupId,
+        isCreator: false, // Default to false, will be overridden if true in the event data
+      });
+
+      // Set up retry mechanism
+      const retryJoin = () => {
+        if (socketRef.current && socketRef.current.connected) {
+          console.log(
+            `[useGroupSocket] Retrying join for group room: ${groupId}`,
+          );
+          socketRef.current.emit("joinGroup", {
+            userId: currentUser.id,
+            groupId,
+          });
+        }
+      };
+
+      // Retry after short delays
+      setTimeout(retryJoin, 1000);
+      setTimeout(retryJoin, 3000);
     },
     [currentUser?.id],
   );
@@ -104,29 +146,43 @@ export const useGroupSocket = () => {
     }
   }, [refreshSelectedGroup]);
 
-  const triggerGroupsReload = async () => {
+  const triggerGroupsReload = () => {
     console.log("[useGroupSocket] Manually triggering groups reload");
 
-    try {
-      // Chỉ cập nhật UI mà không tải lại danh sách cuộc trò chuyện
-      throttledForceUpdate();
+    // Chỉ cập nhật UI mà không tải lại danh sách cuộc trò chuyện
+    throttledForceUpdate();
 
-      // Sau đó gửi sự kiện socket nếu có thể
-      if (socketRef.current && socketRef.current.connected) {
-        console.log("[useGroupSocket] Emitting requestReload event");
-        socketRef.current.emit("requestReload");
-        socketRef.current.emit("broadcastReload");
-      } else {
-        console.log(
-          "[useGroupSocket] Socket not connected, refreshing selected group directly",
+    // Sau đó gửi sự kiện socket nếu có thể
+    if (socketRef.current && socketRef.current.connected) {
+      console.log("[useGroupSocket] Emitting requestReload event");
+      socketRef.current.emit("requestReload");
+      socketRef.current.emit("broadcastReload");
+    } else {
+      console.log(
+        "[useGroupSocket] Socket not connected, refreshing selected group directly",
+      );
+      // Wrap in try/catch to avoid unhandled promise rejection
+      try {
+        refreshSelectedGroup();
+      } catch (error) {
+        console.error(
+          "[useGroupSocket] Error refreshing selected group:",
+          error,
         );
-        await refreshSelectedGroup();
       }
-    } catch (error) {
-      console.error("[useGroupSocket] Error in triggerGroupsReload:", error);
-      // Fallback to refreshAllGroupData if anything fails
-      refreshAllGroupData();
     }
+
+    // Schedule a refresh of all group data as a fallback
+    setTimeout(() => {
+      try {
+        refreshAllGroupData();
+      } catch (error) {
+        console.error(
+          "[useGroupSocket] Error in delayed refreshAllGroupData:",
+          error,
+        );
+      }
+    }, 1000);
   };
 
   if (typeof window !== "undefined") {
@@ -159,6 +215,43 @@ export const useGroupSocket = () => {
     // Handle join confirmations
     socket.on("joinedGroup", (data) => {
       console.log(`[GroupSocket] Joined group room: ${data.groupId}`);
+    });
+
+    socket.on("confirmJoinedGroup", (data) => {
+      console.log(
+        `[GroupSocket] Received confirmation of joining group room: ${data.groupId}`,
+      );
+      // Re-join the group room to ensure we're connected
+      joinGroupRoom(data.groupId);
+    });
+
+    // Handle direct join group requests
+    socket.on("directJoinGroup", (data) => {
+      console.log(
+        `[GroupSocket] Received direct join request for group: ${data.groupId}`,
+      );
+      if (data.userId === currentUser?.id) {
+        console.log(
+          `[GroupSocket] Processing direct join request for current user to group: ${data.groupId}`,
+        );
+        // Join the group room
+        joinGroupRoom(data.groupId);
+
+        // Send confirmation back to server
+        socket.emit("joinedGroupDirectly", {
+          userId: currentUser.id,
+          groupId: data.groupId,
+          timestamp: new Date(),
+          isCreator: data.isCreator || false,
+        });
+      }
+    });
+
+    // Handle join confirmation
+    socket.on("joinedGroupDirectly", (data) => {
+      console.log(
+        `[GroupSocket] User ${data.userId} joined group ${data.groupId} directly`,
+      );
     });
 
     socket.on("joinedUserRoom", (data) => {
@@ -339,13 +432,30 @@ export const useGroupSocket = () => {
         // Kiểm tra xem có thông tin nhóm trong data không
         const groupData = data.group || null;
 
+        // Immediately join the group room without waiting
+        if (data.groupId) {
+          console.log(
+            `[useGroupSocket] Immediately joining group room: ${data.groupId} after creation`,
+          );
+          joinGroupRoom(data.groupId);
+
+          // Emit a confirmation that we've joined the group
+          if (socket.connected) {
+            socket.emit("confirmJoinedGroup", {
+              groupId: data.groupId,
+              userId: currentUser.id,
+              timestamp: new Date(),
+            });
+          }
+        }
+
         // Tạo cuộc trò chuyện nhóm mới nếu chưa tồn tại
         setTimeout(async () => {
           try {
             if (data.groupId) {
-              // Tham gia vào phòng nhóm
+              // Join the group room again to ensure we're connected
               console.log(
-                `[useGroupSocket] Joining group room: ${data.groupId} after creation`,
+                `[useGroupSocket] Re-joining group room: ${data.groupId} after creation`,
               );
               joinGroupRoom(data.groupId);
 
@@ -1003,6 +1113,7 @@ export const useGroupSocket = () => {
     accessToken,
     currentUser,
     joinUserRoom,
+    joinGroupRoom,
     refreshSelectedGroup,
     refreshAllGroupData,
   ]);

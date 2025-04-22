@@ -53,10 +53,10 @@ const emitGroupEvent = (event: string, data: Record<string, unknown>) => {
 };
 
 // Declare the window interface to include our socket and helper functions
+// Note: Full declaration is in useGroupSocket.ts
 declare global {
   interface Window {
     groupSocket: Socket | null;
-    triggerGroupsReload?: () => void;
   }
 }
 
@@ -147,11 +147,50 @@ export async function createGroup(createGroupDto: CreateGroupDto) {
     const response = await axiosInstance.post("/groups", payload);
     console.log("API response:", response.data);
 
-    // Emit group created event
+    // Explicitly join the group socket room first
+    const socket = getGroupSocket();
+    if (socket && socket.connected) {
+      console.log(
+        `[group.action] Explicitly joining group room after creation: ${response.data.id}`,
+      );
+
+      // Join the group room with a retry mechanism
+      const joinGroupRoom = () => {
+        socket.emit("joinGroup", {
+          userId: createGroupDto.creatorId,
+          groupId: response.data.id,
+        });
+
+        // Also emit a direct join request to ensure server processes it
+        socket.emit("directJoinGroup", {
+          userId: createGroupDto.creatorId,
+          groupId: response.data.id,
+          isCreator: true,
+        });
+
+        console.log(
+          `[group.action] Join group request sent for group: ${response.data.id}`,
+        );
+      };
+
+      // Join immediately
+      joinGroupRoom();
+
+      // And retry after a short delay to ensure it works
+      setTimeout(joinGroupRoom, 500);
+      setTimeout(joinGroupRoom, 1500);
+    } else {
+      console.log(
+        `[group.action] Socket not available or not connected, cannot join group room: ${response.data.id}`,
+      );
+    }
+
+    // Then emit group created event
     emitGroupEvent("groupCreated", {
       groupId: response.data.id,
       createdBy: createGroupDto.creatorId,
       timestamp: new Date(),
+      group: response.data, // Include group data in the event
     });
 
     // Trả về dữ liệu nhóm đã tạo để client có thể cập nhật store
