@@ -50,29 +50,29 @@ export default function ChatPage() {
   }, [currentUser?.id, loadConversations]);
 
   // Handle URL parameters for opening specific chats
-  useEffect(() => {
-    const handleUrlParams = async () => {
-      if (!currentUser?.id) return;
+  // useEffect(() => {
+  //   const handleUrlParams = async () => {
+  //     if (!currentUser?.id) return;
 
-      // Wait for conversations to load
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+  //     // Wait for conversations to load
+  //     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      const chatStore = useChatStore.getState();
+  //     const chatStore = useChatStore.getState();
 
-      // Open group chat if groupId is provided
-      if (groupIdParam) {
-        console.log(`Opening group chat with ID: ${groupIdParam}`);
-        await chatStore.openChat(groupIdParam, "GROUP");
-      }
-      // Open user chat if userId is provided
-      else if (userIdParam) {
-        console.log(`Opening user chat with ID: ${userIdParam}`);
-        await chatStore.openChat(userIdParam, "USER");
-      }
-    };
+  //     // Open group chat if groupId is provided
+  //     if (groupIdParam) {
+  //       console.log(`Opening group chat with ID: ${groupIdParam}`);
+  //       await chatStore.openChat(groupIdParam, "GROUP");
+  //     }
+  //     // Open user chat if userId is provided
+  //     else if (userIdParam) {
+  //       console.log(`Opening user chat with ID: ${userIdParam}`);
+  //       await chatStore.openChat(userIdParam, "USER");
+  //     }
+  //   };
 
-    handleUrlParams();
-  }, [groupIdParam, userIdParam, currentUser?.id]);
+  //   handleUrlParams();
+  // }, [groupIdParam, userIdParam, currentUser?.id]);
 
   // Track if a chat is currently open
   const isChatOpen = selectedContact !== null || selectedGroup !== null;

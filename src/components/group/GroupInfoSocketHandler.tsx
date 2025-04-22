@@ -65,13 +65,8 @@ const GroupInfoSocketHandler = ({
       console.log(`[GroupInfoSocketHandler] Joining group room: ${groupId}`);
       joinGroupRoom(groupId);
 
-      // Force update conversations to ensure we have the latest data
-      setTimeout(() => {
-        console.log(
-          `[GroupInfoSocketHandler] Forcing conversations update after joining group room`,
-        );
-        useConversationsStore.getState().forceUpdate();
-      }, 500);
+      // We don't need to force update conversations here anymore
+      // The data should already be available in the cache
     }
   }, [groupId, socket, joinGroupRoom]);
 
@@ -86,20 +81,10 @@ const GroupInfoSocketHandler = ({
         );
 
         // Call the onGroupUpdated callback if provided
+        // This will use the cache system to avoid redundant API calls
         if (onGroupUpdated) {
           onGroupUpdated();
         }
-
-        // Force update conversations to ensure UI is updated
-        setTimeout(() => {
-          console.log(
-            `[GroupInfoSocketHandler] Forcing conversations update after group update`,
-          );
-          useConversationsStore.getState().forceUpdate();
-
-          // Also refresh the selected group in chat store
-          useChatStore.getState().refreshSelectedGroup();
-        }, 100);
       }
     };
 
@@ -110,20 +95,10 @@ const GroupInfoSocketHandler = ({
         );
 
         // Call the onGroupUpdated callback if provided
+        // This will use the cache system to avoid redundant API calls
         if (onGroupUpdated) {
           onGroupUpdated();
         }
-
-        // Force update conversations to ensure UI is updated
-        setTimeout(() => {
-          console.log(
-            `[GroupInfoSocketHandler] Forcing conversations update after member added`,
-          );
-          useConversationsStore.getState().forceUpdate();
-
-          // Also refresh the selected group in chat store
-          useChatStore.getState().refreshSelectedGroup();
-        }, 100);
       }
     };
 
@@ -153,20 +128,10 @@ const GroupInfoSocketHandler = ({
           }, 100);
         } else {
           // Call the onGroupUpdated callback if provided
+          // This will use the cache system to avoid redundant API calls
           if (onGroupUpdated) {
             onGroupUpdated();
           }
-
-          // Force update conversations to ensure UI is updated
-          setTimeout(() => {
-            console.log(
-              `[GroupInfoSocketHandler] Forcing conversations update after member removed`,
-            );
-            useConversationsStore.getState().forceUpdate();
-
-            // Also refresh the selected group in chat store
-            useChatStore.getState().refreshSelectedGroup();
-          }, 100);
         }
       }
     };
@@ -178,20 +143,10 @@ const GroupInfoSocketHandler = ({
         );
 
         // Call the onGroupUpdated callback if provided
+        // This will use the cache system to avoid redundant API calls
         if (onGroupUpdated) {
           onGroupUpdated();
         }
-
-        // Force update conversations to ensure UI is updated
-        setTimeout(() => {
-          console.log(
-            `[GroupInfoSocketHandler] Forcing conversations update after role changed`,
-          );
-          useConversationsStore.getState().forceUpdate();
-
-          // Also refresh the selected group in chat store
-          useChatStore.getState().refreshSelectedGroup();
-        }, 100);
       }
     };
 
@@ -201,29 +156,35 @@ const GroupInfoSocketHandler = ({
           `[GroupInfoSocketHandler] Avatar updated for group ${groupId}, refreshing data`,
         );
 
+        // If we have avatarUrl in the data, update it directly in the selected group
+        if (data.avatarUrl && selectedGroup && selectedGroup.id === groupId) {
+          // Update the selected group directly
+          useChatStore.getState().setSelectedGroup({
+            ...selectedGroup,
+            avatarUrl: data.avatarUrl,
+          });
+
+          // Also update the cache
+          const chatStore = useChatStore.getState();
+          const cachedData = chatStore.groupCache
+            ? chatStore.groupCache[groupId]
+            : undefined;
+          if (cachedData) {
+            chatStore.groupCache[groupId] = {
+              ...cachedData,
+              group: {
+                ...cachedData.group,
+                avatarUrl: data.avatarUrl,
+              },
+            };
+          }
+        }
+
         // Call the onGroupUpdated callback if provided
+        // This will use the cache system to avoid redundant API calls
         if (onGroupUpdated) {
           onGroupUpdated();
         }
-
-        // Force update conversations to ensure UI is updated
-        setTimeout(() => {
-          console.log(
-            `[GroupInfoSocketHandler] Forcing conversations update after avatar updated`,
-          );
-          useConversationsStore.getState().forceUpdate();
-
-          // Also refresh the selected group in chat store
-          useChatStore.getState().refreshSelectedGroup();
-
-          // If we have avatarUrl in the data, update it directly in the selected group
-          if (data.avatarUrl && selectedGroup && selectedGroup.id === groupId) {
-            useChatStore.getState().setSelectedGroup({
-              ...selectedGroup,
-              avatarUrl: data.avatarUrl,
-            });
-          }
-        }, 100);
       }
     };
 

@@ -60,11 +60,15 @@ export default function GroupChatHeader({
     }
     // Nếu không có, sử dụng thông tin từ group prop
     return group?.members?.length || 0;
-  }, [groupConversation, group]);
+  }, [groupConversation?.group?.memberUsers, group?.members]);
 
   // Hàm kiểm tra xem người dùng hiện tại có còn là thành viên của nhóm không
   const checkGroupMembership = useCallback(async () => {
-    if (!group?.id || !currentUser?.id || isCheckingMembership) return;
+    // Store the current group and user IDs to avoid closure issues
+    const currentGroupId = group?.id;
+    const currentUserId = currentUser?.id;
+
+    if (!currentGroupId || !currentUserId || isCheckingMembership) return;
 
     // Kiểm tra throttle để giảm số lượng request API
     const now = Date.now();
@@ -78,23 +82,55 @@ export default function GroupChatHeader({
     try {
       setIsCheckingMembership(true);
       console.log(
-        `[GroupChatHeader] Checking if user ${currentUser.id} is still a member of group ${group.id}`,
+        `[GroupChatHeader] Checking if user ${currentUserId} is still a member of group ${currentGroupId}`,
       );
 
       // Cập nhật timestamp trước khi gọi API
       lastCheckTimestampRef.current = now;
 
-      const result = await getGroupById(group.id);
+      // First check if we have this information in the cache
+      const chatStore = useChatStore.getState();
+      const cachedData =
+        chatStore.groupCache && chatStore.groupCache[currentGroupId];
+      const currentTime = new Date();
+      const isCacheValid =
+        cachedData &&
+        currentTime.getTime() - cachedData.lastFetched.getTime() < 30 * 1000; // 30 seconds cache
 
-      if (result.success && result.group) {
+      let groupData: Group | undefined;
+
+      if (isCacheValid && cachedData.group) {
+        console.log(
+          `[GroupChatHeader] Using cached group data for membership check`,
+        );
+        groupData = cachedData.group;
+      } else {
+        console.log(
+          `[GroupChatHeader] Fetching fresh group data for membership check`,
+        );
+        const result = await getGroupById(currentGroupId);
+        if (result.success && result.group) {
+          groupData = result.group;
+
+          // Update the cache
+          if (chatStore.groupCache) {
+            chatStore.groupCache[currentGroupId] = {
+              group: result.group,
+              lastFetched: new Date(),
+            };
+          }
+        }
+      }
+
+      if (groupData) {
         // Kiểm tra xem người dùng hiện tại có trong danh sách thành viên không
-        const isMember = result.group.members?.some(
-          (member: GroupMember) => member.userId === currentUser.id,
+        const isMember = groupData.members?.some(
+          (member: GroupMember) => member.userId === currentUserId,
         );
 
         if (!isMember) {
           console.log(
-            `[GroupChatHeader] User ${currentUser.id} is no longer a member of group ${group.id}`,
+            `[GroupChatHeader] User ${currentUserId} is no longer a member of group ${currentGroupId}`,
           );
 
           // Hiển thị thông báo
@@ -106,18 +142,21 @@ export default function GroupChatHeader({
 
           // Xóa nhóm khỏi danh sách cuộc trò chuyện
           const conversationsStore = useConversationsStore.getState();
-          conversationsStore.checkAndRemoveGroups(group.id, group.name);
+          conversationsStore.checkAndRemoveGroups(
+            currentGroupId,
+            groupData.name,
+          );
 
           // Xóa tin nhắn của nhóm khỏi cache
-          useChatStore.getState().clearChatCache("GROUP", group.id);
+          useChatStore.getState().clearChatCache("GROUP", currentGroupId);
 
           // Chuyển về trạng thái không chọn nhóm
           // Sử dụng getState() để tránh gây ra vòng lặp vô hạn
           useChatStore.getState().setSelectedGroup(null);
 
           // Tải lại danh sách cuộc trò chuyện
-          if (currentUser?.id) {
-            conversationsStore.loadConversations(currentUser.id);
+          if (currentUserId) {
+            conversationsStore.loadConversations(currentUserId);
           }
 
           // Xóa interval kiểm tra
@@ -127,7 +166,7 @@ export default function GroupChatHeader({
           }
         } else {
           console.log(
-            `[GroupChatHeader] User ${currentUser.id} is still a member of group ${group.id}`,
+            `[GroupChatHeader] User ${currentUserId} is still a member of group ${currentGroupId}`,
           );
         }
       }
@@ -141,10 +180,9 @@ export default function GroupChatHeader({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    group?.id,
-    currentUser?.id,
+    // Only depend on primitive values and refs to avoid unnecessary re-creation
     isCheckingMembership,
-    membershipCheckInterval,
+    // membershipCheckInterval is not actually used in the function body
   ]);
 
   // Thiết lập interval kiểm tra thành viên nhóm

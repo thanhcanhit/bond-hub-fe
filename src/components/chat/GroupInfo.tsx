@@ -40,7 +40,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { useChatStore } from "@/stores/chatStore";
+import { useChatStore, type ChatState } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 
@@ -173,7 +173,7 @@ export default function GroupInfo({
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
   // const groupSocket = useGroupSocket();
-  const [forceUpdate, setForceUpdate] = useState(0);
+  // Removed forceUpdate state as it was causing infinite loops
 
   // Hàm cập nhật danh sách thành viên (sử dụng useCallback để tránh tạo hàm mới mỗi khi render)
   const updateMembersList = useCallback(
@@ -187,6 +187,30 @@ export default function GroupInfo({
         "forceRefresh:",
         forceRefresh,
       );
+
+      // Check if we have a valid cache for this group
+      const chatStore = useChatStore.getState() as ChatState & {
+        setShouldFetchGroupData?: (shouldFetch: boolean) => void;
+        clearGroupCache?: (groupId: string) => void;
+      };
+      const cachedData = chatStore.groupCache
+        ? chatStore.groupCache[groupId]
+        : undefined;
+      const currentTime = new Date();
+      const isCacheValid =
+        cachedData &&
+        !forceRefresh && // Always refresh if forceRefresh is true
+        currentTime.getTime() - cachedData.lastFetched.getTime() < 30 * 1000; // 30 seconds cache
+
+      if (isCacheValid) {
+        console.log(`[GroupInfo] Using cached group data for ${groupId}`);
+
+        // Update the group state with cached data
+        setGroup(cachedData.group);
+
+        // Don't update forceUpdate here to prevent infinite loops
+        return true;
+      }
 
       try {
         // Lấy dữ liệu nhóm mới trực tiếp từ API để đảm bảo dữ liệu mới nhất
@@ -215,20 +239,21 @@ export default function GroupInfo({
           setGroup(result.group);
 
           // Cập nhật selectedGroup trong store
-          useChatStore.getState().setSelectedGroup(result.group);
+          chatStore.setSelectedGroup(result.group);
 
-          // Cập nhật UI
-          setForceUpdate((prev) => prev + 1);
+          // Update the cache
+          if (chatStore.groupCache) {
+            // Fallback for direct cache manipulation
+            chatStore.groupCache[groupId] = {
+              group: result.group,
+              lastFetched: new Date(),
+            };
+          }
 
           // Cập nhật conversations store để đảm bảo UI được cập nhật đồng bộ
           useConversationsStore.getState().updateConversation(groupId, {
             group: result.group,
           });
-
-          // Force update conversations để đảm bảo UI được cập nhật
-          setTimeout(() => {
-            useConversationsStore.getState().forceUpdate();
-          }, 100);
 
           // Nếu số lượng thành viên thay đổi, hiển thị thông báo
           if (membersChanged && !forceRefresh) {
@@ -252,24 +277,17 @@ export default function GroupInfo({
       }
 
       // Nếu không thể lấy dữ liệu từ API, thử dùng dữ liệu từ store
-      const storeSelectedGroup = useChatStore.getState().selectedGroup;
+      const storeSelectedGroup = chatStore.selectedGroup;
       if (storeSelectedGroup && storeSelectedGroup.id === groupId) {
         console.log("[GroupInfo] Falling back to store data");
         setGroup(storeSelectedGroup);
-        setForceUpdate((prev) => prev + 1);
+        // Don't update forceUpdate here to prevent infinite loops
         return true;
       }
 
       return false;
     },
-    [
-      group?.id,
-      group?.members?.length,
-      selectedGroup?.id,
-      initialGroup?.id,
-      setGroup,
-      setForceUpdate,
-    ],
+    [group?.id, group?.members?.length, selectedGroup?.id, initialGroup?.id],
   );
 
   // Hàm làm mới dữ liệu nhóm
@@ -277,8 +295,8 @@ export default function GroupInfo({
     toast.info("Đang làm mới dữ liệu nhóm...");
 
     try {
-      // Sử dụng hàm updateMembersList để cập nhật danh sách thành viên
-      const success = await updateMembersList();
+      // Force refresh by passing true to updateMembersList
+      const success = await updateMembersList(true);
 
       if (success) {
         toast.success("Làm mới dữ liệu nhóm thành công");
@@ -287,10 +305,20 @@ export default function GroupInfo({
 
       // Nếu không thể cập nhật qua updateMembersList, thử sử dụng refreshSelectedGroup
       console.log("[GroupInfo] Trying refreshSelectedGroup as fallback");
+
+      // Clear the cache to force a refresh
+      const groupId = group?.id || selectedGroup?.id || initialGroup?.id;
+      if (groupId) {
+        const chatStore = useChatStore.getState();
+        // Clear the cache entry for this group
+        if (chatStore.groupCache && chatStore.groupCache[groupId]) {
+          delete chatStore.groupCache[groupId];
+        }
+      }
+
       await useChatStore.getState().refreshSelectedGroup();
 
       // Kiểm tra xem selectedGroup đã được cập nhật chưa
-      const groupId = group?.id || selectedGroup?.id || initialGroup?.id;
       const updatedSelectedGroup = useChatStore.getState().selectedGroup;
 
       if (updatedSelectedGroup && updatedSelectedGroup.id === groupId) {
@@ -303,20 +331,15 @@ export default function GroupInfo({
         // Cập nhật group state
         setGroup(updatedSelectedGroup);
 
-        // Cập nhật UI
-        setForceUpdate((prev) => prev + 1);
+        // No need to update forceUpdate to prevent infinite loops
 
         // Cập nhật conversations store để đảm bảo UI được cập nhật đồng bộ
-        const groupId = group?.id || selectedGroup?.id || initialGroup?.id;
         if (groupId && updatedSelectedGroup) {
           useConversationsStore.getState().updateConversation(groupId, {
             group: updatedSelectedGroup,
           });
 
-          // Force update conversations để đảm bảo UI được cập nhật
-          setTimeout(() => {
-            useConversationsStore.getState().forceUpdate();
-          }, 100);
+          // No need to force update conversations here
         }
 
         toast.success("Làm mới dữ liệu nhóm thành công");
@@ -327,8 +350,7 @@ export default function GroupInfo({
       if (typeof window !== "undefined" && window.triggerGroupsReload) {
         console.log("[GroupInfo] Triggering global group reload event");
         window.triggerGroupsReload();
-        // Chỉ cập nhật một lần để tránh vòng lặp vô hạn
-        setForceUpdate((prev) => prev + 1);
+        // No need to update forceUpdate to prevent infinite loops
       } else {
         toast.error("Không thể làm mới dữ liệu nhóm");
       }
@@ -587,13 +609,11 @@ export default function GroupInfo({
     }
     // Nếu không có, sử dụng thông tin từ group state
     return group?.members?.length || 0;
-  }, [groupConversation, group]);
+  }, [groupConversation?.group?.memberUsers, group?.members]);
 
-  // Cập nhật UI khi memberCount thay đổi
-  useEffect(() => {
-    console.log("[GroupInfo] Member count updated:", memberCount);
-    setForceUpdate((prev) => prev + 1);
-  }, [memberCount]);
+  // Remove the effect that was causing the infinite loop
+  // We don't need to call setForceUpdate when memberCount changes
+  // as memberCount is already derived from group and groupConversation
 
   // Lấy thông tin chi tiết của các thành viên và vai trò của người dùng hiện tại
   useEffect(() => {
@@ -762,7 +782,7 @@ export default function GroupInfo({
 
       fetchMemberDetails();
     }
-  }, [group?.id, group?.members, currentUser, forceUpdate]);
+  }, [group?.id, group?.members, currentUser]); // Removed forceUpdate from dependencies
 
   // Lấy media từ tin nhắn
   useEffect(() => {
@@ -866,7 +886,7 @@ export default function GroupInfo({
 
       extractMediaFromMessages();
     }
-  }, [group?.id, messages, forceUpdate]);
+  }, [group?.id, messages]); // Removed forceUpdate from dependencies
 
   // Kiểm tra nếu không có dữ liệu nhóm
   useEffect(() => {
@@ -980,9 +1000,7 @@ export default function GroupInfo({
         </div>
 
         <div className="p-4 flex justify-between items-center">
-          <span className="text-sm" key={`members-list-count-${forceUpdate}`}>
-            Danh sách thành viên ({memberCount})
-          </span>
+          <span className="text-sm">Danh sách thành viên ({memberCount})</span>
           <Button
             variant="ghost"
             size="icon"
@@ -1004,7 +1022,7 @@ export default function GroupInfo({
 
                 return (
                   <div
-                    key={`${member.id}-${forceUpdate}`}
+                    key={`${member.id}`}
                     className="flex items-center p-4 hover:bg-gray-100 justify-between"
                   >
                     <div
@@ -1146,7 +1164,7 @@ export default function GroupInfo({
 
                 return (
                   <div
-                    key={`${member.userId}-${forceUpdate}`}
+                    key={`${member.userId}`}
                     className="flex items-center p-4 hover:bg-gray-100 justify-between"
                   >
                     <div
@@ -1527,10 +1545,7 @@ export default function GroupInfo({
             <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50">
               <div className="flex items-center">
                 <span className="font-semibold">Thành viên nhóm</span>
-                <span
-                  className="text-xs text-gray-500 ml-2"
-                  key={`members-header-count-${forceUpdate}`}
-                >
+                <span className="text-xs text-gray-500 ml-2">
                   ({memberCount})
                 </span>
               </div>
@@ -1542,9 +1557,7 @@ export default function GroupInfo({
                 onClick={() => setShowMembersList(true)}
               >
                 <Users className="h-5 w-5 mr-2 text-gray-500" />
-                <span className="text-sm" key={`members-count-${forceUpdate}`}>
-                  {memberCount} thành viên
-                </span>
+                <span className="text-sm">{memberCount} thành viên</span>
               </div>
             </CollapsibleContent>
           </Collapsible>
@@ -1903,7 +1916,7 @@ export default function GroupInfo({
 
                 return (
                   <div
-                    key={`transfer-${member.userId}-${forceUpdate}`}
+                    key={`transfer-${member.userId}`}
                     className="flex items-center p-3 hover:bg-gray-100 cursor-pointer"
                     onClick={() => handleSelectNewLeader(member.userId)}
                   >
@@ -2176,8 +2189,10 @@ export default function GroupInfo({
           group.members = updatedMembers;
         }
 
-        // Force UI update
-        setForceUpdate((prev) => prev + 1);
+        // Force UI update by updating the group state
+        if (group.members) {
+          setGroup({ ...group, members: [...group.members] });
+        }
 
         toast.success("Đã thăng cấp thành viên thành phó nhóm");
       } else {
@@ -2223,8 +2238,10 @@ export default function GroupInfo({
           group.members = updatedMembers;
         }
 
-        // Force UI update
-        setForceUpdate((prev) => prev + 1);
+        // Force UI update by updating the group state
+        if (group.members) {
+          setGroup({ ...group, members: [...group.members] });
+        }
 
         toast.success("Đã hạ cấp thành viên xuống thành viên thường");
       } else {
@@ -2265,8 +2282,10 @@ export default function GroupInfo({
           group.members = updatedMembers;
         }
 
-        // Force UI update
-        setForceUpdate((prev) => prev + 1);
+        // Force UI update by updating the group state
+        if (group.members) {
+          setGroup({ ...group, members: [...group.members] });
+        }
 
         toast.success("Đã xóa thành viên khỏi nhóm");
       } else {
@@ -2359,8 +2378,10 @@ export default function GroupInfo({
           setCurrentUserRole(GroupRole.MEMBER);
         }
 
-        // Force UI update
-        setForceUpdate((prev) => prev + 1);
+        // Force UI update by updating the group state
+        if (group.members) {
+          setGroup({ ...group, members: [...group.members] });
+        }
 
         // Thông báo cho người dùng
         toast.success("Đã chuyển quyền trưởng nhóm thành công");
