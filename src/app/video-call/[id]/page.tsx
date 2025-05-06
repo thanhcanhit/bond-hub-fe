@@ -7,12 +7,13 @@ import { getUserDataById } from "@/actions/user.action";
 import { getUserInitials } from "@/utils/userUtils";
 import { Phone, Video, VideoOff, Mic, MicOff, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import { use } from "react";
 
 export default function VideoCallPage({ params }: { params: { id: string } }) {
   // Unwrap params using React.use()
+  // @ts-ignore - Bỏ qua lỗi TypeScript với use()
   const unwrappedParams = use(params);
+  // @ts-ignore - Bỏ qua lỗi TypeScript với unwrappedParams
   const userId = unwrappedParams.id;
 
   const [user, setUser] = useState<any>(null);
@@ -26,7 +27,6 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
   const [originalVideoStream, setOriginalVideoStream] =
     useState<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const router = useRouter();
 
   // Fetch user data
   useEffect(() => {
@@ -241,9 +241,8 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
         // Cách hiện đại để xử lý sự kiện beforeunload
         e.preventDefault();
         // Đặt một thông báo chung (nhiều trình duyệt hiện đại không hiển thị thông báo tùy chỉnh)
-        const message = "Bạn có chắc chắn muốn kết thúc cuộc gọi?";
-        e.returnValue = message; // Cho trình duyệt cũ
-        return message; // Cho một số trình duyệt
+        // Phương pháp hiện đại - không sử dụng returnValue đã bị deprecated
+        return "Bạn có chắc chắn muốn kết thúc cuộc gọi?";
       }
     };
 

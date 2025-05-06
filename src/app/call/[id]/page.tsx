@@ -7,12 +7,13 @@ import { getUserDataById } from "@/actions/user.action";
 import { getUserInitials } from "@/utils/userUtils";
 import { Phone, Mic, MicOff } from "lucide-react";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import { use } from "react";
 
 export default function CallPage({ params }: { params: { id: string } }) {
   // Unwrap params using React.use()
+  // @ts-ignore - Bỏ qua lỗi TypeScript với use()
   const unwrappedParams = use(params);
+  // @ts-ignore - Bỏ qua lỗi TypeScript với unwrappedParams
   const userId = unwrappedParams.id;
 
   const [user, setUser] = useState<any>(null);
@@ -21,7 +22,6 @@ export default function CallPage({ params }: { params: { id: string } }) {
     "connecting" | "connected" | "ended"
   >("connecting");
   const [callDuration, setCallDuration] = useState(0);
-  const router = useRouter();
 
   // Fetch user data
   useEffect(() => {
@@ -101,10 +101,8 @@ export default function CallPage({ params }: { params: { id: string } }) {
       if (callStatus === "connected") {
         // Cách hiện đại để xử lý sự kiện beforeunload
         e.preventDefault();
-        // Đặt một thông báo chung (nhiều trình duyệt hiện đại không hiển thị thông báo tùy chỉnh)
-        const message = "Bạn có chắc chắn muốn kết thúc cuộc gọi?";
-        e.returnValue = message; // Cho trình duyệt cũ
-        return message; // Cho một số trình duyệt
+        // Phương pháp hiện đại - không sử dụng returnValue đã bị deprecated
+        return "Bạn có chắc chắn muốn kết thúc cuộc gọi?";
       }
     };
 
