@@ -26,6 +26,7 @@ import {
   UserMinus,
   UserPlus,
 } from "lucide-react";
+import CallButton from "@/components/call/CallButton";
 import RefreshUserDataButton from "./RefreshUserDataButton";
 import { User } from "@/types/base";
 import Image from "next/image";
@@ -611,15 +612,7 @@ export default function ProfileDialog({
                     </Button>
                   ) : relationship === "FRIEND" ? (
                     <div className="flex gap-6 w-full p-2 pb-4">
-                      {onCall && (
-                        <Button
-                          onClick={onCall}
-                          variant="outline"
-                          className="flex-1 bg-[#ebecf0] font-semibold hover:bg-[#B3B6B9] py-2 px-4 h-8 !border-none !rounded-none"
-                        >
-                          Gọi điện
-                        </Button>
-                      )}
+                      {user && <CallButton user={user} />}
                       <Button
                         onClick={async () => {
                           if (user?.id) {

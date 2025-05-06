@@ -669,7 +669,6 @@ export default function SearchHeader({ className }: { className?: string }) {
           onCall={() => {
             // Xử lý khi nhấn nút gọi điện
             setShowProfileDialog(false);
-            toast.info("Tính năng gọi điện đang được phát triển");
           }}
         />
       )}

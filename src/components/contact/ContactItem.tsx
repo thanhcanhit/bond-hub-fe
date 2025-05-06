@@ -257,10 +257,8 @@ function ContactItem({ user, onRemove }: ContactItemProps) {
         onCall={() => {
           // Xử lý khi nhấn nút gọi điện
           console.log("Bắt đầu cuộc gọi với:", fullName);
-          toast.success(`Đang gọi cho ${fullName}`);
           // Đóng dialog
           setShowProfileDialog(false);
-          // TODO: Bắt đầu cuộc gọi
         }}
       />
 
