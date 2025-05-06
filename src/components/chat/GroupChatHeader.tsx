@@ -11,6 +11,8 @@ import {
   Users,
   ChevronLeft,
   AlertTriangle,
+  Phone,
+  Video,
 } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
@@ -18,6 +20,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { getGroupById } from "@/actions/group.action";
+import CallButton from "@/components/call/CallButton";
 
 interface GroupChatHeaderProps {
   group: Group | null;
@@ -318,6 +321,17 @@ export default function GroupChatHeader({
             </form>
           ) : (
             <>
+              {/* Nút gọi điện và gọi video */}
+              {group && (
+                <CallButton
+                  target={group}
+                  targetType="GROUP"
+                  variant="icon"
+                  size="md"
+                />
+              )}
+
+              {/* Nút tìm kiếm */}
               <Button
                 variant="ghost"
                 size="icon"
@@ -326,6 +340,8 @@ export default function GroupChatHeader({
               >
                 <Search className="h-5 w-5 text-gray-500" />
               </Button>
+
+              {/* Nút thông tin */}
               <Button
                 variant="ghost"
                 size="icon"

@@ -2,29 +2,31 @@
 
 import { Button } from "@/components/ui/button";
 import { Phone, Video } from "lucide-react";
-import { User } from "@/types/base";
+import { User, Group } from "@/types/base";
 import { toast } from "sonner";
 
 interface CallButtonProps {
-  user: User;
+  target: User | Group;
+  targetType?: "USER" | "GROUP";
   variant?: "icon" | "default";
   size?: "sm" | "md" | "lg";
   showVideoCall?: boolean;
 }
 
 export default function CallButton({
-  user,
+  target,
+  targetType = "USER",
   variant = "default",
   size = "md",
   showVideoCall = true,
 }: CallButtonProps) {
   const handleCall = () => {
+    // Xác định URL dựa trên loại đối tượng (user hoặc group)
+    const callUrl =
+      targetType === "USER" ? `/call/${target.id}` : `/call/group/${target.id}`;
+
     // Mở cửa sổ trình duyệt mới cho cuộc gọi thường
-    const callWindow = window.open(
-      `/call/${user.id}`,
-      "_blank",
-      "width=400,height=600",
-    );
+    const callWindow = window.open(callUrl, "_blank", "width=400,height=600");
     if (callWindow) {
       callWindow.focus();
     } else {
@@ -35,9 +37,15 @@ export default function CallButton({
   };
 
   const handleVideoCall = () => {
+    // Xác định URL dựa trên loại đối tượng (user hoặc group)
+    const videoCallUrl =
+      targetType === "USER"
+        ? `/video-call/${target.id}`
+        : `/video-call/group/${target.id}`;
+
     // Mở cửa sổ trình duyệt mới cho cuộc gọi video
     const videoCallWindow = window.open(
-      `/video-call/${user.id}`,
+      videoCallUrl,
       "_blank",
       "width=800,height=600",
     );

@@ -103,41 +103,7 @@ export default function ChatHeader({
     );
   }
 
-  const handleCall = () => {
-    if (contact) {
-      // Mở cửa sổ trình duyệt mới cho cuộc gọi thường
-      const callWindow = window.open(
-        `/call/${contact.id}`,
-        "_blank",
-        "width=400,height=600",
-      );
-      if (callWindow) {
-        callWindow.focus();
-      } else {
-        toast.error(
-          "Trình duyệt đã chặn cửa sổ pop-up. Vui lòng cho phép pop-up để sử dụng tính năng gọi điện.",
-        );
-      }
-    }
-  };
-
-  const handleVideoCall = () => {
-    if (contact) {
-      // Mở cửa sổ trình duyệt mới cho cuộc gọi video
-      const videoCallWindow = window.open(
-        `/video-call/${contact.id}`,
-        "_blank",
-        "width=800,height=600",
-      );
-      if (videoCallWindow) {
-        videoCallWindow.focus();
-      } else {
-        toast.error(
-          "Trình duyệt đã chặn cửa sổ pop-up. Vui lòng cho phép pop-up để sử dụng tính năng gọi video.",
-        );
-      }
-    }
-  };
+  // Các hàm handleCall và handleVideoCall đã được thay thế bằng component CallButton
 
   return (
     <>
@@ -252,24 +218,12 @@ export default function ChatHeader({
           ) : (
             <>
               {contact && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full"
-                    onClick={handleCall}
-                  >
-                    <Phone className="h-5 w-5 text-gray-500" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full"
-                    onClick={handleVideoCall}
-                  >
-                    <Video className="h-5 w-5 text-gray-500" />
-                  </Button>
-                </>
+                <CallButton
+                  target={contact}
+                  targetType="USER"
+                  variant="icon"
+                  size="md"
+                />
               )}
               <Button
                 variant="ghost"
