@@ -166,6 +166,8 @@ interface ConversationsState {
 declare global {
   interface Window {
     _conversationsForceUpdateTimeout: NodeJS.Timeout | null;
+    _lastConversationsUpdateTime: number;
+    _groupSocketForceUpdateTimeout: NodeJS.Timeout | null;
   }
 }
 
@@ -260,7 +262,7 @@ export const useConversationsStore = create<ConversationsState>()(
                         createdAt: new Date(),
                         updatedAt: new Date(),
                         blockStrangers: false,
-                        userAuth: { id: apiMessage.senderId },
+                        userAuth: null, // Loại bỏ tham chiếu vòng tròn
                       },
                     } as User,
                     recalled: apiMessage.recalled,
@@ -298,7 +300,7 @@ export const useConversationsStore = create<ConversationsState>()(
                       blockStrangers: false,
                       createdAt: new Date(),
                       updatedAt: new Date(),
-                      userAuth: { id: conv.user.id },
+                      userAuth: null, // Loại bỏ tham chiếu vòng tròn
                     },
                     // Add online status based on lastSeen (consider online if active in last 5 minutes)
                     online: isOnline,
@@ -331,7 +333,7 @@ export const useConversationsStore = create<ConversationsState>()(
                           createdAt: new Date(),
                           updatedAt: new Date(),
                           blockStrangers: false,
-                          userAuth: { id: member.userId },
+                          userAuth: null, // Loại bỏ tham chiếu vòng tròn
                         },
                       } as User,
                       addedBy: {
@@ -342,7 +344,7 @@ export const useConversationsStore = create<ConversationsState>()(
                           createdAt: new Date(),
                           updatedAt: new Date(),
                           blockStrangers: false,
-                          userAuth: { id: member.addedBy?.id || "" },
+                          userAuth: null, // Loại bỏ tham chiếu vòng tròn
                         },
                       } as User,
                       addedById: member.addedBy?.id || "",
@@ -384,7 +386,7 @@ export const useConversationsStore = create<ConversationsState>()(
                       blockStrangers: false,
                       createdAt: new Date(),
                       updatedAt: new Date(),
-                      userAuth: { id: conv.group.id },
+                      userAuth: { id: conv.group?.id || "" },
                     },
                   } as User & { userInfo: UserInfo };
 
@@ -451,7 +453,7 @@ export const useConversationsStore = create<ConversationsState>()(
                           blockStrangers: false,
                           createdAt: new Date(),
                           updatedAt: new Date(),
-                          userAuth: user,
+                          userAuth: null, // Loại bỏ tham chiếu vòng tròn
                         },
                   },
                   lastMessage: undefined,
@@ -487,7 +489,7 @@ export const useConversationsStore = create<ConversationsState>()(
                         blockStrangers: false,
                         createdAt: new Date(),
                         updatedAt: new Date(),
-                        userAuth: updatedUser,
+                        userAuth: null, // Loại bỏ tham chiếu vòng tròn
                       };
                     }
 
@@ -1086,7 +1088,7 @@ export const useConversationsStore = create<ConversationsState>()(
                 blockStrangers: false,
                 createdAt: new Date(),
                 updatedAt: new Date(),
-                userAuth: null as unknown as User,
+                userAuth: null, // Loại bỏ tham chiếu vòng tròn
               },
               refreshTokens: [],
               qrCodes: [],
@@ -1209,21 +1211,51 @@ export const useConversationsStore = create<ConversationsState>()(
       forceUpdate: () => {
         console.log("[conversationsStore] Forcing UI update");
 
-        // Use a debounced version to prevent multiple calls in quick succession
+        // Track last update time to prevent excessive updates
         if (typeof window !== "undefined") {
+          // Initialize the last update time if it doesn't exist
+          if (!window._lastConversationsUpdateTime) {
+            window._lastConversationsUpdateTime = 0;
+          }
+
+          const now = Date.now();
+          const timeSinceLastUpdate = now - window._lastConversationsUpdateTime;
+
+          // If we've updated too recently, skip this update
+          if (timeSinceLastUpdate < 1000) {
+            // 1 second throttle
+            console.log(
+              `[conversationsStore] Skipping update, last update was ${timeSinceLastUpdate}ms ago`,
+            );
+            return;
+          }
+
           // Clear any existing timeout
           if (window._conversationsForceUpdateTimeout) {
             clearTimeout(window._conversationsForceUpdateTimeout);
           }
 
-          // Set a new timeout
+          // Set a new timeout with a longer delay to prevent rapid updates
           window._conversationsForceUpdateTimeout = setTimeout(() => {
-            set((state) => ({
-              ...state,
-              conversations: [...state.conversations],
-            }));
-            window._conversationsForceUpdateTimeout = null;
-          }, 50); // Small delay to batch multiple calls
+            try {
+              // Update the last update time
+              window._lastConversationsUpdateTime = Date.now();
+
+              // Create a new reference to trigger React updates
+              set((state) => ({
+                ...state,
+                conversations: [...state.conversations],
+              }));
+
+              window._conversationsForceUpdateTimeout = null;
+              console.log("[conversationsStore] UI update completed");
+            } catch (error) {
+              console.error(
+                "[conversationsStore] Error during UI update:",
+                error,
+              );
+            }
+          }, 300); // Longer delay to batch multiple calls and prevent rapid updates
         } else {
           // Fallback for SSR
           set((state) => ({

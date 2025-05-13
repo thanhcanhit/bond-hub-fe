@@ -38,6 +38,13 @@ declare global {
     _groupSocketForceUpdateTimeout: NodeJS.Timeout | null;
     groupSocket: Socket | null;
     triggerGroupsReload?: () => void;
+    _lastGroupApiCallTime?: Record<string, number>;
+    _lastGroupInfoUpdateTime?: Record<string, number>;
+    _lastGroupInfoStateUpdateTime?: Record<string, number>;
+    _lastGroupInfoApiCallTime?: Record<string, number>;
+    _lastContactInfoUpdateTime?: Record<string, number>;
+    _lastContactInfoResetTime?: Record<string, number>;
+    _lastGroupHeaderIntervalTime?: Record<string, number>;
   }
 }
 

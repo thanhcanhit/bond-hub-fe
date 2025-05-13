@@ -97,6 +97,29 @@ export default function GroupInfo({
 
   // Cập nhật group state khi selectedGroup hoặc initialGroup thay đổi
   useEffect(() => {
+    // Thêm throttle để tránh cập nhật quá thường xuyên
+    if (!window._lastGroupInfoStateUpdateTime) {
+      window._lastGroupInfoStateUpdateTime = {};
+    }
+
+    const groupId = selectedGroup?.id || initialGroup?.id;
+    if (!groupId) return;
+
+    const now = Date.now();
+    const lastUpdateTime = window._lastGroupInfoStateUpdateTime[groupId] || 0;
+    const timeSinceLastUpdate = now - lastUpdateTime;
+
+    // Nếu đã cập nhật trong vòng 1 giây, bỏ qua
+    if (timeSinceLastUpdate < 1000) {
+      console.log(
+        `[GroupInfo] Skipping state update, last update was ${timeSinceLastUpdate}ms ago`,
+      );
+      return;
+    }
+
+    // Cập nhật thời gian cập nhật cuối cùng
+    window._lastGroupInfoStateUpdateTime[groupId] = now;
+
     // Ưu tiên sử dụng selectedGroup từ store
     if (selectedGroup) {
       console.log("[GroupInfo] Updating group from selectedGroup in store");
@@ -180,6 +203,26 @@ export default function GroupInfo({
     async (forceRefresh = false) => {
       const groupId = group?.id || selectedGroup?.id || initialGroup?.id;
       if (!groupId) return false;
+
+      // Thêm throttle để tránh gọi API quá thường xuyên
+      if (!window._lastGroupInfoApiCallTime) {
+        window._lastGroupInfoApiCallTime = {};
+      }
+
+      const now = Date.now();
+      const lastCallTime = window._lastGroupInfoApiCallTime[groupId] || 0;
+      const timeSinceLastCall = now - lastCallTime;
+
+      // Nếu đã gọi API trong vòng 2 giây và không phải là force refresh, bỏ qua
+      if (timeSinceLastCall < 2000 && !forceRefresh) {
+        console.log(
+          `[GroupInfo] Skipping API call, last call was ${timeSinceLastCall}ms ago`,
+        );
+        return true;
+      }
+
+      // Cập nhật thời gian gọi API
+      window._lastGroupInfoApiCallTime[groupId] = now;
 
       console.log(
         "[GroupInfo] Updating members list for group",

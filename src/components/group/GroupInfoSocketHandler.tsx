@@ -80,6 +80,27 @@ const GroupInfoSocketHandler = ({
           `[GroupInfoSocketHandler] Group ${groupId} updated, refreshing data`,
         );
 
+        // Thêm throttle để tránh gọi onGroupUpdated quá thường xuyên
+        // Sử dụng biến toàn cục để theo dõi thời gian gọi cuối cùng
+        if (!window._lastGroupInfoUpdateTime) {
+          window._lastGroupInfoUpdateTime = {};
+        }
+
+        const now = Date.now();
+        const lastUpdateTime = window._lastGroupInfoUpdateTime[groupId] || 0;
+        const timeSinceLastUpdate = now - lastUpdateTime;
+
+        // Nếu đã gọi trong vòng 2 giây, bỏ qua
+        if (timeSinceLastUpdate < 2000) {
+          console.log(
+            `[GroupInfoSocketHandler] Skipping update, last update was ${timeSinceLastUpdate}ms ago`,
+          );
+          return;
+        }
+
+        // Cập nhật thời gian gọi cuối cùng
+        window._lastGroupInfoUpdateTime[groupId] = now;
+
         // Call the onGroupUpdated callback if provided
         // This will use the cache system to avoid redundant API calls
         if (onGroupUpdated) {
@@ -93,6 +114,26 @@ const GroupInfoSocketHandler = ({
         console.log(
           `[GroupInfoSocketHandler] Member added to group ${groupId}, refreshing data`,
         );
+
+        // Thêm throttle để tránh gọi onGroupUpdated quá thường xuyên
+        if (!window._lastGroupInfoUpdateTime) {
+          window._lastGroupInfoUpdateTime = {};
+        }
+
+        const now = Date.now();
+        const lastUpdateTime = window._lastGroupInfoUpdateTime[groupId] || 0;
+        const timeSinceLastUpdate = now - lastUpdateTime;
+
+        // Nếu đã gọi trong vòng 2 giây, bỏ qua
+        if (timeSinceLastUpdate < 2000) {
+          console.log(
+            `[GroupInfoSocketHandler] Skipping update, last update was ${timeSinceLastUpdate}ms ago`,
+          );
+          return;
+        }
+
+        // Cập nhật thời gian gọi cuối cùng
+        window._lastGroupInfoUpdateTime[groupId] = now;
 
         // Call the onGroupUpdated callback if provided
         // This will use the cache system to avoid redundant API calls
@@ -127,6 +168,26 @@ const GroupInfoSocketHandler = ({
             useConversationsStore.getState().forceUpdate();
           }, 100);
         } else {
+          // Thêm throttle để tránh gọi onGroupUpdated quá thường xuyên
+          if (!window._lastGroupInfoUpdateTime) {
+            window._lastGroupInfoUpdateTime = {};
+          }
+
+          const now = Date.now();
+          const lastUpdateTime = window._lastGroupInfoUpdateTime[groupId] || 0;
+          const timeSinceLastUpdate = now - lastUpdateTime;
+
+          // Nếu đã gọi trong vòng 2 giây, bỏ qua
+          if (timeSinceLastUpdate < 2000) {
+            console.log(
+              `[GroupInfoSocketHandler] Skipping update, last update was ${timeSinceLastUpdate}ms ago`,
+            );
+            return;
+          }
+
+          // Cập nhật thời gian gọi cuối cùng
+          window._lastGroupInfoUpdateTime[groupId] = now;
+
           // Call the onGroupUpdated callback if provided
           // This will use the cache system to avoid redundant API calls
           if (onGroupUpdated) {
@@ -141,6 +202,26 @@ const GroupInfoSocketHandler = ({
         console.log(
           `[GroupInfoSocketHandler] Role changed in group ${groupId}, refreshing data`,
         );
+
+        // Thêm throttle để tránh gọi onGroupUpdated quá thường xuyên
+        if (!window._lastGroupInfoUpdateTime) {
+          window._lastGroupInfoUpdateTime = {};
+        }
+
+        const now = Date.now();
+        const lastUpdateTime = window._lastGroupInfoUpdateTime[groupId] || 0;
+        const timeSinceLastUpdate = now - lastUpdateTime;
+
+        // Nếu đã gọi trong vòng 2 giây, bỏ qua
+        if (timeSinceLastUpdate < 2000) {
+          console.log(
+            `[GroupInfoSocketHandler] Skipping update, last update was ${timeSinceLastUpdate}ms ago`,
+          );
+          return;
+        }
+
+        // Cập nhật thời gian gọi cuối cùng
+        window._lastGroupInfoUpdateTime[groupId] = now;
 
         // Call the onGroupUpdated callback if provided
         // This will use the cache system to avoid redundant API calls
@@ -179,6 +260,26 @@ const GroupInfoSocketHandler = ({
             };
           }
         }
+
+        // Thêm throttle để tránh gọi onGroupUpdated quá thường xuyên
+        if (!window._lastGroupInfoUpdateTime) {
+          window._lastGroupInfoUpdateTime = {};
+        }
+
+        const now = Date.now();
+        const lastUpdateTime = window._lastGroupInfoUpdateTime[groupId] || 0;
+        const timeSinceLastUpdate = now - lastUpdateTime;
+
+        // Nếu đã gọi trong vòng 2 giây, bỏ qua
+        if (timeSinceLastUpdate < 2000) {
+          console.log(
+            `[GroupInfoSocketHandler] Skipping update, last update was ${timeSinceLastUpdate}ms ago`,
+          );
+          return;
+        }
+
+        // Cập nhật thời gian gọi cuối cùng
+        window._lastGroupInfoUpdateTime[groupId] = now;
 
         // Call the onGroupUpdated callback if provided
         // This will use the cache system to avoid redundant API calls

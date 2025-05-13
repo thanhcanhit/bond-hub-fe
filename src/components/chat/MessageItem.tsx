@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
 import { formatMessageTime } from "@/utils/dateUtils";
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "../ui/separator";
 import { useChatStore } from "@/stores/chatStore";
+import { useConversationsStore } from "@/stores/conversationsStore";
 import {
   Copy,
   Download,
@@ -199,6 +200,19 @@ function getSenderName(
   message: Message | ExtendedMessage,
   userInfo?: UserInfo,
 ): string {
+  // Log the available information for debugging
+  if (process.env.NODE_ENV !== "production") {
+    console.log(
+      `[MessageItem] Getting sender name for message ${message.id}:`,
+      {
+        senderUserInfoFullName: message.sender?.userInfo?.fullName,
+        propsUserInfoFullName: userInfo?.fullName,
+        extendedMessageSenderName: (message as ExtendedMessage).senderName,
+        senderId: message.senderId,
+      },
+    );
+  }
+
   return (
     message.sender?.userInfo?.fullName ||
     userInfo?.fullName ||
@@ -245,6 +259,82 @@ export default function MessageItem({
   const isRead =
     Array.isArray(message.readBy) && message.readBy.includes(currentUserId);
   const isSent = message.id && !message.id.startsWith("temp-");
+
+  // Use a ref to track when we last refreshed group data
+  const lastGroupRefreshRef = useRef<Record<string, number>>({});
+
+  // Check if we need to fetch user information for this message
+  useEffect(() => {
+    // Only for group messages where sender info is missing or incomplete
+    if (
+      isGroup &&
+      !isCurrentUser &&
+      message.senderId &&
+      message.groupId &&
+      (!message.sender?.userInfo ||
+        !message.sender.userInfo.fullName ||
+        message.sender.userInfo.fullName === "Unknown")
+    ) {
+      // Check if we've already refreshed this group recently (within 5 seconds)
+      const lastRefreshTime = lastGroupRefreshRef.current[message.groupId];
+      const now = Date.now();
+
+      if (lastRefreshTime && now - lastRefreshTime < 5000) {
+        console.log(
+          `[MessageItem] Skipping refresh for group ${message.groupId}, last refresh was ${now - lastRefreshTime}ms ago`,
+        );
+        return;
+      }
+
+      console.log(
+        `[MessageItem] Message ${message.id} has missing sender info, triggering group refresh`,
+      );
+
+      // Record this refresh
+      lastGroupRefreshRef.current[message.groupId] = now;
+
+      // Clean up old entries
+      Object.keys(lastGroupRefreshRef.current).forEach((groupId) => {
+        if (now - lastGroupRefreshRef.current[groupId] > 30000) {
+          // 30 seconds
+          delete lastGroupRefreshRef.current[groupId];
+        }
+      });
+
+      // Use setTimeout to break potential update cycles
+      setTimeout(() => {
+        try {
+          // Trigger a refresh of the selected group to get updated member information
+          if (
+            chatStore.refreshSelectedGroup &&
+            chatStore.selectedGroup?.id === message.groupId
+          ) {
+            console.log(
+              `[MessageItem] Refreshing group data for ${message.groupId}`,
+            );
+            chatStore.refreshSelectedGroup();
+          } else {
+            // If not the selected group, force an update of the conversations list
+            console.log(
+              `[MessageItem] Forcing update of conversations to get group ${message.groupId}`,
+            );
+            const conversationsStore = useConversationsStore.getState();
+            conversationsStore.forceUpdate();
+          }
+        } catch (error) {
+          console.error(`[MessageItem] Error refreshing group data:`, error);
+        }
+      }, 500);
+    }
+  }, [
+    isGroup,
+    isCurrentUser,
+    message.senderId,
+    message.sender?.userInfo,
+    message.id,
+    message.groupId,
+    chatStore,
+  ]);
 
   // Đánh dấu tin nhắn đã đọc khi hiển thị (nếu chưa đọc và không phải tin nhắn của người dùng hiện tại)
   useEffect(() => {

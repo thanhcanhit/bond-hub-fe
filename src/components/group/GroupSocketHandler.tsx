@@ -127,8 +127,51 @@ export default function GroupSocketHandler() {
 
   // Helper function to update conversation with latest group data
   const updateConversationWithLatestGroupData = useCallback(
-    async (groupId: string) => {
+    async (groupId: string, groupData?: any) => {
       try {
+        // Nếu đã có dữ liệu group từ socket, sử dụng nó thay vì gọi API
+        if (groupData) {
+          console.log(
+            `[GroupSocketHandler] Using provided group data for ${groupId}`,
+          );
+
+          // Find the conversation
+          const conversation = conversations.find(
+            (conv) => conv.type === "GROUP" && conv.group?.id === groupId,
+          );
+
+          if (conversation) {
+            // Update the conversation with the provided group data
+            updateConversation(groupId, {
+              group: {
+                ...conversation.group,
+                ...groupData,
+                lastUpdated: new Date(), // Thêm timestamp để theo dõi thời gian cập nhật
+              },
+            });
+            return;
+          }
+        }
+
+        // Kiểm tra thời gian gọi API cuối cùng
+        const now = Date.now();
+        const lastCallTime = window._lastGroupApiCallTime?.[groupId] || 0;
+        const timeSinceLastCall = now - lastCallTime;
+
+        // Nếu đã gọi API trong vòng 5 giây, bỏ qua
+        if (timeSinceLastCall < 5000) {
+          console.log(
+            `[GroupSocketHandler] Skipping API call for ${groupId}, last call was ${timeSinceLastCall}ms ago`,
+          );
+          return;
+        }
+
+        // Cập nhật thời gian gọi API cuối cùng
+        if (!window._lastGroupApiCallTime) {
+          window._lastGroupApiCallTime = {};
+        }
+        window._lastGroupApiCallTime[groupId] = now;
+
         // Import here to avoid circular dependencies
         const { getGroupById } = await import("@/actions/group.action");
         const result = await getGroupById(groupId);
@@ -140,6 +183,9 @@ export default function GroupSocketHandler() {
           );
 
           if (conversation) {
+            // Thêm timestamp để theo dõi thời gian cập nhật
+            result.group.lastUpdated = new Date();
+
             // Update the conversation with the latest group data
             updateConversation(groupId, {
               group: result.group,
@@ -192,7 +238,8 @@ export default function GroupSocketHandler() {
 
         if (groupConversation) {
           // Refresh this group's data in the conversations store
-          updateConversationWithLatestGroupData(data.groupId);
+          // Sử dụng dữ liệu từ socket nếu có
+          updateConversationWithLatestGroupData(data.groupId, data);
         }
       }
     };
@@ -217,7 +264,8 @@ export default function GroupSocketHandler() {
 
         if (groupConversation) {
           // Refresh this group's data in the conversations store
-          updateConversationWithLatestGroupData(data.groupId);
+          // Sử dụng dữ liệu từ socket nếu có
+          updateConversationWithLatestGroupData(data.groupId, data);
         }
       }
     };
@@ -232,10 +280,11 @@ export default function GroupSocketHandler() {
         useChatStore.getState().setSelectedGroup(null);
         useChatStore.getState().clearChatCache("GROUP", data.groupId);
         useConversationsStore.getState().removeConversation(data.groupId);
+      } else {
+        // Refresh the group data in the conversations store
+        // Sử dụng dữ liệu từ socket nếu có
+        updateConversationWithLatestGroupData(data.groupId, data);
       }
-
-      // Refresh the group data in the conversations store
-      updateConversationWithLatestGroupData(data.groupId);
     };
 
     const handleMemberRoleUpdated = (data: MemberRoleUpdatedEventData) => {
@@ -272,7 +321,8 @@ export default function GroupSocketHandler() {
 
         if (groupConversation) {
           // Refresh this group's data in the conversations store
-          updateConversationWithLatestGroupData(data.groupId);
+          // Sử dụng dữ liệu từ socket nếu có
+          updateConversationWithLatestGroupData(data.groupId, data);
         }
       }
     };
@@ -347,9 +397,6 @@ export default function GroupSocketHandler() {
 
       // Check if this is the currently selected group
       if (selectedGroup && selectedGroup.id === data.groupId) {
-        // Refresh the selected group data
-        refreshSelectedGroup();
-
         // Show toast notification
         if (data.updatedBy !== currentUser?.id) {
           toast.info("Avatar nhóm đã được cập nhật");
@@ -361,7 +408,28 @@ export default function GroupSocketHandler() {
           useChatStore.getState().setSelectedGroup({
             ...selectedGroup,
             avatarUrl: data.avatarUrl,
+            lastUpdated: new Date(), // Thêm timestamp để theo dõi thời gian cập nhật
           });
+
+          // Cập nhật cache
+          const chatStore = useChatStore.getState();
+          const cachedData = chatStore.groupCache
+            ? chatStore.groupCache[data.groupId]
+            : undefined;
+          if (cachedData) {
+            chatStore.groupCache[data.groupId] = {
+              ...cachedData,
+              group: {
+                ...cachedData.group,
+                avatarUrl: data.avatarUrl,
+                lastUpdated: new Date(),
+              },
+              lastFetched: new Date(),
+            };
+          }
+        } else {
+          // Nếu không có avatarUrl, refresh để lấy dữ liệu mới
+          refreshSelectedGroup();
         }
       } else {
         // Find the group in conversations
@@ -369,9 +437,18 @@ export default function GroupSocketHandler() {
           (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
         );
 
-        if (groupConversation) {
-          // Refresh this group's data in the conversations store
-          updateConversationWithLatestGroupData(data.groupId);
+        if (groupConversation && data.avatarUrl) {
+          // Cập nhật trực tiếp avatarUrl vào conversation
+          updateConversation(data.groupId, {
+            group: {
+              ...groupConversation.group,
+              avatarUrl: data.avatarUrl,
+              lastUpdated: new Date(),
+            },
+          });
+        } else if (groupConversation) {
+          // Nếu không có avatarUrl, refresh để lấy dữ liệu mới
+          updateConversationWithLatestGroupData(data.groupId, data);
         }
       }
     };

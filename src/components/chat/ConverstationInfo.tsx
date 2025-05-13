@@ -77,6 +77,29 @@ export default function ContactInfo({
 
   // Reset media gallery, viewer, and create group dialog when contact changes
   useEffect(() => {
+    if (!contact?.id) return;
+
+    // Thêm throttle để tránh xử lý quá thường xuyên
+    if (!window._lastContactInfoResetTime) {
+      window._lastContactInfoResetTime = {};
+    }
+
+    const contactId = contact.id;
+    const now = Date.now();
+    const lastResetTime = window._lastContactInfoResetTime[contactId] || 0;
+    const timeSinceLastReset = now - lastResetTime;
+
+    // Nếu đã xử lý trong vòng 1 giây, bỏ qua
+    if (timeSinceLastReset < 1000) {
+      console.log(
+        `[ContactInfo] Skipping reset, last reset was ${timeSinceLastReset}ms ago`,
+      );
+      return;
+    }
+
+    // Cập nhật thời gian xử lý cuối cùng
+    window._lastContactInfoResetTime[contactId] = now;
+
     setShowMediaGallery(false);
     setShowMediaViewer(false);
     setShowCreateGroupDialog(false);
@@ -88,6 +111,27 @@ export default function ContactInfo({
   // Lấy media từ tin nhắn
   useEffect(() => {
     if (contact?.id) {
+      // Thêm throttle để tránh xử lý quá thường xuyên
+      if (!window._lastContactInfoUpdateTime) {
+        window._lastContactInfoUpdateTime = {};
+      }
+
+      const contactId = contact.id;
+      const now = Date.now();
+      const lastUpdateTime = window._lastContactInfoUpdateTime[contactId] || 0;
+      const timeSinceLastUpdate = now - lastUpdateTime;
+
+      // Nếu đã xử lý trong vòng 2 giây, bỏ qua
+      if (timeSinceLastUpdate < 2000) {
+        console.log(
+          `[ContactInfo] Skipping media extraction, last update was ${timeSinceLastUpdate}ms ago`,
+        );
+        return;
+      }
+
+      // Cập nhật thời gian xử lý cuối cùng
+      window._lastContactInfoUpdateTime[contactId] = now;
+
       setIsLoadingMedia(true);
 
       // Lọc media từ tin nhắn hiện có

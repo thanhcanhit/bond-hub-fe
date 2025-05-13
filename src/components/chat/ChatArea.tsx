@@ -622,6 +622,10 @@ export default function ChatArea({
       return [];
     }
 
+    // Tạo một map để lưu trữ thông tin người dùng đã tìm thấy
+    // Điều này giúp tránh việc tìm kiếm lặp lại thông tin cho cùng một người dùng
+    const userInfoCache: Record<string, UserInfo | undefined> = {};
+
     return messages
       .map((message, index, array) => {
         // Ensure message is valid
@@ -643,67 +647,104 @@ export default function ChatArea({
         const showAvatar =
           !prevMessage || prevMessage.senderId !== message.senderId;
 
+        // Nếu là người dùng hiện tại, sử dụng thông tin của họ
+        if (isCurrentUser && currentUser?.userInfo) {
+          return {
+            message,
+            isCurrentUser,
+            showAvatar,
+            userInfo: currentUser.userInfo,
+          };
+        }
+
+        // Kiểm tra xem đã có thông tin người dùng trong cache chưa
+        if (userInfoCache[message.senderId]) {
+          return {
+            message,
+            isCurrentUser,
+            showAvatar,
+            userInfo: userInfoCache[message.senderId],
+          };
+        }
+
         // Ensure we have userInfo for the sender
         let userInfo = message.sender?.userInfo;
 
+        // Nếu đã có thông tin người gửi trong tin nhắn, sử dụng nó
+        if (userInfo && userInfo.fullName) {
+          userInfoCache[message.senderId] = userInfo;
+          return { message, isCurrentUser, showAvatar, userInfo };
+        }
+
         // For group messages, try to find sender info from the group members
         if (currentChatType === "GROUP" && !isCurrentUser) {
-          // Ưu tiên sử dụng thông tin từ message.sender nếu đã có
-          if (!userInfo || !userInfo.fullName) {
-            // Tìm thông tin nhóm từ conversationsStore
-            const groupConversation = conversations?.find(
-              (conv) =>
-                conv?.type === "GROUP" &&
-                (conv?.group?.id === message.groupId ||
-                  (selectedGroup && conv?.group?.id === selectedGroup.id)),
+          // Tìm thông tin nhóm từ conversationsStore
+          const groupConversation = conversations?.find(
+            (conv) =>
+              conv?.type === "GROUP" &&
+              (conv?.group?.id === message.groupId ||
+                (selectedGroup && conv?.group?.id === selectedGroup.id)),
+          );
+
+          // Tìm thông tin người gửi từ danh sách thành viên nhóm
+          type MemberInfo = {
+            id: string;
+            fullName: string;
+            profilePictureUrl?: string | null;
+            role: GroupRole;
+          };
+
+          let memberInfo: MemberInfo | null = null;
+
+          // 1. Tìm trong memberUsers (cách mới)
+          if (groupConversation?.group?.memberUsers) {
+            const memberUser = groupConversation.group.memberUsers.find(
+              (m) => m.id === message.senderId,
             );
 
-            // Tìm thông tin người gửi từ danh sách thành viên nhóm
-            // Ưu tiên tìm theo userId vì đó là ID thực của người dùng
-            // Define a type for memberInfo to fix TypeScript errors
-            type MemberInfo = {
+            if (memberUser) {
+              memberInfo = memberUser;
+            }
+          }
+
+          // 2. Nếu không tìm thấy, thử tìm trong members (cách cũ)
+          if (!memberInfo && groupConversation?.group) {
+            interface ApiGroupMember {
               id: string;
+              userId: string;
               fullName: string;
               profilePictureUrl?: string | null;
-              role: GroupRole;
-            };
-
-            let memberInfo: MemberInfo | null = null;
-
-            // 1. Tìm trong API response của conversation
-            if (groupConversation?.group) {
-              // API response có thể có trường members khác với Group interface
-              // Định nghĩa interface cho member từ API response
-              interface ApiGroupMember {
-                id: string;
-                userId: string;
-                fullName: string;
-                profilePictureUrl?: string | null;
-                role: string;
-              }
-
-              const apiMembers = (
-                groupConversation.group as { members?: ApiGroupMember[] }
-              ).members;
-              if (apiMembers && Array.isArray(apiMembers)) {
-                const member = apiMembers.find(
-                  (m: ApiGroupMember) => m.userId === message.senderId,
-                );
-
-                if (member) {
-                  memberInfo = {
-                    id: member.userId,
-                    fullName: member.fullName,
-                    profilePictureUrl: member.profilePictureUrl,
-                    role: member.role as GroupRole,
-                  };
-                }
-              }
+              role: string;
             }
 
-            // 2. Nếu không tìm thấy, thử tìm trong memberUsers
-            if (!memberInfo && groupConversation?.group?.memberUsers) {
-              const memberUser = groupConversation.group.memberUsers.find(
+            // Sử dụng type assertion để truy cập vào members
+            const apiMembers = (
+              groupConversation.group as unknown as {
+                members?: ApiGroupMember[];
+              }
+            ).members;
+
+            if (apiMembers && Array.isArray(apiMembers)) {
+              const member = apiMembers.find(
+                (m: ApiGroupMember) => m.userId === message.senderId,
+              );
+
+              if (member) {
+                memberInfo = {
+                  id: member.userId,
+                  fullName: member.fullName,
+                  profilePictureUrl: member.profilePictureUrl,
+                  role: member.role as GroupRole,
+                };
+              }
+            }
+          }
+
+          // 3. Nếu không tìm thấy, thử tìm trong selectedGroup
+          if (!memberInfo && selectedGroup) {
+            // Tìm trong memberUsers (cách mới)
+            if (selectedGroup.memberUsers) {
+              const memberUser = selectedGroup.memberUsers.find(
                 (m) => m.id === message.senderId,
               );
 
@@ -712,58 +753,47 @@ export default function ChatArea({
               }
             }
 
-            // 3. Nếu vẫn không tìm thấy, thử tìm trong selectedGroup
-            if (!memberInfo && selectedGroup) {
-              // Tìm trong members
-              if (selectedGroup.members) {
-                const member = selectedGroup.members.find(
-                  (m: GroupMember) => m.userId === message.senderId,
-                );
+            // Nếu không tìm thấy, thử tìm trong members (cách cũ)
+            if (!memberInfo && selectedGroup.members) {
+              const member = selectedGroup.members.find(
+                (m: GroupMember) => m.userId === message.senderId,
+              );
 
-                if (member) {
-                  // Lấy thông tin từ user object của member
-                  memberInfo = {
-                    id: member.userId,
-                    fullName: member.user?.userInfo?.fullName || "Unknown",
-                    profilePictureUrl: member.user?.userInfo?.profilePictureUrl,
-                    role: member.role as GroupRole,
-                  };
-                }
-              }
-
-              // Tìm trong memberUsers
-              if (!memberInfo && selectedGroup.memberUsers) {
-                const memberUser = selectedGroup.memberUsers.find(
-                  (m) => m.id === message.senderId,
-                );
-
-                if (memberUser) {
-                  memberInfo = memberUser;
-                }
+              if (member) {
+                // Lấy thông tin từ user object của member
+                memberInfo = {
+                  id: member.userId,
+                  fullName: member.user?.userInfo?.fullName || "Unknown",
+                  profilePictureUrl: member.user?.userInfo?.profilePictureUrl,
+                  role: member.role as GroupRole,
+                };
               }
             }
+          }
 
-            // Nếu tìm thấy thông tin thành viên, tạo userInfo
-            if (memberInfo) {
-              userInfo = {
+          // Nếu tìm thấy thông tin thành viên, tạo userInfo
+          if (memberInfo) {
+            userInfo = {
+              id: memberInfo.id,
+              fullName: memberInfo.fullName || "Unknown",
+              profilePictureUrl: memberInfo.profilePictureUrl,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              blockStrangers: false,
+              userAuth: { id: memberInfo.id } as User,
+            };
+
+            // Lưu vào cache để sử dụng lại
+            userInfoCache[message.senderId] = userInfo;
+
+            // Cập nhật thông tin người gửi vào message để đảm bảo tính nhất quán
+            if (message.sender) {
+              message.sender.userInfo = userInfo;
+            } else {
+              message.sender = {
                 id: memberInfo.id,
-                fullName: memberInfo.fullName || "Unknown",
-                profilePictureUrl: memberInfo.profilePictureUrl,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                blockStrangers: false,
-                userAuth: { id: memberInfo.id } as User,
-              };
-
-              // Cập nhật thông tin người gửi vào message để đảm bảo tính nhất quán
-              if (message.sender) {
-                message.sender.userInfo = userInfo;
-              } else {
-                message.sender = {
-                  id: memberInfo.id,
-                  userInfo: userInfo,
-                } as User;
-              }
+                userInfo: userInfo,
+              } as User;
             }
           }
         }
@@ -775,6 +805,7 @@ export default function ChatArea({
           selectedContact?.userInfo
         ) {
           userInfo = selectedContact.userInfo;
+          userInfoCache[message.senderId] = userInfo;
         }
 
         // Ensure userInfo is never null (only undefined is allowed by the type)
