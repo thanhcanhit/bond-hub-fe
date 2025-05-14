@@ -94,27 +94,73 @@ export default function FloatingIncomingCall({
         return;
       }
 
+      // Make the API call first to ensure the backend knows the call is accepted
       console.log(`Calling acceptCall with callId=${callId}`);
       const result = await acceptCall(callId, token);
       console.log("Call acceptance result:", result);
 
       if (result.success) {
-        // Determine the appropriate call URL
+        // Use the call URL from the API response if available, otherwise determine it locally
         const callUrl =
-          type === "VIDEO" ? `/video-call/${roomId}` : `/call/${roomId}`;
-
+          result.callUrl ||
+          (type === "VIDEO" ? `/video-call/${roomId}` : `/call/${roomId}`);
         console.log(`Redirecting to call page: ${callUrl}`);
-        router.push(callUrl);
 
+        // Then dispatch the accepted event to notify the initiator
+        // Include additional information to help synchronize both sides
+        console.log(
+          "Dispatching call:accepted custom event with roomId and callUrl",
+        );
+        window.dispatchEvent(
+          new CustomEvent("call:accepted", {
+            detail: {
+              callId,
+              roomId,
+              callUrl,
+              type: result.type || type,
+              acceptedAt: result.acceptedAt || new Date().toISOString(), // Use API timestamp if available
+            },
+          }),
+        );
+
+        // Close the UI before navigation to prevent state updates after unmount
         onClose();
+
+        // Use a short timeout to ensure UI state is updated before navigation
+        // Increased timeout to give the initiator time to process the event
+        setTimeout(() => {
+          // Use window.location for more reliable navigation in this context
+          console.log(`Navigating to ${callUrl} using window.location`);
+          window.location.href = callUrl;
+        }, 500);
       } else {
         console.error("Failed to accept call:", result.message);
         toast.error(result.message || "Không thể kết nối cuộc gọi");
+
+        // Dispatch call ended event to clean up on the initiator side
+        window.dispatchEvent(
+          new CustomEvent("call:ended", {
+            detail: { callId },
+          }),
+        );
+
         onClose();
       }
     } catch (error) {
       console.error("Error accepting call:", error);
       toast.error("Đã xảy ra lỗi khi kết nối cuộc gọi");
+
+      // Still try to dispatch event to ensure cleanup
+      try {
+        window.dispatchEvent(
+          new CustomEvent("call:ended", {
+            detail: { callId },
+          }),
+        );
+      } catch (e) {
+        console.error("Error dispatching call ended event:", e);
+      }
+
       onClose();
     }
   };
@@ -154,14 +200,51 @@ export default function FloatingIncomingCall({
         return;
       }
 
-      console.log(`Calling rejectCall with callId=${callId}`);
-      await rejectCall(callId, token);
-      console.log("Call rejected successfully");
+      // First dispatch events to ensure the initiator is notified immediately
+      // This helps ensure the UI updates even if the API call takes time
+      console.log("Dispatching call:rejected custom event");
+      window.dispatchEvent(
+        new CustomEvent("call:rejected", {
+          detail: { callId },
+        }),
+      );
 
+      // Also dispatch a call:ended event for backward compatibility
+      console.log("Dispatching call:ended custom event for compatibility");
+      window.dispatchEvent(
+        new CustomEvent("call:ended", {
+          detail: { callId },
+        }),
+      );
+
+      // Then make the API call
+      console.log(`Calling rejectCall with callId=${callId}`);
+      const result = await rejectCall(callId, token);
+      console.log("Call rejected result:", result);
+
+      // Close the UI immediately after dispatching events
+      // Don't wait for the API call to complete
       onClose();
     } catch (error) {
       console.error("Error rejecting call:", error);
       toast.error("Đã xảy ra lỗi khi từ chối cuộc gọi");
+
+      // Still try to dispatch events to ensure cleanup if they weren't dispatched earlier
+      try {
+        window.dispatchEvent(
+          new CustomEvent("call:rejected", {
+            detail: { callId },
+          }),
+        );
+        window.dispatchEvent(
+          new CustomEvent("call:ended", {
+            detail: { callId },
+          }),
+        );
+      } catch (e) {
+        console.error("Error dispatching rejection events:", e);
+      }
+
       onClose();
     }
   };

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getUserDataById } from "@/actions/user.action";
+import { endCall as endCallAction } from "@/actions/call.action";
 import { getUserInitials } from "@/utils/userUtils";
 import { Phone, Mic, MicOff } from "lucide-react";
 import { toast } from "sonner";
@@ -64,14 +65,116 @@ export default function CallPage({ params }: { params: { id: string } }) {
     };
   }, [callStatus]);
 
-  // Simulate connecting and then connected after 2 seconds
+  // Initialize WebRTC connection
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setCallStatus("connected");
-    }, 2000);
+    if (!userId) return;
 
-    return () => clearTimeout(timer);
-  }, []);
+    const initWebRTC = async () => {
+      try {
+        // Import dynamically to avoid SSR issues
+        const { initializeWebRTC } = await import("@/utils/webrtcUtils");
+
+        // Initialize WebRTC with audio only
+        console.log(`Initializing WebRTC for room ${userId} with audio only`);
+        await initializeWebRTC(userId, false);
+
+        // Update call status
+        setCallStatus("connected");
+        console.log("WebRTC connection established successfully");
+      } catch (error) {
+        console.error("Error initializing WebRTC:", error);
+        toast.error("Không thể kết nối cuộc gọi");
+
+        // Still set to connected to allow the user to see the UI
+        setCallStatus("connected");
+      }
+    };
+
+    // Check if this is a response to an incoming call
+    const checkIncomingCall = async () => {
+      try {
+        // Get active call information
+        const { getActiveCall } = await import("@/actions/call.action");
+        const { useAuthStore } = await import("@/stores/authStore");
+        const token = useAuthStore.getState().accessToken;
+
+        if (!token) {
+          console.warn("No token available to check active call");
+          initWebRTC();
+          return;
+        }
+
+        const activeCallResult = await getActiveCall(token);
+
+        if (activeCallResult.success && activeCallResult.activeCall) {
+          console.log("Active call found:", activeCallResult.activeCall);
+          // We have an active call, proceed with WebRTC initialization
+          initWebRTC();
+        } else {
+          console.log("No active call found, but continuing anyway");
+          initWebRTC();
+        }
+      } catch (error) {
+        console.error("Error checking active call:", error);
+        // Continue with WebRTC initialization anyway
+        initWebRTC();
+      }
+    };
+
+    checkIncomingCall();
+
+    // Set up event listeners for remote streams (audio only)
+    const handleRemoteStream = (event: any) => {
+      const { id, stream, kind } = event.detail;
+      console.log(`Remote stream added: ${id}, kind: ${kind}`);
+
+      // For audio calls, we just need to create an audio element
+      if (kind === "audio") {
+        // Check if we already have an audio element for this stream
+        let audioElement = document.getElementById(
+          `remote-audio-${id}`,
+        ) as HTMLAudioElement;
+
+        if (!audioElement) {
+          // Create a new audio element
+          audioElement = document.createElement("audio");
+          audioElement.id = `remote-audio-${id}`;
+          audioElement.autoplay = true;
+          audioElement.style.display = "none"; // Hide the audio element
+          document.body.appendChild(audioElement);
+        }
+
+        // Set the stream as the source
+        audioElement.srcObject = stream;
+      }
+    };
+
+    const handleRemoteStreamRemoved = (event: any) => {
+      const { id } = event.detail;
+      console.log(`Remote stream removed: ${id}`);
+
+      // Remove the audio element
+      const audioElement = document.getElementById(`remote-audio-${id}`);
+      if (audioElement) {
+        audioElement.remove();
+      }
+    };
+
+    window.addEventListener("call:remoteStreamAdded", handleRemoteStream);
+    window.addEventListener(
+      "call:remoteStreamRemoved",
+      handleRemoteStreamRemoved,
+    );
+
+    // Cleanup when component unmounts
+    return () => {
+      window.removeEventListener("call:remoteStreamAdded", handleRemoteStream);
+      window.removeEventListener(
+        "call:remoteStreamRemoved",
+        handleRemoteStreamRemoved,
+      );
+    };
+  }, [userId]);
 
   // Format call duration as mm:ss
   const formatDuration = (seconds: number) => {
@@ -80,19 +183,55 @@ export default function CallPage({ params }: { params: { id: string } }) {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const handleEndCall = () => {
-    setCallStatus("ended");
-    toast.info(
-      `Cuộc gọi với ${user?.userInfo?.fullName || "người dùng"} đã kết thúc`,
-    );
-    setTimeout(() => {
+  const handleEndCall = async () => {
+    try {
+      // Import dynamically to avoid SSR issues
+      const { endCall } = await import("@/utils/webrtcUtils");
+      const { useAuthStore } = await import("@/stores/authStore");
+
+      // Get token for API call
+      const token = useAuthStore.getState().accessToken;
+
+      // End the WebRTC call
+      endCall();
+
+      // Also notify the server that the call has ended
+      if (user?.id && token) {
+        await endCallAction(user.id, token);
+      }
+
+      setCallStatus("ended");
+      toast.info(
+        `Cuộc gọi với ${user?.userInfo?.fullName || "người dùng"} đã kết thúc`,
+      );
+      setTimeout(() => {
+        window.close();
+      }, 1000);
+    } catch (error) {
+      console.error("Error ending call:", error);
       window.close();
-    }, 1000);
+    }
   };
 
-  const toggleMute = () => {
-    setIsMuted(!isMuted);
-    toast.info(isMuted ? "Đã bật micrô" : "Đã tắt micrô");
+  const toggleMute = async () => {
+    try {
+      // Import dynamically to avoid SSR issues
+      const { toggleMute: toggleMuteUtil } = await import(
+        "@/utils/webrtcUtils"
+      );
+
+      // Toggle mute state
+      const newMuteState = await toggleMuteUtil();
+      setIsMuted(newMuteState);
+
+      toast.info(newMuteState ? "Đã tắt micrô" : "Đã bật micrô");
+    } catch (error) {
+      console.error("Error toggling mute:", error);
+
+      // Fallback to local state toggle
+      setIsMuted(!isMuted);
+      toast.info(!isMuted ? "Đã tắt micrô" : "Đã bật micrô");
+    }
   };
 
   // Handle window close event
