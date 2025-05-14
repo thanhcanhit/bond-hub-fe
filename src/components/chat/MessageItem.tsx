@@ -17,6 +17,8 @@ import ForwardMessageDialog from "./ForwardMessageDialog";
 import ReactionPicker from "./ReactionPicker";
 import ReactionSummary from "./ReactionSummary";
 import AudioVisualizer from "./AudioVisualizer";
+import { summarizeText } from "@/actions/ai.action";
+import { toast } from "sonner";
 // import { getUserDisplayName } from "@/utils/userUtils";
 
 import { Button } from "@/components/ui/button";
@@ -48,8 +50,16 @@ import {
   CornerUpRight,
   AtSign,
   Music,
+  FileDigit,
 } from "lucide-react";
 import { getUserInitials } from "@/utils/userUtils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface MediaItemProps {
   media: Media;
@@ -232,6 +242,80 @@ interface MessageItemProps {
   isGroupMessage?: boolean; // Thêm flag để xác định tin nhắn nhóm
 }
 
+// Summary dialog component
+interface SummaryDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  originalText: string;
+  summary: string;
+  isLoading: boolean;
+}
+
+function SummaryDialog({
+  isOpen,
+  onClose,
+  originalText,
+  summary,
+  isLoading,
+}: SummaryDialogProps) {
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center">
+            <FileDigit className="h-5 w-5 mr-2 text-blue-500" />
+            Tóm tắt nội dung
+          </DialogTitle>
+          <DialogDescription>
+            Nội dung được tóm tắt bằng trí tuệ nhân tạo
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 max-h-[60vh] overflow-auto">
+          {isLoading ? (
+            <div className="py-8 flex justify-center items-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            </div>
+          ) : (
+            <>
+              <div className="bg-gray-100 p-3 rounded-md text-sm">
+                <h4 className="font-medium text-gray-700 mb-1">
+                  Nội dung gốc:
+                </h4>
+                <p className="text-gray-600 whitespace-pre-wrap">
+                  {originalText}
+                </p>
+              </div>
+              <div className="bg-blue-50 p-3 rounded-md text-sm border border-blue-100">
+                <h4 className="font-medium text-blue-700 mb-1">
+                  Nội dung tóm tắt:
+                </h4>
+                <p className="text-blue-600 whitespace-pre-wrap">{summary}</p>
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flex justify-between mt-4">
+          <Button variant="outline" onClick={onClose}>
+            Đóng
+          </Button>
+          {!isLoading && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                navigator.clipboard.writeText(summary);
+                toast.success("Đã sao chép vào clipboard");
+              }}
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Sao chép tóm tắt
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function MessageItem({
   message,
   isCurrentUser,
@@ -249,6 +333,9 @@ export default function MessageItem({
     !!message.groupId;
   const [isHovered, setIsHovered] = useState(false);
   const [isForwardDialogOpen, setIsForwardDialogOpen] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
+  const [summaryText, setSummaryText] = useState("");
   const formattedTime = formatMessageTime(message.createdAt);
   const currentUser = useAuthStore((state) => state.user);
   // Get chat store for message operations
@@ -508,6 +595,39 @@ export default function MessageItem({
 
   const isDeletedForSelf = message.deletedBy.includes(currentUser?.id || "");
 
+  const handleSummarizeMessage = async () => {
+    if (!message.content.text || message.content.text.trim().length === 0) {
+      toast.error("Không thể tóm tắt", {
+        description: "Tin nhắn không có nội dung văn bản để tóm tắt",
+      });
+      return;
+    }
+
+    setIsSummarizing(true);
+    setSummaryDialogOpen(true);
+    setSummaryText("");
+
+    try {
+      const result = await summarizeText(message.content.text, 150);
+
+      if (result.success && result.summary) {
+        setSummaryText(result.summary);
+      } else {
+        toast.error("Không thể tóm tắt", {
+          description: result.error || "Đã xảy ra lỗi khi tóm tắt nội dung",
+        });
+        setSummaryDialogOpen(false);
+      }
+    } catch {
+      toast.error("Không thể tóm tắt", {
+        description: "Đã xảy ra lỗi khi kết nối đến dịch vụ AI",
+      });
+      setSummaryDialogOpen(false);
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+
   if (isDeletedForSelf) {
     return null;
   }
@@ -519,6 +639,15 @@ export default function MessageItem({
         isOpen={isForwardDialogOpen}
         onOpenChange={setIsForwardDialogOpen}
       />
+
+      <SummaryDialog
+        isOpen={summaryDialogOpen}
+        onClose={() => setSummaryDialogOpen(false)}
+        originalText={message.content.text || ""}
+        summary={summaryText}
+        isLoading={isSummarizing}
+      />
+
       <div
         className={`flex group ${isCurrentUser ? "justify-end" : "justify-start"} mb-2 relative`}
       >
@@ -610,6 +739,20 @@ export default function MessageItem({
                         <Copy className="h-4 w-4 mr-2" />
                         <span>Sao chép</span>
                       </DropdownMenuItem>
+                      {message.content.text &&
+                        message.content.text.trim().length > 0 && (
+                          <DropdownMenuItem
+                            onClick={handleSummarizeMessage}
+                            disabled={isSummarizing}
+                          >
+                            <FileDigit className="h-4 w-4 mr-2" />
+                            <span>
+                              {isSummarizing
+                                ? "Đang tóm tắt..."
+                                : "Tóm tắt nội dung"}
+                            </span>
+                          </DropdownMenuItem>
+                        )}
                       <Separator />
                     </>
                   )}
