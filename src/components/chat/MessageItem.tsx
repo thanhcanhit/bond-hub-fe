@@ -316,6 +316,9 @@ function SummaryDialog({
   );
 }
 
+// Define minimum character requirements
+const MIN_SUMMARIZE_LENGTH = 50;
+
 export default function MessageItem({
   message,
   isCurrentUser,
@@ -596,9 +599,18 @@ export default function MessageItem({
   const isDeletedForSelf = message.deletedBy.includes(currentUser?.id || "");
 
   const handleSummarizeMessage = async () => {
+    // Validate message has content
     if (!message.content.text || message.content.text.trim().length === 0) {
       toast.error("Không thể tóm tắt", {
         description: "Tin nhắn không có nội dung văn bản để tóm tắt",
+      });
+      return;
+    }
+
+    // Check message is long enough to summarize
+    if (message.content.text.trim().length < MIN_SUMMARIZE_LENGTH) {
+      toast.error("Không thể tóm tắt", {
+        description: `Tin nhắn cần có ít nhất ${MIN_SUMMARIZE_LENGTH} ký tự để tóm tắt`,
       });
       return;
     }
@@ -743,13 +755,26 @@ export default function MessageItem({
                         message.content.text.trim().length > 0 && (
                           <DropdownMenuItem
                             onClick={handleSummarizeMessage}
-                            disabled={isSummarizing}
+                            disabled={
+                              isSummarizing ||
+                              message.content.text.trim().length <
+                                MIN_SUMMARIZE_LENGTH
+                            }
+                            title={
+                              message.content.text.trim().length <
+                              MIN_SUMMARIZE_LENGTH
+                                ? `Tin nhắn cần có ít nhất ${MIN_SUMMARIZE_LENGTH} ký tự để tóm tắt`
+                                : "Tóm tắt nội dung bằng AI"
+                            }
                           >
                             <FileDigit className="h-4 w-4 mr-2" />
                             <span>
                               {isSummarizing
                                 ? "Đang tóm tắt..."
-                                : "Tóm tắt nội dung"}
+                                : message.content.text.trim().length <
+                                    MIN_SUMMARIZE_LENGTH
+                                  ? `Cần ít nhất ${MIN_SUMMARIZE_LENGTH} ký tự`
+                                  : "Tóm tắt nội dung"}
                             </span>
                           </DropdownMenuItem>
                         )}

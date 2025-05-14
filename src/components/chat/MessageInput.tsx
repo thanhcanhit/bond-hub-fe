@@ -458,6 +458,14 @@ export default function MessageInput({
     // Prevent enhancing if already processing or empty message
     if (!message.trim() || disabled || isEnhancing) return;
 
+    // Check for minimum character requirement (10 characters)
+    if (message.trim().length < 10) {
+      toast.error("Không thể tăng cường", {
+        description: "Tin nhắn cần có ít nhất 10 ký tự để tăng cường bằng AI",
+      });
+      return;
+    }
+
     setIsEnhancing(true);
     try {
       // Store original message in case enhancement fails
@@ -695,7 +703,11 @@ export default function MessageInput({
             size="icon"
             disabled={disabled || !message.trim() || isEnhancing}
             onClick={handleEnhanceMessage}
-            title="Tăng cường tin nhắn bằng AI"
+            title={
+              message.trim().length < 10
+                ? "Tin nhắn cần ít nhất 10 ký tự để tăng cường"
+                : "Tăng cường tin nhắn bằng AI"
+            }
             className={isEnhancing ? "text-blue-500" : ""}
           >
             {isEnhancing ? (
