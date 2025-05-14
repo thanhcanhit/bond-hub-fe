@@ -15,6 +15,8 @@ import {
   AlertCircle,
   Music,
   Mic,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
 import AudioRecorder from "./AudioRecorder";
 import { toast } from "sonner";
@@ -23,6 +25,7 @@ import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { useChatStore } from "@/stores/chatStore";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
+import { enhanceMessage } from "@/actions/ai.action";
 
 interface MessageInputProps {
   onSendMessage: (message: string, files?: File[]) => void;
@@ -46,6 +49,8 @@ export default function MessageInput({
   const [isDragging, setIsDragging] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [isEnhancedMessage, setIsEnhancedMessage] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
@@ -57,6 +62,8 @@ export default function MessageInput({
   const sendTypingIndicator = useChatStore(
     (state) => state.sendTypingIndicator,
   );
+  const messages = useChatStore((state) => state.messages);
+  const selectedContact = useChatStore((state) => state.selectedContact);
 
   // Danh sách các định dạng file an toàn được chấp nhận
   const safeDocumentTypes = [
@@ -255,12 +262,32 @@ export default function MessageInput({
         selectedFiles.length > 0 ? selectedFiles : undefined,
       );
       setMessage("");
+      setIsEnhancedMessage(false);
       handleRemoveAllFiles(); // Clear files after sending
     }
   };
 
+  // Handle textarea change
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessage(e.target.value);
+    // If user starts typing after AI enhancement, clear the enhanced status
+    if (isEnhancedMessage) {
+      setIsEnhancedMessage(false);
+    }
+    // Điều chỉnh chiều cao sau khi nội dung thay đổi
+    setTimeout(adjustTextareaHeight, 0);
+    // Send typing indicator
+    handleTyping();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
+      // Prevent immediate sending of enhanced messages if they haven't been modified
+      if (isEnhancing) {
+        e.preventDefault();
+        return;
+      }
+
       e.preventDefault();
       handleSendMessage();
     }
@@ -424,6 +451,65 @@ export default function MessageInput({
     }
 
     return "";
+  };
+
+  // Xử lý tăng cường tin nhắn bằng AI
+  const handleEnhanceMessage = async () => {
+    // Prevent enhancing if already processing or empty message
+    if (!message.trim() || disabled || isEnhancing) return;
+
+    setIsEnhancing(true);
+    try {
+      // Store original message in case enhancement fails
+      const originalMessage = message;
+
+      // Lấy 5 tin nhắn gần nhất để cung cấp ngữ cảnh cho AI
+      const recentMessages = messages
+        .slice(-5)
+        .filter((m) => !m.recalled) // Lọc bỏ các tin nhắn đã thu hồi
+        .map((m) => ({
+          content: m.content.text || "",
+          type: m.sender?.id === selectedContact?.id ? "contact" : "user",
+          senderId: m.sender?.id || "",
+          senderName: m.sender?.userInfo?.fullName || "",
+        }))
+        .filter((m) => m.content.trim() !== ""); // Lọc bỏ tin nhắn rỗng
+
+      // Temporary clear message to prevent double sending
+      setMessage("");
+
+      const result = await enhanceMessage(
+        originalMessage,
+        recentMessages.length > 0 ? recentMessages : undefined,
+      );
+
+      if (result.success && result.enhancedMessage) {
+        // Mark message as enhanced to prevent automatic duplication
+        setIsEnhancedMessage(true);
+        setMessage(result.enhancedMessage);
+        toast.success("Tin nhắn đã được tăng cường", {
+          description: "Nội dung đã được cải thiện bởi AI",
+        });
+        // Focus input after enhancement
+        setTimeout(() => {
+          textareaRef.current?.focus();
+        }, 0);
+      } else {
+        // Restore original message if enhancement failed
+        setMessage(originalMessage);
+        toast.error("Không thể tăng cường tin nhắn", {
+          description: result.error || "Đã xảy ra lỗi khi tăng cường tin nhắn",
+        });
+      }
+    } catch {
+      // Restore message in case of error
+      setMessage(message);
+      toast.error("Không thể tăng cường tin nhắn", {
+        description: "Đã xảy ra lỗi khi kết nối đến dịch vụ AI",
+      });
+    } finally {
+      setIsEnhancing(false);
+    }
   };
 
   return (
@@ -603,6 +689,21 @@ export default function MessageInput({
           >
             <Mic className="h-5 w-5" />
           </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={disabled || !message.trim() || isEnhancing}
+            onClick={handleEnhanceMessage}
+            title="Tăng cường tin nhắn bằng AI"
+            className={isEnhancing ? "text-blue-500" : ""}
+          >
+            {isEnhancing ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Sparkles className="h-5 w-5" />
+            )}
+          </Button>
         </div>
 
         {/* Audio recorder */}
@@ -665,13 +766,7 @@ export default function MessageInput({
                 }
                 className="w-full p-2 pl-3 pr-10 rounded-md focus:outline-none focus:ring-none resize-none overflow-auto"
                 value={message}
-                onChange={(e) => {
-                  setMessage(e.target.value);
-                  // Điều chỉnh chiều cao sau khi nội dung thay đổi
-                  setTimeout(adjustTextareaHeight, 0);
-                  // Send typing indicator
-                  handleTyping();
-                }}
+                onChange={handleTextareaChange}
                 onKeyDown={handleKeyDown}
                 disabled={disabled}
                 rows={1}
