@@ -227,17 +227,9 @@ export default function CallManager() {
     // Clear outgoing call state first to prevent UI issues
     setOutgoingCall(null);
 
-    // Also dispatch a custom event to ensure all components are notified
-    // This should happen before navigation
-    window.dispatchEvent(
-      new CustomEvent("call:accepted", {
-        detail: {
-          callId,
-          roomId,
-          callUrl,
-          acceptedAt: new Date().toISOString(), // Add timestamp for synchronization
-        },
-      }),
+    // Không phát sự kiện call:accepted vì backend không hỗ trợ
+    console.log(
+      "Call accepted, proceeding with navigation without dispatching event",
     );
 
     // Use window.location for more reliable navigation in this context

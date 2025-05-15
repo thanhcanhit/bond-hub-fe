@@ -25,11 +25,11 @@ export async function getAllUsers() {
 }
 
 // Lấy thông tin user theo ID
-export async function getUserDataById(id: string) {
+export async function getUserDataById(id: string, token?: string) {
   try {
     // Kiểm tra id hợp lệ
     if (!id || typeof id !== "string" || id.trim() === "") {
-      console.error("Invalid user ID provided:", id);
+      console.error("[USER_ACTION] Invalid user ID provided:", id);
       return {
         success: false,
         error: "Invalid user ID",
@@ -39,25 +39,70 @@ export async function getUserDataById(id: string) {
     // Check if user data is in cache and still valid
     const cachedUser = getCachedUserData(id);
     if (cachedUser) {
-      console.log(`Using cached user data for ID: ${id}`);
+      console.log(`[USER_ACTION] Using cached user data for ID: ${id}`);
       return { success: true, user: cachedUser };
     }
 
-    console.log(`Fetching user data for ID: ${id}`);
-    const response = await axiosInstance.get(`/users/${id}`);
-    const user: User = response.data;
+    console.log(`[USER_ACTION] Fetching user data for ID: ${id}`);
 
-    // Store user data in cache
-    cacheUserData(id, user);
+    // Add timeout to the request to prevent hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-    return { success: true, user };
+    try {
+      // Set up request config
+      const config: any = {
+        signal: controller.signal,
+      };
+
+      // If token is provided, use it in the request
+      if (token) {
+        config.headers = {
+          ...config.headers,
+          Authorization: `Bearer ${token}`,
+        };
+        console.log(`[USER_ACTION] Using provided token for user data request`);
+      }
+
+      const response = await axiosInstance.get(`/users/${id}`, config);
+
+      clearTimeout(timeoutId);
+
+      const user: User = response.data;
+      console.log(
+        `[USER_ACTION] Successfully fetched user data for ID: ${id}`,
+        user,
+      );
+
+      // Store user data in cache
+      cacheUserData(id, user);
+
+      return { success: true, user };
+    } catch (requestError) {
+      clearTimeout(timeoutId);
+      throw requestError; // Re-throw to be caught by the outer catch
+    }
   } catch (error) {
-    console.error(`Get user by ID failed for ID ${id}:`, error);
+    console.error(`[USER_ACTION] Get user by ID failed for ID ${id}:`, error);
+
+    // Check if this is a timeout or abort error
+    if (error.name === "AbortError" || error.name === "TimeoutError") {
+      console.warn(`[USER_ACTION] Request timed out for user ID: ${id}`);
+
+      // Try to get from cache even if expired as fallback
+      const expiredCachedUser = getCachedUserData(id, true);
+      if (expiredCachedUser) {
+        console.log(
+          `[USER_ACTION] Using expired cached user data for ID: ${id} after timeout`,
+        );
+        return { success: true, user: expiredCachedUser };
+      }
+    }
 
     // Tạo user giả nếu không tìm thấy (chỉ cho mục đích hiển thị UI)
     const axiosError = error as AxiosError;
     if (axiosError.response && axiosError.response.status === 404) {
-      console.log(`Creating placeholder user for ID ${id}`);
+      console.log(`[USER_ACTION] Creating placeholder user for ID ${id}`);
       const placeholderUser: User = {
         id: id,
         email: null,
@@ -67,7 +112,7 @@ export async function getUserDataById(id: string) {
         updatedAt: new Date(),
         userInfo: {
           id: id,
-          fullName: "Người dùng không tồn tại",
+          fullName: "Người dùng",
           profilePictureUrl: null,
           statusMessage: "",
           blockStrangers: false,
@@ -102,10 +147,52 @@ export async function getUserDataById(id: string) {
       return { success: true, user: placeholderUser };
     }
 
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+    // For any other error, create a generic placeholder user
+    console.log(
+      `[USER_ACTION] Creating generic placeholder user for ID ${id} due to error`,
+    );
+    const genericUser: User = {
+      id: id,
+      email: null,
+      phoneNumber: null,
+      passwordHash: "",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      userInfo: {
+        id: id,
+        fullName: "Người dùng",
+        profilePictureUrl: null,
+        statusMessage: "",
+        blockStrangers: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        userAuth: null as unknown as User,
+      },
+      refreshTokens: [],
+      qrCodes: [],
+      posts: [],
+      stories: [],
+      groupMembers: [],
+      cloudFiles: [],
+      pinnedItems: [],
+      sentFriends: [],
+      receivedFriends: [],
+      contacts: [],
+      contactOf: [],
+      settings: [],
+      postReactions: [],
+      hiddenPosts: [],
+      addedBy: [],
+      notifications: [],
+      sentMessages: [],
+      receivedMessages: [],
+      comments: [],
     };
+
+    // Cache the generic user too
+    cacheUserData(id, genericUser);
+
+    return { success: true, user: genericUser };
   }
 }
 

@@ -168,28 +168,8 @@ export default function CallingUI({
     // Store the timeout ID in the global registry
     (window as any).__callTimeoutIds[callId] = timeoutId;
 
-    const handleCallAccepted = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const data = customEvent.detail;
-
-      console.log(`Received call:accepted event with data:`, data);
-
-      if (data.callId === callId) {
-        console.log(
-          `Call accepted matches our callId=${callId}, calling onCallAccepted`,
-        );
-        // Clear the timeout since the call was accepted
-        if ((window as any).__callTimeoutIds[callId]) {
-          clearTimeout((window as any).__callTimeoutIds[callId]);
-          delete (window as any).__callTimeoutIds[callId];
-        }
-        onCallAccepted();
-      } else {
-        console.log(
-          `Call accepted event for different call (${data.callId}), ignoring`,
-        );
-      }
-    };
+    // Không sử dụng sự kiện call:accepted vì backend không hỗ trợ
+    // Thay vào đó, sẽ sử dụng sự kiện participantJoined từ backend
 
     const handleCallRejected = (event: Event) => {
       const customEvent = event as CustomEvent;
@@ -242,10 +222,6 @@ export default function CallingUI({
 
     console.log("Adding event listeners for call events");
     window.addEventListener(
-      "call:accepted",
-      handleCallAccepted as EventListener,
-    );
-    window.addEventListener(
       "call:rejected",
       handleCallRejected as EventListener,
     );
@@ -275,10 +251,6 @@ export default function CallingUI({
         console.error("Error dispatching call ended event during cleanup:", e);
       }
 
-      window.removeEventListener(
-        "call:accepted",
-        handleCallAccepted as EventListener,
-      );
       window.removeEventListener(
         "call:rejected",
         handleCallRejected as EventListener,

@@ -70,18 +70,14 @@ export default function CallButton({
         }),
       );
 
-      // Mở cửa sổ phòng đợi ngay lập tức
-      const waitingRoomUrl =
+      // Mở trang cuộc gọi trực tiếp với trạng thái "đang gọi"
+      const callUrl =
         targetType === "USER"
-          ? `/call/waiting/${currentCall.id}?roomId=${currentCall.roomId}&targetId=${target.id}&type=AUDIO`
-          : `/call/waiting/${currentCall.id}?roomId=${currentCall.roomId}&groupId=${target.id}&type=AUDIO`;
+          ? `/call/${currentCall.roomId}?callId=${currentCall.id}&targetId=${target.id}&type=AUDIO&direction=outgoing`
+          : `/call/${currentCall.roomId}?callId=${currentCall.id}&groupId=${target.id}&type=AUDIO&direction=outgoing`;
 
-      // Mở cửa sổ trình duyệt mới cho phòng đợi
-      const callWindow = window.open(
-        waitingRoomUrl,
-        "_blank",
-        "width=400,height=600",
-      );
+      // Mở cửa sổ trình duyệt mới cho cuộc gọi
+      const callWindow = window.open(callUrl, "_blank", "width=400,height=600");
       if (!callWindow) {
         toast.error(
           "Trình duyệt đã chặn cửa sổ pop-up. Vui lòng cho phép pop-up để sử dụng tính năng gọi điện.",
@@ -196,18 +192,14 @@ export default function CallButton({
         }),
       );
 
-      // Mở cửa sổ phòng đợi ngay lập tức
-      const waitingRoomUrl =
+      // Mở trang cuộc gọi trực tiếp với trạng thái "đang gọi"
+      const callUrl =
         targetType === "USER"
-          ? `/call/waiting/${currentCall.id}?roomId=${currentCall.roomId}&targetId=${target.id}&type=VIDEO`
-          : `/call/waiting/${currentCall.id}?roomId=${currentCall.roomId}&groupId=${target.id}&type=VIDEO`;
+          ? `/video-call/${currentCall.roomId}?callId=${currentCall.id}&targetId=${target.id}&type=VIDEO&direction=outgoing`
+          : `/video-call/${currentCall.roomId}?callId=${currentCall.id}&groupId=${target.id}&type=VIDEO&direction=outgoing`;
 
-      // Mở cửa sổ trình duyệt mới cho phòng đợi
-      const callWindow = window.open(
-        waitingRoomUrl,
-        "_blank",
-        "width=800,height=600",
-      );
+      // Mở cửa sổ trình duyệt mới cho cuộc gọi
+      const callWindow = window.open(callUrl, "_blank", "width=800,height=600");
       if (!callWindow) {
         toast.error(
           "Trình duyệt đã chặn cửa sổ pop-up. Vui lòng cho phép pop-up để sử dụng tính năng gọi video.",

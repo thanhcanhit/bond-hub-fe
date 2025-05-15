@@ -14,14 +14,7 @@ interface CallData {
 }
 
 let incomingCallHandler: ((callData: CallData) => void) | null = null;
-let callAcceptedHandler:
-  | ((data: {
-      callId: string;
-      roomId: string;
-      callUrl?: string;
-      acceptedAt?: string;
-    }) => void)
-  | null = null;
+// Không sử dụng callAcceptedHandler vì backend không hỗ trợ sự kiện call:accepted
 let callRejectedHandler: ((data: { callId: string }) => void) | null = null;
 let callEndedHandler: ((data: { callId: string }) => void) | null = null;
 
@@ -262,23 +255,23 @@ function registerSocketEventHandlers() {
   // Remove any existing listeners from main socket to prevent duplicates
   socket.off("call:incoming");
   socket.off("incomingCall"); // Also remove old event name for backward compatibility
-  socket.off("call:accepted");
-  socket.off("callAccepted"); // Also remove old event name for backward compatibility
+  // Không xử lý sự kiện call:accepted vì backend không hỗ trợ
   socket.off("call:rejected");
   socket.off("callRejected"); // Also remove old event name for backward compatibility
   socket.off("call:ended");
   socket.off("callEnded"); // Also remove old event name for backward compatibility
+  socket.off("call:participant:joined"); // Add this to handle participant joined events
 
   // Remove any existing listeners from call socket if it exists
   if (callSocket) {
     callSocket.off("call:incoming");
     callSocket.off("incomingCall"); // Also remove old event name for backward compatibility
-    callSocket.off("call:accepted");
-    callSocket.off("callAccepted"); // Also remove old event name for backward compatibility
+    // Không xử lý sự kiện call:accepted vì backend không hỗ trợ
     callSocket.off("call:rejected");
     callSocket.off("callRejected"); // Also remove old event name for backward compatibility
     callSocket.off("call:ended");
     callSocket.off("callEnded"); // Also remove old event name for backward compatibility
+    callSocket.off("call:participant:joined"); // Add this to handle participant joined events
   }
 
   console.log("Removed existing call socket event listeners from both sockets");
@@ -305,52 +298,8 @@ function registerSocketEventHandlers() {
     callSocket.on("incomingCall", handleIncomingCall); // For backward compatibility
   }
 
-  // Handle call accepted - listen for both event names for backward compatibility
-  const handleCallAccepted = (data: {
-    callId: string;
-    roomId: string;
-    callUrl?: string;
-    acceptedAt?: string;
-  }) => {
-    console.log("Call accepted event received:", data);
-
-    // Add timestamp if not provided
-    if (!data.acceptedAt) {
-      data.acceptedAt = new Date().toISOString();
-    }
-
-    // Determine call URL if not provided
-    if (!data.callUrl && data.roomId) {
-      // Try to determine the call type from the event data
-      // Default to audio call if we can't determine
-      const callType = data.callType || "AUDIO";
-      data.callUrl =
-        callType === "VIDEO"
-          ? `/video-call/${data.roomId}`
-          : `/call/${data.roomId}`;
-      console.log(`Generated callUrl: ${data.callUrl}`);
-    }
-
-    // Dispatch custom event with enhanced data
-    console.log("Dispatching call:accepted custom event with enhanced data");
-    window.dispatchEvent(new CustomEvent("call:accepted", { detail: data }));
-
-    if (callAcceptedHandler) {
-      console.log("Calling registered callAcceptedHandler");
-      callAcceptedHandler(data);
-    } else {
-      console.warn("No callAcceptedHandler registered");
-    }
-  };
-
-  // Listen for both event names on both sockets
-  socket.on("call:accepted", handleCallAccepted);
-  socket.on("callAccepted", handleCallAccepted); // For backward compatibility
-
-  if (callSocket) {
-    callSocket.on("call:accepted", handleCallAccepted);
-    callSocket.on("callAccepted", handleCallAccepted); // For backward compatibility
-  }
+  // Không xử lý sự kiện call:accepted vì backend không hỗ trợ
+  // Thay vào đó, sẽ sử dụng sự kiện call:participant:joined từ backend
 
   // Handle call rejected - listen for both event names for backward compatibility
   const handleCallRejected = (data: { callId: string }) => {
@@ -402,6 +351,36 @@ function registerSocketEventHandlers() {
     callSocket.on("call:ended", handleCallEnded);
     callSocket.on("callEnded", handleCallEnded); // For backward compatibility
   }
+
+  // Handle participant joined event - this is sent when a user joins a call
+  const handleParticipantJoined = (data: {
+    callId: string;
+    userId: string;
+    roomId: string;
+  }) => {
+    console.log("Call participant joined event received:", data);
+
+    // Dispatch the participant joined event directly
+    console.log("Dispatching call:participant:joined custom event");
+    window.dispatchEvent(
+      new CustomEvent("call:participant:joined", {
+        detail: data,
+      }),
+    );
+
+    // No need to convert to call:accepted anymore
+    // Just log that we received and dispatched the event
+    console.log(
+      `User ${data.userId} joined call ${data.callId} in room ${data.roomId}`,
+    );
+  };
+
+  // Listen for participant joined event on both sockets
+  socket.on("call:participant:joined", handleParticipantJoined);
+
+  if (callSocket) {
+    callSocket.on("call:participant:joined", handleParticipantJoined);
+  }
 }
 
 /**
@@ -421,27 +400,8 @@ export function unregisterIncomingCallHandler() {
   incomingCallHandler = null;
 }
 
-/**
- * Register a handler for call accepted events
- * @param handler Function to handle call accepted data
- */
-export function registerCallAcceptedHandler(
-  handler: (data: {
-    callId: string;
-    roomId: string;
-    callUrl?: string;
-    acceptedAt?: string;
-  }) => void,
-) {
-  callAcceptedHandler = handler;
-}
-
-/**
- * Unregister the call accepted handler
- */
-export function unregisterCallAcceptedHandler() {
-  callAcceptedHandler = null;
-}
+// Không sử dụng registerCallAcceptedHandler và unregisterCallAcceptedHandler
+// vì backend không hỗ trợ sự kiện call:accepted
 
 /**
  * Register a handler for call rejected events
@@ -490,6 +450,7 @@ export function cleanupCallSocketHandlers() {
   socket.off("callRejected");
   socket.off("call:ended");
   socket.off("callEnded");
+  socket.off("call:participant:joined");
 
   // Remove both old and new event names from call socket if it exists
   if (callSocket) {
@@ -501,6 +462,7 @@ export function cleanupCallSocketHandlers() {
     callSocket.off("callRejected");
     callSocket.off("call:ended");
     callSocket.off("callEnded");
+    callSocket.off("call:participant:joined");
   }
 
   // Remove custom event listener

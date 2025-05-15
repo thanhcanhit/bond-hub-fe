@@ -17,10 +17,31 @@ export function isCacheValid(userId: string): boolean {
 }
 
 // Function to get user data from cache
-export function getCachedUserData(userId: string): User | null {
-  if (isCacheValid(userId)) {
+export function getCachedUserData(
+  userId: string,
+  allowExpired: boolean = false,
+): User | null {
+  // If we allow expired data, just check if it exists
+  if (allowExpired && userDataCache[userId]) {
+    console.log(`[USER_CACHE] Returning expired cache data for user ${userId}`);
     return userDataCache[userId].user;
   }
+
+  // Otherwise check if it's valid
+  if (isCacheValid(userId)) {
+    console.log(`[USER_CACHE] Returning valid cache data for user ${userId}`);
+    return userDataCache[userId].user;
+  }
+
+  // If we get here, either the data doesn't exist or it's expired and we don't allow expired
+  if (userDataCache[userId]) {
+    console.log(
+      `[USER_CACHE] Cache data for user ${userId} exists but is expired`,
+    );
+  } else {
+    console.log(`[USER_CACHE] No cache data exists for user ${userId}`);
+  }
+
   return null;
 }
 

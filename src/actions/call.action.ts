@@ -97,10 +97,18 @@ export async function initiateCall(
  * @param token Authentication token (passed from client)
  * @returns Success status
  */
-export async function acceptCall(callId: string, token: string) {
+export async function acceptCall(
+  callId: string,
+  token: string,
+  initiatorId?: string,
+  roomId?: string,
+) {
   try {
     console.log(`Accepting call ${callId}`);
     console.log(`Token received: ${token ? "Token exists" : "No token"}`);
+    console.log(
+      `Additional params - initiatorId: ${initiatorId || "not provided"}, roomId: ${roomId || "not provided"}`,
+    );
 
     if (!token) {
       return { success: false, message: "Unauthorized" };
@@ -112,13 +120,39 @@ export async function acceptCall(callId: string, token: string) {
     // Đảm bảo API URL không bị undefined
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
+    // Extract user ID from token
+    const userId = extractUserIdFromToken(cleanToken);
+    console.log(`Extracted userId from token for call acceptance: ${userId}`);
+
+    // Prepare request body with all available information
+    const requestBody: any = {
+      callId,
+      userId, // Include the user ID in the request
+    };
+
+    // Add optional parameters if provided
+    if (initiatorId) {
+      requestBody.initiatorId = initiatorId;
+      console.log(`Including initiatorId in request: ${initiatorId}`);
+    }
+
+    if (roomId) {
+      requestBody.roomId = roomId;
+      console.log(`Including roomId in request: ${roomId}`);
+    }
+
+    // Log request details for debugging
+    console.log(`Making request to ${apiUrl}/api/v1/calls/join`);
+    console.log(`Authorization header: Bearer ${cleanToken}`);
+    console.log(`Request body:`, requestBody);
+
     const response = await fetch(`${apiUrl}/api/v1/calls/join`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${cleanToken}`,
       },
-      body: JSON.stringify({ callId }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -139,6 +173,44 @@ export async function acceptCall(callId: string, token: string) {
       callType === "VIDEO"
         ? `/video-call/${data.roomId}`
         : `/call/${data.roomId}`;
+
+    // Dispatch a global event to notify that the call has been accepted
+    // This helps ensure that all open windows (including the caller's window) are notified
+    if (typeof window !== "undefined") {
+      try {
+        console.log(
+          `Dispatching call:accepted event for call ID: ${callId}, roomId: ${data.roomId}`,
+        );
+        window.dispatchEvent(
+          new CustomEvent("call:accepted", {
+            detail: {
+              callId,
+              roomId: data.roomId,
+              initiatorId: initiatorId || undefined,
+              receiverId: userId,
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        );
+
+        // Also dispatch a participant joined event to ensure the UI updates
+        console.log(
+          `Dispatching call:participant:joined event for roomId: ${data.roomId}`,
+        );
+        window.dispatchEvent(
+          new CustomEvent("call:participant:joined", {
+            detail: {
+              roomId: data.roomId,
+              userId: userId,
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        );
+      } catch (eventError) {
+        console.error("Error dispatching call acceptance events:", eventError);
+        // Continue anyway, as this is just an additional notification mechanism
+      }
+    }
 
     return {
       success: true,
@@ -218,11 +290,29 @@ export async function endCall(callId: string, token: string) {
       return { success: false, message: "Unauthorized" };
     }
 
+    if (!callId) {
+      console.error("No call ID provided to endCall function");
+      return { success: false, message: "Missing call ID" };
+    }
+
     // Đảm bảo token không có khoảng trắng ở đầu hoặc cuối
     const cleanToken = token.trim();
 
     // Đảm bảo API URL không bị undefined
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+    console.log(`Using API URL: ${apiUrl}`);
+
+    // Log thông tin request để debug
+    console.log(`Making request to ${apiUrl}/api/v1/calls/end`);
+    console.log(`Authorization header: Bearer ${cleanToken}`);
+    console.log(`Request body: { callId: ${callId} }`);
+
+    // Extract user ID from token
+    const userId = extractUserIdFromToken(cleanToken);
+    console.log(`Extracted userId from token for ending call: ${userId}`);
+
+    // Log request details for debugging
+    console.log(`Request body: { callId: ${callId}, userId: ${userId} }`);
 
     const response = await fetch(`${apiUrl}/api/v1/calls/end`, {
       method: "POST",
@@ -230,15 +320,37 @@ export async function endCall(callId: string, token: string) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${cleanToken}`,
       },
-      body: JSON.stringify({ callId }),
+      body: JSON.stringify({
+        callId,
+        userId, // Include the user ID in the request
+      }),
     });
 
     if (!response.ok) {
       const errorData = await response.json();
+      console.error(
+        `Error ending call: ${errorData.message || "Unknown error"}`,
+      );
       return {
         success: false,
         message: errorData.message || "Failed to end call",
       };
+    }
+
+    console.log("Call ended successfully");
+
+    // Try to dispatch a call:ended event to ensure all components are notified
+    try {
+      if (typeof window !== "undefined") {
+        console.log(`Dispatching call:ended event for call ID: ${callId}`);
+        window.dispatchEvent(
+          new CustomEvent("call:ended", {
+            detail: { callId },
+          }),
+        );
+      }
+    } catch (eventError) {
+      console.error("Error dispatching call:ended event:", eventError);
     }
 
     return { success: true };
