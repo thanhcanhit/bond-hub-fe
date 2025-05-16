@@ -1,0 +1,383 @@
+import { state } from "./state";
+import { setCurrentRoomId } from "./state";
+
+/**
+ * Clean up WebRTC resources
+ * @returns Promise that resolves when cleanup is complete
+ */
+export async function cleanup(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    try {
+      console.log("[WEBRTC] Starting cleanup process");
+
+      // Create a flag to track if we're already cleaning up
+      let isCleaningUp = false;
+
+      // First, safely stop any await queues before doing anything else
+      // This helps prevent AwaitQueueStoppedError
+      const safelyStopAwaitQueues = () => {
+        try {
+          // Set a flag in sessionStorage to indicate we're cleaning up
+          try {
+            sessionStorage.setItem("webrtc_cleaning_up", "true");
+
+            // Clear the flag after a delay
+            setTimeout(() => {
+              try {
+                sessionStorage.removeItem("webrtc_cleaning_up");
+                console.log(
+                  "[WEBRTC] Cleared cleanup flag from sessionStorage",
+                );
+              } catch (storageError) {
+                console.warn(
+                  "[WEBRTC] Error clearing cleanup flag:",
+                  storageError,
+                );
+              }
+            }, 5000); // Clear after 5 seconds
+          } catch (storageError) {
+            console.warn("[WEBRTC] Error setting cleanup flag:", storageError);
+          }
+
+          // Helper function to safely stop a queue with better error handling
+          const safelyStopQueue = (
+            transport: any,
+            transportType: string,
+          ): Promise<void> => {
+            return new Promise((resolve) => {
+              if (!transport || !transport._awaitQueue) {
+                console.log(
+                  `[WEBRTC] No ${transportType} transport or queue to stop`,
+                );
+                resolve();
+                return;
+              }
+
+              try {
+                console.log(
+                  `[WEBRTC] Safely stopping ${transportType} transport await queue`,
+                );
+
+                // Check if the queue is already stopped to avoid errors
+                if (
+                  typeof transport._awaitQueue.isStopped === "function" &&
+                  transport._awaitQueue.isStopped()
+                ) {
+                  console.log(
+                    `[WEBRTC] ${transportType} transport await queue is already stopped`,
+                  );
+                  resolve();
+                  return;
+                }
+
+                // First, try to drain the queue by processing all pending tasks
+                if (
+                  transport._awaitQueue.pendingTasks !== undefined &&
+                  transport._awaitQueue.pendingTasks > 0
+                ) {
+                  console.log(
+                    `[WEBRTC] ${transportType} transport has ${transport._awaitQueue.pendingTasks} pending tasks, attempting to drain`,
+                  );
+
+                  // Wait longer to allow pending tasks to complete (increased from 100ms to 500ms)
+                  setTimeout(() => {
+                    try {
+                      // Check again if there are still pending tasks
+                      if (
+                        transport._awaitQueue.pendingTasks !== undefined &&
+                        transport._awaitQueue.pendingTasks > 0
+                      ) {
+                        console.log(
+                          `[WEBRTC] ${transportType} transport still has ${transport._awaitQueue.pendingTasks} pending tasks after waiting, stopping anyway`,
+                        );
+                      }
+
+                      // Now stop the queue
+                      transport._awaitQueue.stop();
+                      console.log(
+                        `[WEBRTC] ${transportType} transport await queue stopped after drain attempt`,
+                      );
+                      resolve();
+                    } catch (stopError: any) {
+                      // Check if this is an AwaitQueueStoppedError
+                      if (
+                        stopError.name === "AwaitQueueStoppedError" ||
+                        (stopError.message &&
+                          stopError.message.includes("queue stopped"))
+                      ) {
+                        console.log(
+                          `[WEBRTC] ${transportType} queue was already stopped, continuing cleanup`,
+                        );
+                      } else {
+                        console.error(
+                          `[WEBRTC] Error stopping ${transportType} transport queue after drain:`,
+                          stopError,
+                        );
+                      }
+                      resolve(); // Resolve anyway to continue cleanup
+                    }
+                  }, 500); // Increased timeout to 500ms
+                } else {
+                  // No pending tasks, stop immediately
+                  try {
+                    transport._awaitQueue.stop();
+                    console.log(
+                      `[WEBRTC] ${transportType} transport await queue stopped successfully`,
+                    );
+                  } catch (stopError: any) {
+                    // Check if this is an AwaitQueueStoppedError
+                    if (
+                      stopError.name === "AwaitQueueStoppedError" ||
+                      (stopError.message &&
+                        stopError.message.includes("queue stopped"))
+                    ) {
+                      console.log(
+                        `[WEBRTC] ${transportType} queue was already stopped, continuing cleanup`,
+                      );
+                    } else {
+                      console.error(
+                        `[WEBRTC] Error stopping ${transportType} transport queue:`,
+                        stopError,
+                      );
+                    }
+                  }
+                  resolve();
+                }
+              } catch (queueError: any) {
+                console.error(
+                  `[WEBRTC] Error handling ${transportType} transport await queue:`,
+                  queueError,
+                );
+
+                // If we get an AwaitQueueStoppedError, it means the queue is already stopped
+                if (
+                  queueError.name === "AwaitQueueStoppedError" ||
+                  (queueError.message &&
+                    queueError.message.includes("queue stopped"))
+                ) {
+                  console.log(
+                    `[WEBRTC] ${transportType} queue already stopped (AwaitQueueStoppedError), continuing cleanup`,
+                  );
+                }
+
+                resolve(); // Resolve anyway to continue cleanup
+              }
+            });
+          };
+
+          // Use Promise.all to stop both queues in parallel
+          Promise.all([
+            safelyStopQueue(state.sendTransport as any, "send"),
+            safelyStopQueue(state.recvTransport as any, "receive"),
+          ]).catch((error) => {
+            console.error("[WEBRTC] Error stopping queues:", error);
+          });
+        } catch (error) {
+          console.error("[WEBRTC] Error in safelyStopAwaitQueues:", error);
+        }
+      };
+
+      // Stop await queues first to prevent AwaitQueueStoppedError
+      safelyStopAwaitQueues();
+
+      // Add a longer delay to ensure queues are fully stopped before proceeding
+      // Increased from 300ms to 800ms to give more time for queue operations to complete
+      setTimeout(() => {
+        if (isCleaningUp) {
+          console.log(
+            "[WEBRTC] Cleanup already in progress, skipping duplicate cleanup",
+          );
+          resolve();
+          return;
+        }
+
+        isCleaningUp = true;
+
+        // First, disconnect socket to prevent new events during cleanup
+        if (state.socket) {
+          try {
+            console.log("[WEBRTC] Disconnecting socket");
+
+            // Store the socket ID before disconnecting for debugging
+            const socketId = state.socket.id;
+            console.log(
+              `[WEBRTC] Disconnecting socket with ID: ${socketId || "unknown"}`,
+            );
+
+            // Use emit instead of disconnect to ensure server is notified
+            state.socket.emit("clientDisconnecting", {
+              reason: "cleanup",
+              timestamp: new Date().toISOString(),
+            });
+
+            // Small delay to allow the message to be sent
+            setTimeout(() => {
+              try {
+                if (state.socket) {
+                  // Set a flag in sessionStorage to indicate we're intentionally disconnecting
+                  try {
+                    sessionStorage.setItem("intentional_disconnect", "true");
+                    // Clear the flag after a delay
+                    setTimeout(() => {
+                      sessionStorage.removeItem("intentional_disconnect");
+                    }, 5000);
+                  } catch (storageError) {
+                    console.warn(
+                      "[WEBRTC] Error setting intentional disconnect flag:",
+                      storageError,
+                    );
+                  }
+
+                  // Now disconnect the socket
+                  state.socket.disconnect();
+                  console.log(
+                    `[WEBRTC] Socket with ID ${socketId || "unknown"} disconnected`,
+                  );
+                }
+              } catch (disconnectError) {
+                console.error(
+                  "[WEBRTC] Error during socket disconnect:",
+                  disconnectError,
+                );
+              } finally {
+                state.socket = null;
+              }
+            }, 200); // Increased from 100ms to 200ms to ensure message is sent
+          } catch (socketError) {
+            console.error(
+              "[WEBRTC] Error with socket during cleanup:",
+              socketError,
+            );
+            state.socket = null;
+          }
+        }
+
+        // Stop local stream tracks first to prevent media issues
+        if (state.localStream) {
+          console.log("[WEBRTC] Stopping local stream tracks");
+          state.localStream.getTracks().forEach((track) => {
+            try {
+              track.stop();
+              console.log(`[WEBRTC] Stopped ${track.kind} track: ${track.id}`);
+            } catch (trackError) {
+              console.error(
+                `[WEBRTC] Error stopping ${track.kind} track:`,
+                trackError,
+              );
+            }
+          });
+          state.localStream = null;
+        }
+
+        // Close all producers with error handling for each one
+        console.log(`[WEBRTC] Closing ${state.producers.size} producers`);
+        state.producers.forEach((producer, kind) => {
+          try {
+            console.log(`[WEBRTC] Closing ${kind} producer: ${producer.id}`);
+            producer.close();
+          } catch (producerError) {
+            console.error(
+              `[WEBRTC] Error closing ${kind} producer:`,
+              producerError,
+            );
+          }
+        });
+        state.producers.clear();
+
+        // Close all consumers with error handling for each one
+        console.log(`[WEBRTC] Closing ${state.consumers.size} consumers`);
+        state.consumers.forEach((consumer, id) => {
+          try {
+            console.log(`[WEBRTC] Closing consumer: ${id}`);
+            consumer.close();
+          } catch (consumerError) {
+            console.error(
+              `[WEBRTC] Error closing consumer ${id}:`,
+              consumerError,
+            );
+          }
+        });
+        state.consumers.clear();
+
+        // Close transports with proper error handling
+        // Close send transport
+        if (state.sendTransport) {
+          console.log("[WEBRTC] Closing send transport");
+          try {
+            // Check if the transport is already closed to avoid errors
+            const transport = state.sendTransport as any;
+            if (transport.closed) {
+              console.log("[WEBRTC] Send transport is already closed");
+            } else {
+              // Now close the transport (queues already stopped above)
+              state.sendTransport.close();
+              console.log("[WEBRTC] Send transport closed successfully");
+            }
+          } catch (sendError) {
+            console.error("[WEBRTC] Error closing send transport:", sendError);
+          } finally {
+            state.sendTransport = null;
+          }
+        }
+
+        // Close receive transport
+        if (state.recvTransport) {
+          console.log("[WEBRTC] Closing receive transport");
+          try {
+            // Check if the transport is already closed to avoid errors
+            const transport = state.recvTransport as any;
+            if (transport.closed) {
+              console.log("[WEBRTC] Receive transport is already closed");
+            } else {
+              // Now close the transport (queues already stopped above)
+              state.recvTransport.close();
+              console.log("[WEBRTC] Receive transport closed successfully");
+            }
+          } catch (recvError) {
+            console.error(
+              "[WEBRTC] Error closing receive transport:",
+              recvError,
+            );
+          } finally {
+            state.recvTransport = null;
+          }
+        }
+
+        // Clear remote streams
+        console.log(
+          `[WEBRTC] Clearing ${state.remoteStreams.size} remote streams`,
+        );
+        state.remoteStreams.clear();
+
+        // Clear device
+        console.log("[WEBRTC] Clearing device");
+        state.device = null;
+
+        // Clear current room ID
+        setCurrentRoomId(null);
+
+        console.log("[WEBRTC] Cleanup completed successfully");
+        isCleaningUp = false;
+        resolve();
+      }, 800); // Increased delay to ensure queues are fully stopped
+    } catch (error) {
+      console.error("[WEBRTC] Unhandled error during cleanup:", error);
+
+      // Reset all state to ensure clean slate
+      state.producers.clear();
+      state.consumers.clear();
+      state.remoteStreams.clear();
+      state.sendTransport = null;
+      state.recvTransport = null;
+      state.localStream = null;
+      state.socket = null;
+      state.device = null;
+
+      // Clear current room ID
+      setCurrentRoomId(null);
+
+      console.log("[WEBRTC] State reset after cleanup error");
+      resolve(); // Resolve anyway to prevent hanging
+    }
+  });
+}
