@@ -7,6 +7,14 @@ export const state: WebRTCState = createInitialState();
 let currentRoomId: string | null = null;
 
 /**
+ * Get the local media stream
+ * @returns The local media stream or null if not available
+ */
+export function getLocalStream(): MediaStream | null {
+  return state.localStream;
+}
+
+/**
  * Get the current room ID
  * @returns Current room ID or null if not in a room
  */

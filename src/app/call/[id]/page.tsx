@@ -157,12 +157,17 @@ function CallPageContent({ userId }: { userId: string }) {
     // Set up handlers for remote streams
     const cleanupRemoteStreamHandlers = setupRemoteStreamHandlers();
 
-    // Notify that the call page has loaded successfully
+    // Notify that the call page has loaded successfully with more detailed information
     try {
       window.dispatchEvent(
         new CustomEvent("call:pageLoaded", {
           detail: {
             roomId: userId,
+            callId: callId,
+            targetId: targetId,
+            isOutgoing: isOutgoing,
+            isIncoming: isIncoming,
+            callType: callType,
             timestamp: new Date().toISOString(),
           },
         }),

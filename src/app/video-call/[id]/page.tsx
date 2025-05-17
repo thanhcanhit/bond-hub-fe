@@ -68,18 +68,69 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
     };
   }, [callStatus]);
 
-  // Initialize WebRTC connection
+  // Initialize WebRTC connection with improved error handling
   useEffect(() => {
     if (!userId) return;
 
+    // Track initialization state to prevent duplicate attempts
+    let isInitializing = false;
+    let isInitialized = false;
+
     const initWebRTC = async () => {
+      // Prevent multiple simultaneous initialization attempts
+      if (isInitializing) {
+        console.log(
+          "[CALL_PAGE] WebRTC initialization already in progress, skipping",
+        );
+        return;
+      }
+
+      if (isInitialized) {
+        console.log("[CALL_PAGE] WebRTC already initialized, skipping");
+        return;
+      }
+
+      isInitializing = true;
+
       try {
         // Import dynamically to avoid SSR issues
-        const { initializeWebRTC } = await import("@/utils/webrtcUtils");
+        const { useWebRTC } = await import("@/hooks/useWebRTC");
 
-        // Initialize WebRTC with video
-        console.log(`Initializing WebRTC for room ${userId} with video`);
-        const stream = await initializeWebRTC(userId, true);
+        // Create a temporary instance of the hook's returned functions
+        const { initWebRTC: startWebRTC } = useWebRTC({
+          roomId: userId,
+          isOutgoing: true,
+        });
+
+        // Dispatch event to notify that initialization is starting
+        window.dispatchEvent(
+          new CustomEvent("call:pageLoaded", {
+            detail: {
+              roomId: userId,
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        );
+        console.log("[CALL_PAGE] Dispatched call:pageLoaded event");
+
+        // Initialize WebRTC with a single attempt
+        console.log(`[CALL_PAGE] Initializing WebRTC for room ${userId}`);
+
+        // Use the useWebRTC hook's initialization function
+        await startWebRTC(true);
+
+        // If we get here, initialization was successful
+        console.log("[CALL_PAGE] WebRTC connection established successfully");
+
+        // Get the media stream from the WebRTC state
+        const { state } = await import("@/utils/webrtc/state");
+        const stream = state.localStream;
+
+        if (!stream) {
+          throw new Error(
+            "No media stream available after WebRTC initialization",
+          );
+        }
 
         // Save the stream
         setLocalStream(stream);
@@ -92,25 +143,41 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
 
         // Update call status
         setCallStatus("connected");
-        console.log("WebRTC connection established successfully");
+        isInitialized = true;
       } catch (error) {
-        console.error("Error initializing WebRTC:", error);
-        toast.error("Không thể kết nối cuộc gọi video");
-        setIsVideoOff(true);
+        console.error("[CALL_PAGE] Error initializing WebRTC:", error);
 
-        try {
-          // Try audio only if video fails
-          console.log("Attempting audio-only fallback");
-          const { initializeWebRTC } = await import("@/utils/webrtcUtils");
-          const audioStream = await initializeWebRTC(userId, false);
-          setLocalStream(audioStream);
-          console.log("Audio-only connection established");
-        } catch (audioError) {
-          console.error("Error initializing audio-only WebRTC:", audioError);
+        // Show a more specific error message
+        if (error instanceof Error) {
+          if (
+            error.message.includes("timeout") ||
+            error.message.includes("thời gian")
+          ) {
+            toast.error(
+              "Kết nối cuộc gọi quá chậm. Vui lòng kiểm tra kết nối mạng và thử lại sau.",
+            );
+          } else if (
+            error.message.includes("permission") ||
+            error.message.includes("getUserMedia")
+          ) {
+            toast.error(
+              "Không thể truy cập micrô hoặc camera. Vui lòng kiểm tra quyền truy cập thiết bị.",
+            );
+          } else {
+            toast.error(
+              "Không thể kết nối cuộc gọi video. Vui lòng thử lại sau.",
+            );
+          }
+        } else {
+          toast.error("Đã xảy ra lỗi khi kết nối cuộc gọi video.");
         }
+
+        setIsVideoOff(true);
 
         // Still set to connected to allow the user to see the UI
         setCallStatus("connected");
+      } finally {
+        isInitializing = false;
       }
     };
 
@@ -123,7 +190,7 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
         const token = useAuthStore.getState().accessToken;
 
         if (!token) {
-          console.warn("No token available to check active call");
+          console.warn("[CALL_PAGE] No token available to check active call");
           initWebRTC();
           return;
         }
@@ -131,21 +198,39 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
         const activeCallResult = await getActiveCall(token);
 
         if (activeCallResult.success && activeCallResult.activeCall) {
-          console.log("Active call found:", activeCallResult.activeCall);
+          console.log(
+            "[CALL_PAGE] Active call found:",
+            activeCallResult.activeCall,
+          );
           // We have an active call, proceed with WebRTC initialization
+          window.dispatchEvent(
+            new CustomEvent("call:pageLoaded", {
+              detail: {
+                isIncoming: true,
+                callId: activeCallResult.activeCall.id,
+                roomId: userId,
+              },
+            }),
+          );
+          console.log("[CALL_PAGE] This is an incoming call or reconnection");
           initWebRTC();
         } else {
-          console.log("No active call found, but continuing anyway");
+          console.log(
+            "[CALL_PAGE] No active call found, but continuing anyway",
+          );
           initWebRTC();
         }
       } catch (error) {
-        console.error("Error checking active call:", error);
+        console.error("[CALL_PAGE] Error checking active call:", error);
         // Continue with WebRTC initialization anyway
         initWebRTC();
       }
     };
 
-    checkIncomingCall();
+    // Add a small delay before initialization to ensure the page is fully loaded
+    setTimeout(() => {
+      checkIncomingCall();
+    }, 500);
 
     // Set up event listeners for remote streams
     const handleRemoteStream = (event: any) => {

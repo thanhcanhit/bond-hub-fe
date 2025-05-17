@@ -66,9 +66,9 @@ export function useWebRTC({
         );
       }
 
-      // Add enhanced retry logic for WebRTC initialization
+      // Add enhanced retry logic for WebRTC initialization with fewer retries
       let retryCount = 0;
-      const maxRetries = 7;
+      const maxRetries = 2; // Reduced from 7 to 2 to avoid excessive retries
       let success = false;
 
       // Check URL parameters for timestamp
@@ -220,7 +220,7 @@ export function useWebRTC({
             }
           }
 
-          // Ensure call socket is connected first
+          // Ensure call socket is connected first with improved error handling
           try {
             console.log(
               "[useWebRTC] Ensuring call socket is connected before WebRTC initialization",
@@ -230,60 +230,75 @@ export function useWebRTC({
             const authStore = await import("@/stores/authStore");
             const token = authStore.useAuthStore.getState().accessToken;
 
-            if (token) {
-              console.log("[useWebRTC] Initializing sockets with token");
-
-              // First set up the main socket
-              socketModule.setupSocket(token);
-
-              // Then set up the call socket
-              const callSocket = await callSocketModule.ensureCallSocket(true);
-
-              if (callSocket && callSocket.connected) {
-                console.log("[useWebRTC] Call socket is connected and ready");
-              } else if (callSocket) {
-                console.log(
-                  "[useWebRTC] Call socket exists but not connected, waiting for connection",
-                );
-
-                // Wait for the socket to connect with timeout
-                const startTime = Date.now();
-                const timeout = 5000;
-
-                while (
-                  !callSocket.connected &&
-                  Date.now() - startTime < timeout
-                ) {
-                  console.log(
-                    "[useWebRTC] Waiting for call socket to connect...",
-                  );
-                  await new Promise((resolve) => setTimeout(resolve, 500));
-                }
-
-                if (callSocket.connected) {
-                  console.log("[useWebRTC] Call socket connected successfully");
-                } else {
-                  console.warn(
-                    "[useWebRTC] Call socket failed to connect within timeout",
-                  );
-                }
-              } else {
-                console.error("[useWebRTC] Failed to initialize call socket");
-              }
-            } else {
-              console.error(
-                "[useWebRTC] No token available for socket initialization",
-              );
+            if (!token) {
+              throw new Error("No authentication token available");
             }
+
+            console.log("[useWebRTC] Initializing sockets with token");
+
+            // First set up the main socket
+            socketModule.setupSocket(token);
+
+            // Then set up the call socket with a longer timeout
+            const callSocket = await callSocketModule.ensureCallSocket(true);
+
+            if (!callSocket) {
+              throw new Error("Failed to initialize call socket");
+            }
+
+            if (callSocket.connected) {
+              console.log("[useWebRTC] Call socket is connected and ready");
+            } else {
+              console.log(
+                "[useWebRTC] Call socket exists but not connected, waiting for connection",
+              );
+
+              // Wait for the socket to connect with a longer timeout
+              const startTime = Date.now();
+              const timeout = 10000; // Increased from 5000 to 10000
+
+              while (
+                !callSocket.connected &&
+                Date.now() - startTime < timeout
+              ) {
+                console.log(
+                  "[useWebRTC] Waiting for call socket to connect...",
+                );
+                await new Promise((resolve) => setTimeout(resolve, 500));
+              }
+
+              if (callSocket.connected) {
+                console.log("[useWebRTC] Call socket connected successfully");
+              } else {
+                throw new Error("Call socket failed to connect within timeout");
+              }
+            }
+
+            // Add a small delay after socket connection to ensure stability
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            console.log(
+              "[useWebRTC] Socket connection stabilized, proceeding with WebRTC initialization",
+            );
           } catch (socketError) {
             console.error(
               "[useWebRTC] Error ensuring call socket:",
               socketError,
             );
-            // Continue anyway, as the WebRTC initialization will try to set up the socket
+
+            // If this is the first attempt, try to continue anyway
+            if (retryCount === 0) {
+              console.log(
+                "[useWebRTC] First attempt: continuing with WebRTC initialization despite socket error",
+              );
+            } else {
+              // On subsequent attempts, throw the error to trigger proper retry logic
+              throw new Error(
+                `Socket connection error: ${socketError instanceof Error ? socketError.message : "Unknown error"}`,
+              );
+            }
           }
 
-          // Initialize WebRTC with timeout
+          // Initialize WebRTC with a longer timeout
           const initPromise = initializeWebRTC(
             roomId,
             false,
@@ -291,12 +306,33 @@ export function useWebRTC({
           );
           const timeoutPromise = new Promise((_, reject) => {
             setTimeout(
-              () => reject(new Error("WebRTC initialization timeout")),
-              15000,
+              () =>
+                reject(
+                  new Error(
+                    "Không thể kết nối WebRTC trong thời gian cho phép",
+                  ),
+                ),
+              30000, // Increased timeout to 30 seconds
             );
           });
 
-          await Promise.race([initPromise, timeoutPromise]);
+          // Use try-catch to provide more detailed error information
+          try {
+            await Promise.race([initPromise, timeoutPromise]);
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              error.message.includes("thời gian cho phép")
+            ) {
+              console.error(
+                "[useWebRTC] WebRTC initialization timed out after 30 seconds",
+              );
+              throw new Error(
+                "Không thể kết nối WebRTC. Vui lòng kiểm tra kết nối mạng và thử lại.",
+              );
+            }
+            throw error;
+          }
 
           success = true;
           console.log("[useWebRTC] WebRTC connection established successfully");
@@ -359,7 +395,29 @@ export function useWebRTC({
               `[useWebRTC] Will retry WebRTC initialization (${retryCount}/${maxRetries})`,
             );
 
-            // If error is transport-related, wait longer
+            // Perform thorough cleanup before retrying
+            try {
+              console.log(
+                "[useWebRTC] Performing thorough cleanup before retry",
+              );
+
+              // End any existing call
+              await webrtcUtils.endCall();
+
+              // Wait for cleanup to complete
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+
+              console.log("[useWebRTC] Cleanup completed successfully");
+            } catch (cleanupError) {
+              console.error(
+                "[useWebRTC] Error during cleanup before retry:",
+                cleanupError,
+              );
+            }
+
+            // Determine wait time based on error type
+            let waitTime = 3000; // Default wait time
+
             if (
               initError instanceof Error &&
               (initError.message.includes("transport") ||
@@ -369,28 +427,69 @@ export function useWebRTC({
               console.log(
                 "[useWebRTC] Transport-related error detected, waiting longer before retry",
               );
+              waitTime = 5000; // Longer wait for transport issues
+            } else if (
+              initError instanceof Error &&
+              initError.message.includes("timeout")
+            ) {
+              console.log(
+                "[useWebRTC] Timeout error detected, waiting longer before retry",
+              );
+              waitTime = 7000; // Even longer wait for timeout issues
+            }
 
-              // Clean up before retrying
-              try {
-                console.log(
-                  "[useWebRTC] Cleaning up WebRTC resources before retry",
-                );
-                await webrtcUtils.endCall();
-                console.log("[useWebRTC] Cleanup completed successfully");
-              } catch (cleanupError) {
-                console.error(
-                  "[useWebRTC] Error during cleanup before retry:",
-                  cleanupError,
-                );
-              }
+            console.log(
+              `[useWebRTC] Waiting ${waitTime}ms before retry attempt ${retryCount + 1}`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, waitTime));
 
-              await new Promise((resolve) => setTimeout(resolve, 3000));
+            // Dispatch event to notify about retry
+            try {
+              window.dispatchEvent(
+                new CustomEvent("call:webrtc:retry", {
+                  detail: {
+                    roomId: roomId,
+                    attempt: retryCount,
+                    maxAttempts: maxRetries,
+                    error:
+                      initError instanceof Error
+                        ? initError.message
+                        : "Unknown error",
+                  },
+                }),
+              );
+            } catch (e) {
+              console.error("[useWebRTC] Error dispatching retry event:", e);
             }
           } else {
             console.error(
               `[useWebRTC] All ${maxRetries} WebRTC initialization attempts failed`,
             );
-            throw initError;
+
+            // Dispatch final failure event
+            try {
+              window.dispatchEvent(
+                new CustomEvent("call:webrtc:all_attempts_failed", {
+                  detail: {
+                    roomId: roomId,
+                    attempts: retryCount,
+                    error:
+                      initError instanceof Error
+                        ? initError.message
+                        : "Unknown error",
+                  },
+                }),
+              );
+            } catch (e) {
+              console.error(
+                "[useWebRTC] Error dispatching final failure event:",
+                e,
+              );
+            }
+
+            throw new Error(
+              `Không thể kết nối cuộc gọi sau ${maxRetries} lần thử. Lỗi: ${initError instanceof Error ? initError.message : "Lỗi không xác định"}`,
+            );
           }
         }
       }
@@ -408,10 +507,33 @@ export function useWebRTC({
         lastInitAttempt: Date.now(),
       }));
 
-      // Show error toast
-      toast.error(
-        "Không thể kết nối cuộc gọi. Vui lòng kiểm tra kết nối mạng của bạn.",
-      );
+      // Show more specific error toast based on the error type
+      let errorMessage =
+        "Không thể kết nối cuộc gọi. Vui lòng kiểm tra kết nối mạng của bạn.";
+
+      if (error instanceof Error) {
+        if (
+          error.message.includes("timeout") ||
+          error.message.includes("thời gian")
+        ) {
+          errorMessage =
+            "Kết nối cuộc gọi quá chậm. Vui lòng kiểm tra kết nối mạng và thử lại sau.";
+        } else if (
+          error.message.includes("socket") ||
+          error.message.includes("connection")
+        ) {
+          errorMessage =
+            "Không thể kết nối đến máy chủ cuộc gọi. Vui lòng thử lại sau.";
+        } else if (
+          error.message.includes("permission") ||
+          error.message.includes("getUserMedia")
+        ) {
+          errorMessage =
+            "Không thể truy cập micrô hoặc camera. Vui lòng kiểm tra quyền truy cập thiết bị.";
+        }
+      }
+
+      toast.error(errorMessage);
 
       // Dispatch an event to notify that WebRTC initialization failed
       try {
