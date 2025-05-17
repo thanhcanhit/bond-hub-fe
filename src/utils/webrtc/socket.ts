@@ -144,7 +144,33 @@ export async function connectToSocket(): Promise<void> {
           }
         }
 
-        if (!accessToken || !user || !user.id) {
+        // Get user ID from multiple sources
+        let userId = user?.id;
+
+        // If no user ID from auth store, try to get from session storage
+        if (!userId) {
+          const storedUserId = sessionStorage.getItem("currentUserId");
+          if (storedUserId) {
+            console.log(
+              `[WEBRTC] Using user ID from sessionStorage: ${storedUserId}`,
+            );
+            userId = storedUserId;
+          }
+        }
+
+        // If still no user ID, try to get from URL parameters
+        if (!userId && typeof window !== "undefined") {
+          const urlParams = new URLSearchParams(window.location.search);
+          const urlUserId = urlParams.get("userId");
+          if (urlUserId) {
+            console.log(
+              `[WEBRTC] Using user ID from URL parameters: ${urlUserId}`,
+            );
+            userId = urlUserId;
+          }
+        }
+
+        if (!accessToken || !userId) {
           console.error(
             "[WEBRTC] Not authenticated - missing token or user ID",
           );
@@ -152,7 +178,7 @@ export async function connectToSocket(): Promise<void> {
           return;
         }
 
-        const currentUser = user;
+        const currentUserId = userId;
 
         // Ensure Socket URL is not undefined
         const socketUrl = `${process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"}/call`;
@@ -169,7 +195,7 @@ export async function connectToSocket(): Promise<void> {
           const newSocket = io(socketUrl, {
             auth: {
               token: accessToken,
-              userId: currentUser.id,
+              userId: currentUserId,
             },
             transports: ["websocket"], // Use only websocket to avoid polling issues
             reconnection: true, // Enable automatic reconnection for persistent connection

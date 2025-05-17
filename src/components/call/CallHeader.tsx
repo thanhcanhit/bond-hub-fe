@@ -26,7 +26,10 @@ export default function CallHeader({
   callDuration,
 }: CallHeaderProps) {
   return (
-    <div className="w-full bg-white p-4 flex items-center justify-between shadow-sm">
+    <div
+      className="w-full bg-white p-4 flex items-center justify-between shadow-sm"
+      data-call-status={callStatus}
+    >
       <div className="flex items-center">
         <span className="text-lg font-semibold">{userName}</span>
       </div>

@@ -11,10 +11,8 @@ import { toast } from "sonner";
 import { use } from "react";
 
 export default function VideoCallPage({ params }: { params: { id: string } }) {
-  // Unwrap params using React.use()
-  // @ts-ignore - Bỏ qua lỗi TypeScript với use()
-  const unwrappedParams = use(params);
-  // @ts-ignore - Bỏ qua lỗi TypeScript với unwrappedParams
+  // Unwrap params using React.use() at the top level of the component
+  const unwrappedParams = use(params as any) as { id: string };
   const userId = unwrappedParams.id;
 
   const [user, setUser] = useState<any>(null);

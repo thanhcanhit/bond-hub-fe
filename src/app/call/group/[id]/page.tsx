@@ -10,10 +10,8 @@ import { use } from "react";
 import { Group } from "@/types/base";
 
 export default function GroupCallPage({ params }: { params: { id: string } }) {
-  // Unwrap params using React.use()
-  // @ts-ignore - Bỏ qua lỗi TypeScript với use()
-  const unwrappedParams = use(params);
-  // @ts-ignore - Bỏ qua lỗi TypeScript với unwrappedParams
+  // Unwrap params at the top level of the component
+  const unwrappedParams = use(params as any) as { id: string };
   const groupId = unwrappedParams.id;
 
   const [group, setGroup] = useState<Group | null>(null);

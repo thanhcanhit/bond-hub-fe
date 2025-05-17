@@ -440,6 +440,141 @@ export async function initiateGroupCall(
  * @param token Authentication token (passed from client)
  * @returns Active call data if exists
  */
+/**
+ * Join an existing call
+ * @param callId ID of the call to join
+ * @param token Authentication token (passed from client)
+ * @returns Success status and call details
+ */
+export async function joinCall(callId: string, token: string) {
+  try {
+    console.log(`Joining call ${callId}`);
+    console.log(`Token received: ${token ? "Token exists" : "No token"}`);
+
+    if (!token) {
+      return { success: false, message: "Unauthorized" };
+    }
+
+    // Đảm bảo token không có khoảng trắng ở đầu hoặc cuối
+    const cleanToken = token.trim();
+
+    // Đảm bảo API URL không bị undefined
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
+    // Extract user ID from token
+    const userId = extractUserIdFromToken(cleanToken);
+    console.log(`Extracted userId from token for call join: ${userId}`);
+
+    // Prepare request body
+    const requestBody = {
+      callId,
+      userId,
+    };
+
+    // Log request details for debugging
+    console.log(`Making request to ${apiUrl}/api/v1/calls/join`);
+    console.log(`Authorization header: Bearer ${cleanToken}`);
+    console.log(`Request body:`, requestBody);
+
+    const response = await fetch(`${apiUrl}/api/v1/calls/join`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cleanToken}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        message: errorData.message || "Failed to join call",
+      };
+    }
+
+    const data = await response.json();
+    return {
+      success: true,
+      roomId: data.roomId,
+      type: data.type || "AUDIO",
+    };
+  } catch (error) {
+    console.error("Error joining call:", error);
+    return {
+      success: false,
+      message: "Internal server error",
+    };
+  }
+}
+
+/**
+ * Create a call room on the server
+ * @param callId ID of the call to create a room for
+ * @param token Authentication token (passed from client)
+ * @returns Success status
+ */
+export async function createCallRoom(callId: string, token: string) {
+  try {
+    console.log(`Creating call room for call ${callId}`);
+    console.log(`Token received: ${token ? "Token exists" : "No token"}`);
+
+    if (!token) {
+      return { success: false, message: "Unauthorized" };
+    }
+
+    // Đảm bảo token không có khoảng trắng ở đầu hoặc cuối
+    const cleanToken = token.trim();
+
+    // Đảm bảo API URL không bị undefined
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
+    // Extract user ID from token
+    const userId = extractUserIdFromToken(cleanToken);
+    console.log(`Extracted userId from token for room creation: ${userId}`);
+
+    // Prepare request body
+    const requestBody = {
+      callId,
+      userId,
+    };
+
+    // Log request details for debugging
+    console.log(`Making request to ${apiUrl}/api/v1/calls/room`);
+    console.log(`Authorization header: Bearer ${cleanToken}`);
+    console.log(`Request body:`, requestBody);
+
+    const response = await fetch(`${apiUrl}/api/v1/calls/room`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cleanToken}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        message: errorData.message || "Failed to create call room",
+      };
+    }
+
+    const data = await response.json();
+    return {
+      success: true,
+      roomId: data.roomId,
+    };
+  } catch (error) {
+    console.error("Error creating call room:", error);
+    return {
+      success: false,
+      message: "Internal server error",
+    };
+  }
+}
+
 export async function getActiveCall(token: string) {
   try {
     console.log(`Getting active call`);

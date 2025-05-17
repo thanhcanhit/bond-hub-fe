@@ -24,6 +24,14 @@ export function setupCallEventHandlers({
   initWebRTC,
   webrtcInitialized,
 }: CallEventHandlersProps): () => void {
+  // Log call setup information for debugging
+  console.log("[CALL_EVENTS] Setting up call event handlers with:", {
+    roomId,
+    callId,
+    targetId,
+    currentStatus: callStatus,
+    webrtcInitialized,
+  });
   // Handler for message events from other windows
   const handleMessage = (event: MessageEvent) => {
     if (!event.data || typeof event.data !== "object") return;
@@ -337,6 +345,24 @@ export function setupCallEventHandlers({
             });
         }, 300); // Reduced delay for faster connection
       }
+
+      // After a short delay, move to connected state to ensure UI updates properly
+      setTimeout(() => {
+        // Get current call status from the DOM or other means
+        const currentCallStatusElement =
+          document.querySelector("[data-call-status]");
+        const currentCallStatus =
+          currentCallStatusElement?.getAttribute("data-call-status") ||
+          callStatus;
+
+        if (currentCallStatus !== "connected") {
+          console.log(
+            `[CALL_EVENTS] Changing call status to connected after delay (was: ${currentCallStatus})`,
+          );
+          setCallStatus("connected");
+          toast.success("Người dùng khác đã tham gia cuộc gọi");
+        }
+      }, 3000); // Give enough time for WebRTC to initialize
     }
     // If we're in connecting state, change to connected
     else if (callStatus === "connecting") {
@@ -347,6 +373,19 @@ export function setupCallEventHandlers({
 
       // Notify the user
       toast.success("Người dùng khác đã tham gia cuộc gọi");
+
+      // Make sure WebRTC is initialized
+      if (!webrtcInitialized) {
+        console.log(
+          "[CALL_EVENTS] Ensuring WebRTC is initialized in connecting state",
+        );
+        initWebRTC(true).catch((error) => {
+          console.error(
+            "[CALL_EVENTS] Error initializing WebRTC in connecting state:",
+            error,
+          );
+        });
+      }
     }
   };
 

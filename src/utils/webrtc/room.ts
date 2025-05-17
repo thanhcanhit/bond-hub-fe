@@ -555,20 +555,29 @@ export async function joinRoomAttempt(roomId: string): Promise<void> {
           console.log("[WEBRTC] Attempting to connect existing socket");
           state.socket.connect();
 
-          // Wait a bit for the connection to establish
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          // Wait a bit for the connection to establish using setTimeout instead of await
+          setTimeout(() => {
+            // Check if connection was successful
+            if (state.socket.connected) {
+              console.log("[WEBRTC] Successfully connected existing socket");
+              // Continue with the existing socket
+              joinRoomWithSocket(
+                state.socket,
+                roomId,
+                timeout,
+                resolve,
+                reject,
+              );
+              return;
+            } else {
+              console.log(
+                "[WEBRTC] Failed to connect existing socket, will try to create a new one",
+              );
 
-          // Check if connection was successful
-          if (state.socket.connected) {
-            console.log("[WEBRTC] Successfully connected existing socket");
-            // Continue with the existing socket
-            joinRoomWithSocket(state.socket, roomId, timeout, resolve, reject);
-            return;
-          } else {
-            console.log(
-              "[WEBRTC] Failed to connect existing socket, will try to create a new one",
-            );
-          }
+              // Continue with the reconnection process below
+              // The code after this block will execute and try to reconnect
+            }
+          }, 2000);
         }
       } else {
         console.log("[WEBRTC] Socket is null");
@@ -904,133 +913,222 @@ function emitJoinRoom(
       return;
     }
 
-    socket.emit("joinRoom", { roomId }, async (response: any) => {
-      // Remove the listeners since we got a response
-      if (disconnectHandler) {
-        socket.off("disconnect", disconnectHandler);
-      }
-      if (connectErrorHandler) {
-        socket.off("connect_error", connectErrorHandler);
-      }
+    // Get additional information to help with room joining
+    const userId =
+      useAuthStore.getState().user?.id ||
+      sessionStorage.getItem("currentUserId") ||
+      "unknown";
+    const callId = sessionStorage.getItem("currentCallId") || "";
+    const targetId = sessionStorage.getItem("callTargetId") || "";
 
-      clearTimeout(timeout);
-
-      console.log(`[WEBRTC] Received response from joinRoom:`, response);
-
-      if (!response) {
-        console.error("[WEBRTC] No response received from joinRoom");
-        reject(new Error("No response received from joinRoom"));
-        return;
-      }
-
-      if (response.error) {
-        console.error(`[WEBRTC] Error joining room: ${response.error}`);
-
-        // Check if the error is related to authentication
-        const isAuthError =
-          response.error.includes("auth") ||
-          response.error.includes("token") ||
-          response.error.includes("unauthorized") ||
-          response.error.includes("authentication");
-
-        if (isAuthError) {
-          console.error("[WEBRTC] Authentication error detected in room join");
-
-          // Try to refresh the token
-          try {
-            console.log("[WEBRTC] Attempting to refresh authentication token");
-            // This will be handled by the auth store's refresh mechanism
-            window.dispatchEvent(new CustomEvent("auth:tokenRefreshNeeded"));
-          } catch (refreshError) {
-            console.error(
-              "[WEBRTC] Error requesting token refresh:",
-              refreshError,
-            );
-          }
+    // Include more information in the joinRoom request to help with permissions
+    socket.emit(
+      "joinRoom",
+      {
+        roomId,
+        userId,
+        callId,
+        targetId,
+        timestamp: Date.now(),
+      },
+      async (response: any) => {
+        // Remove the listeners since we got a response
+        if (disconnectHandler) {
+          socket.off("disconnect", disconnectHandler);
+        }
+        if (connectErrorHandler) {
+          socket.off("connect_error", connectErrorHandler);
         }
 
-        reject(new Error(response.error));
-        return;
-      }
+        clearTimeout(timeout);
 
-      console.log(
-        `[WEBRTC] Received successful response from joinRoom for room ${roomId}`,
-      );
+        console.log(`[WEBRTC] Received response from joinRoom:`, response);
 
-      try {
-        // Check if rtpCapabilities is valid
-        if (!response.rtpCapabilities) {
-          console.error("[WEBRTC] No RTP capabilities received from server");
+        if (!response) {
+          console.error("[WEBRTC] No response received from joinRoom");
+          reject(new Error("No response received from joinRoom"));
+          return;
+        }
 
-          // Try to get stored RTP capabilities as a fallback
-          try {
-            const storedCapabilities =
-              sessionStorage.getItem("rtpCapabilities");
-            if (storedCapabilities) {
-              console.log("[WEBRTC] Using stored RTP capabilities as fallback");
-              response.rtpCapabilities = JSON.parse(storedCapabilities);
-            } else {
-              reject(
-                new Error(
-                  "No RTP capabilities received from server and no stored capabilities available",
-                ),
-              );
-              return;
-            }
-          } catch (storageError) {
+        if (response.error) {
+          console.error(`[WEBRTC] Error joining room: ${response.error}`);
+
+          // Check if the error is related to authentication or permissions
+          const isAuthError =
+            response.error.includes("auth") ||
+            response.error.includes("token") ||
+            response.error.includes("unauthorized") ||
+            response.error.includes("authentication") ||
+            response.error.includes("not allowed") ||
+            response.error.includes("permission");
+
+          if (isAuthError) {
             console.error(
-              "[WEBRTC] Error accessing stored RTP capabilities:",
-              storageError,
+              "[WEBRTC] Authentication/permission error detected in room join",
             );
-            reject(new Error("No RTP capabilities received from server"));
+
+            // Try to refresh the token
+            try {
+              console.log(
+                "[WEBRTC] Attempting to refresh authentication token",
+              );
+              // This will be handled by the auth store's refresh mechanism
+              window.dispatchEvent(new CustomEvent("auth:tokenRefreshNeeded"));
+
+              // Also try to get a fresh token from the auth store
+              const freshToken = useAuthStore.getState().accessToken;
+              if (freshToken) {
+                console.log(
+                  "[WEBRTC] Got fresh token from auth store, will retry with this token",
+                );
+                sessionStorage.setItem("callAccessToken", freshToken);
+              }
+            } catch (refreshError) {
+              console.error(
+                "[WEBRTC] Error requesting token refresh:",
+                refreshError,
+              );
+            }
+
+            // If this is a permission error, try to create/join the call again
+            if (
+              response.error.includes("not allowed") ||
+              response.error.includes("permission")
+            ) {
+              try {
+                console.log(
+                  "[WEBRTC] Permission error detected, attempting to rejoin call properly",
+                );
+
+                // Try to get the token
+                const token =
+                  useAuthStore.getState().accessToken ||
+                  sessionStorage.getItem("callAccessToken");
+
+                if (token && callId) {
+                  // Try to join the call properly through the API
+                  const { joinCall } = await import("@/actions/call.action");
+                  const joinResult = await joinCall(callId, token);
+
+                  if (joinResult.success) {
+                    console.log(
+                      "[WEBRTC] Successfully joined call through API, retrying room join",
+                    );
+                    // Continue with the room join despite the error
+                    // The server should now recognize this user as part of the call
+                  } else {
+                    console.error(
+                      "[WEBRTC] Failed to join call through API:",
+                      joinResult.message,
+                    );
+                  }
+                }
+              } catch (joinError) {
+                console.error(
+                  "[WEBRTC] Error joining call through API:",
+                  joinError,
+                );
+              }
+            }
+          }
+
+          // For permission errors, we'll try to continue anyway
+          if (
+            response.error.includes("not allowed") ||
+            response.error.includes("permission")
+          ) {
+            console.log(
+              "[WEBRTC] Continuing despite permission error to attempt recovery",
+            );
+            // Continue with the process despite the error
+          } else {
+            // For other errors, reject the promise
+            reject(new Error(response.error));
             return;
           }
-        } else {
-          // Store the received RTP capabilities for future recovery
+        }
+
+        console.log(
+          `[WEBRTC] Received successful response from joinRoom for room ${roomId}`,
+        );
+
+        try {
+          // Check if rtpCapabilities is valid
+          if (!response.rtpCapabilities) {
+            console.error("[WEBRTC] No RTP capabilities received from server");
+
+            // Try to get stored RTP capabilities as a fallback
+            try {
+              const storedCapabilities =
+                sessionStorage.getItem("rtpCapabilities");
+              if (storedCapabilities) {
+                console.log(
+                  "[WEBRTC] Using stored RTP capabilities as fallback",
+                );
+                response.rtpCapabilities = JSON.parse(storedCapabilities);
+              } else {
+                reject(
+                  new Error(
+                    "No RTP capabilities received from server and no stored capabilities available",
+                  ),
+                );
+                return;
+              }
+            } catch (storageError) {
+              console.error(
+                "[WEBRTC] Error accessing stored RTP capabilities:",
+                storageError,
+              );
+              reject(new Error("No RTP capabilities received from server"));
+              return;
+            }
+          } else {
+            // Store the received RTP capabilities for future recovery
+            try {
+              sessionStorage.setItem(
+                "rtpCapabilities",
+                JSON.stringify(response.rtpCapabilities),
+              );
+              console.log(
+                "[WEBRTC] Stored new RTP capabilities in sessionStorage",
+              );
+            } catch (storageError) {
+              console.warn(
+                "[WEBRTC] Error storing RTP capabilities in sessionStorage:",
+                storageError,
+              );
+              // Continue anyway
+            }
+          }
+
+          // Dispatch an event to notify that we've received RTP capabilities
           try {
-            sessionStorage.setItem(
-              "rtpCapabilities",
-              JSON.stringify(response.rtpCapabilities),
+            window.dispatchEvent(
+              new CustomEvent("webrtc:rtpCapabilitiesReceived", {
+                detail: {
+                  roomId,
+                  timestamp: new Date().toISOString(),
+                },
+              }),
             );
             console.log(
-              "[WEBRTC] Stored new RTP capabilities in sessionStorage",
+              `Dispatched webrtc:rtpCapabilitiesReceived event for room ${roomId}`,
             );
-          } catch (storageError) {
-            console.warn(
-              "[WEBRTC] Error storing RTP capabilities in sessionStorage:",
-              storageError,
+          } catch (eventError) {
+            console.error(
+              "Error dispatching webrtc:rtpCapabilitiesReceived event:",
+              eventError,
             );
-            // Continue anyway
           }
-        }
 
-        // Dispatch an event to notify that we've received RTP capabilities
-        try {
-          window.dispatchEvent(
-            new CustomEvent("webrtc:rtpCapabilitiesReceived", {
-              detail: {
-                roomId,
-                timestamp: new Date().toISOString(),
-              },
-            }),
-          );
-          console.log(
-            `Dispatched webrtc:rtpCapabilitiesReceived event for room ${roomId}`,
-          );
-        } catch (eventError) {
-          console.error(
-            "Error dispatching webrtc:rtpCapabilitiesReceived event:",
-            eventError,
-          );
+          await setupRoomConnection(roomId, response.rtpCapabilities);
+          resolve();
+        } catch (error) {
+          console.error("Error in joinRoom:", error);
+          reject(error);
         }
-
-        await setupRoomConnection(roomId, response.rtpCapabilities);
-        resolve();
-      } catch (error) {
-        console.error("Error in joinRoom:", error);
-        reject(error);
-      }
-    });
+      },
+    );
   };
 
   // Start the first attempt

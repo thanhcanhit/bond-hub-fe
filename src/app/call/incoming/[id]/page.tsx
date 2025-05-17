@@ -17,12 +17,16 @@ export default function IncomingCallPage({
 }: {
   params: { id: string };
 }) {
-  // Unwrap params using React.use() to avoid the warning
-  // @ts-ignore - Ignore TypeScript error with use()
-  const unwrappedParams = use(params);
-  // @ts-ignore - Ignore TypeScript error with unwrappedParams
+  // Unwrap params at the top level of the component
+  const unwrappedParams = use(params as any) as { id: string };
   const callId = unwrappedParams.id;
 
+  // Return the actual incoming call UI with the unwrapped callId
+  return <IncomingCallContent callId={callId} />;
+}
+
+// Separate component for the actual incoming call UI
+function IncomingCallContent({ callId }: { callId: string }) {
   const searchParams = useSearchParams();
   const initiatorId = searchParams.get("initiatorId");
   const roomId = searchParams.get("roomId");

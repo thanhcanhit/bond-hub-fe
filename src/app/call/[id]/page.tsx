@@ -529,10 +529,9 @@ function CallPageContent({ userId }: { userId: string }) {
 
 // Main component that will be exported
 export default function CallPage({ params }: { params: { id: string } }) {
-  // Unwrap params using React.use() to avoid the warning
-  // @ts-ignore - Ignore TypeScript error with use()
-  const unwrappedParams = use(params);
-  // @ts-ignore - Ignore TypeScript error with unwrappedParams
+  // Unwrap params at the top level of the component
+  // This is valid in Next.js page components
+  const unwrappedParams = use(params as any) as { id: string };
   const id = unwrappedParams.id;
 
   return <CallPageContent userId={id} />;
