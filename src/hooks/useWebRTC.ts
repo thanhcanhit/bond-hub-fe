@@ -298,40 +298,51 @@ export function useWebRTC({
             }
           }
 
-          // Initialize WebRTC with a longer timeout
-          const initPromise = initializeWebRTC(
-            roomId,
-            false,
-            shouldForceConnect,
-          );
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(
-              () =>
-                reject(
-                  new Error(
-                    "Không thể kết nối WebRTC trong thời gian cho phép",
-                  ),
-                ),
-              30000, // Increased timeout to 30 seconds
-            );
-          });
-
-          // Use try-catch to provide more detailed error information
+          // Initialize WebRTC with improved error handling
           try {
-            await Promise.race([initPromise, timeoutPromise]);
+            // Use a single promise with the WebRTC initialization
+            // This avoids race conditions between the timeout and the actual initialization
+            await initializeWebRTC(roomId, false, shouldForceConnect);
+
+            console.log(
+              "[useWebRTC] WebRTC initialization completed successfully",
+            );
           } catch (error) {
-            if (
-              error instanceof Error &&
-              error.message.includes("thời gian cho phép")
-            ) {
-              console.error(
-                "[useWebRTC] WebRTC initialization timed out after 30 seconds",
-              );
-              throw new Error(
-                "Không thể kết nối WebRTC. Vui lòng kiểm tra kết nối mạng và thử lại.",
-              );
+            console.error(
+              "[useWebRTC] Error during WebRTC initialization:",
+              error,
+            );
+
+            // Provide more specific error messages based on the error type
+            if (error instanceof Error) {
+              if (
+                error.message.includes("timeout") ||
+                error.message.includes("thời gian")
+              ) {
+                throw new Error(
+                  "Không thể kết nối WebRTC trong thời gian cho phép. Vui lòng kiểm tra kết nối mạng và thử lại.",
+                );
+              } else if (
+                error.message.includes("socket") ||
+                error.message.includes("connection")
+              ) {
+                throw new Error(
+                  "Không thể kết nối đến máy chủ cuộc gọi. Vui lòng kiểm tra kết nối mạng và thử lại sau.",
+                );
+              } else if (
+                error.message.includes("getUserMedia") ||
+                error.message.includes("permission")
+              ) {
+                throw new Error(
+                  "Không thể truy cập micrô. Vui lòng kiểm tra quyền truy cập thiết bị của trình duyệt.",
+                );
+              }
             }
-            throw error;
+
+            // If we can't determine a specific error, throw a generic one
+            throw new Error(
+              "Không thể khởi tạo cuộc gọi. Vui lòng thử lại sau.",
+            );
           }
 
           success = true;

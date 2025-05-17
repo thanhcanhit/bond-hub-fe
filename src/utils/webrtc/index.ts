@@ -265,10 +265,10 @@ export async function initializeWebRTC(
     // 2. Connect to socket
     console.log("[WEBRTC] Connecting to socket server...");
 
-    // Create a function to verify socket connection - simplified for stability
+    // Create a function to verify socket connection - improved for reliability
     const verifySocketConnection = async (
       attempt = 1,
-      maxAttempts = 3,
+      maxAttempts = 5, // Increased max attempts
     ): Promise<void> => {
       if (attempt > maxAttempts) {
         throw new Error(
@@ -313,10 +313,14 @@ export async function initializeWebRTC(
             "[WEBRTC] No connected socket found, ensuring call socket",
           );
 
-          // Ensure call socket is initialized and connected
-          const callSocket = await callSocketModule.ensureCallSocket(true);
+          // Ensure call socket is initialized and connected with improved error handling
+          try {
+            const callSocket = await callSocketModule.ensureCallSocket(true);
 
-          if (callSocket) {
+            if (!callSocket) {
+              throw new Error("Failed to create call socket");
+            }
+
             console.log("[WEBRTC] Successfully initialized call socket");
             state.socket = callSocket;
 
@@ -329,34 +333,74 @@ export async function initializeWebRTC(
                 callSocket.connect();
               }
 
-              // Wait for connection with timeout
-              const connectionTimeout = 5000;
-              const startTime = Date.now();
+              // Set up a promise-based connection wait with timeout
+              const waitForConnection = () => {
+                return new Promise<boolean>((resolve, reject) => {
+                  // Set up a timeout
+                  const timeout = setTimeout(() => {
+                    callSocket.off("connect");
+                    callSocket.off("connect_error");
+                    resolve(false);
+                  }, 15000); // Increased timeout to 15 seconds
 
-              while (
-                !callSocket.connected &&
-                Date.now() - startTime < connectionTimeout
-              ) {
-                await new Promise((resolve) => setTimeout(resolve, 500));
-                console.log(
-                  "[WEBRTC] Still waiting for call socket connection...",
+                  // Set up connect listener
+                  callSocket.once("connect", () => {
+                    clearTimeout(timeout);
+                    callSocket.off("connect_error");
+                    resolve(true);
+                  });
+
+                  // Set up error listener
+                  callSocket.once("connect_error", (error) => {
+                    clearTimeout(timeout);
+                    console.error("[WEBRTC] Socket connect_error:", error);
+                    reject(
+                      new Error(`Socket connection error: ${error.message}`),
+                    );
+                  });
+
+                  // If already connected, resolve immediately
+                  if (callSocket.connected) {
+                    clearTimeout(timeout);
+                    resolve(true);
+                  }
+                });
+              };
+
+              // Wait for connection
+              try {
+                const connected = await waitForConnection();
+                if (connected) {
+                  console.log(
+                    "[WEBRTC] Call socket connected successfully with ID:",
+                    callSocket.id,
+                  );
+                  return;
+                } else {
+                  console.warn(
+                    "[WEBRTC] Call socket failed to connect within timeout, will try connectToSocket",
+                  );
+                }
+              } catch (connectionError) {
+                console.error(
+                  "[WEBRTC] Error connecting socket:",
+                  connectionError,
                 );
+                throw connectionError;
               }
-            }
-
-            if (callSocket.connected) {
+            } else {
               console.log(
-                "[WEBRTC] Call socket connected successfully with ID:",
+                "[WEBRTC] Call socket already connected with ID:",
                 callSocket.id,
               );
               return;
-            } else {
-              console.warn(
-                "[WEBRTC] Call socket failed to connect within timeout, will try connectToSocket",
-              );
             }
-          } else {
-            console.error("[WEBRTC] Failed to initialize call socket");
+          } catch (socketError) {
+            console.error(
+              "[WEBRTC] Error initializing call socket:",
+              socketError,
+            );
+            throw socketError;
           }
         } catch (importError) {
           console.error(
@@ -377,20 +421,32 @@ export async function initializeWebRTC(
             "[WEBRTC] Socket object is null after connectToSocket()",
           );
 
-          // Try to create a fallback socket
+          // Try to create a fallback socket with improved configuration
           try {
             console.log("[WEBRTC] Attempting to create fallback socket");
             const { io } = await import("socket.io-client");
             const authStore = useAuthStore.getState();
             const socketUrl = `${process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"}/call`;
 
+            // Create a more robust fallback socket
             const fallbackSocket = io(socketUrl, {
               auth: { token: authStore.accessToken },
               forceNew: true,
               reconnection: true,
-              reconnectionAttempts: 3, // Limited reconnection attempts
-              reconnectionDelay: 2000, // Longer delay for fallback
-              timeout: 15000, // Shorter timeout for fallback
+              reconnectionAttempts: 5, // Increased reconnection attempts
+              reconnectionDelay: 1000, // Start with shorter delay
+              reconnectionDelayMax: 5000, // Maximum delay between attempts
+              timeout: 30000, // Increased timeout for better reliability
+              transports: ["websocket"], // Use only websocket to avoid polling issues
+            });
+
+            // Set up error handlers
+            fallbackSocket.on("connect_error", (error) => {
+              console.error("[WEBRTC] Fallback socket connect_error:", error);
+            });
+
+            fallbackSocket.on("error", (error) => {
+              console.error("[WEBRTC] Fallback socket general error:", error);
             });
 
             if (fallbackSocket) {

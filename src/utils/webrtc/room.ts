@@ -26,6 +26,42 @@ export async function joinRoom(roomId: string): Promise<void> {
       "[WEBRTC] Socket or device not initialized, attempting to reconnect",
     );
 
+    // Check if we're in cleanup mode
+    try {
+      const isCleaningUp =
+        sessionStorage.getItem("webrtc_cleaning_up") === "true";
+      if (isCleaningUp) {
+        console.log(
+          "[WEBRTC] Not attempting to reconnect because cleanup is in progress",
+        );
+        reject(new Error("Cannot join room during cleanup process"));
+        return;
+      }
+    } catch (storageError) {
+      console.warn("[WEBRTC] Error checking cleanup status:", storageError);
+    }
+
+    // Dispatch an event to notify that we need a socket
+    try {
+      window.dispatchEvent(
+        new CustomEvent("webrtc:socket:needed", {
+          detail: {
+            roomId,
+            timestamp: new Date().toISOString(),
+          },
+        }),
+      );
+      console.log("[WEBRTC] Dispatched webrtc:socket:needed event");
+    } catch (eventError) {
+      console.error(
+        "[WEBRTC] Error dispatching socket needed event:",
+        eventError,
+      );
+    }
+
+    // Wait for a short time to allow the socket:needed event to be processed
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     // Try to reconnect socket if it's not initialized
     if (!state.socket) {
       try {
@@ -542,6 +578,25 @@ export async function joinRoomAttempt(roomId: string): Promise<void> {
     if (!state.socket || !state.socket.connected) {
       clearTimeout(timeout);
       console.error("[WEBRTC] Socket is not initialized or not connected");
+
+      // Dispatch an event to notify that we need a socket
+      try {
+        window.dispatchEvent(
+          new CustomEvent("webrtc:socket:needed", {
+            detail: {
+              roomId,
+              timestamp: new Date().toISOString(),
+              urgent: true,
+            },
+          }),
+        );
+        console.log("[WEBRTC] Dispatched urgent webrtc:socket:needed event");
+      } catch (eventError) {
+        console.error(
+          "[WEBRTC] Error dispatching urgent socket needed event:",
+          eventError,
+        );
+      }
 
       // Log socket state for debugging
       if (state.socket) {

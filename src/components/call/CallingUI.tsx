@@ -107,78 +107,9 @@ export default function CallingUI({
     getTarget();
   }, [targetId, targetType]);
 
-  // Set up event listeners for call accepted/rejected and auto-timeout
+  // Set up event listeners for call accepted/rejected
   useEffect(() => {
     console.log(`Setting up call event listeners for callId=${callId}`);
-
-    // Store the timeout ID in a global variable to ensure it's accessible
-    // This helps prevent issues with closure and stale state
-    (window as any).__callTimeoutIds = (window as any).__callTimeoutIds || {};
-
-    // Clear any existing timeout for this call ID
-    if ((window as any).__callTimeoutIds[callId]) {
-      console.log(`Clearing existing timeout for callId=${callId}`);
-      clearTimeout((window as any).__callTimeoutIds[callId]);
-    }
-
-    // Set up auto-timeout for unanswered calls (60 seconds)
-    console.log(`Setting up 60-second timeout for callId=${callId}`);
-    const timeoutId = setTimeout(() => {
-      console.log(
-        `Call timeout reached for callId=${callId}, auto-ending call`,
-      );
-
-      // Use a direct approach to end the call
-      try {
-        console.log(`Auto-ending call with callId=${callId}`);
-
-        // Dispatch the ended event first to ensure UI updates
-        window.dispatchEvent(
-          new CustomEvent("call:ended", {
-            detail: { callId },
-          }),
-        );
-
-        // Then call the API using the token from props
-        if (token) {
-          // Import the endCall function directly to avoid potential issues with the store
-          import("@/actions/call.action")
-            .then(async (module) => {
-              try {
-                console.log(
-                  `Directly calling endCall API for callId=${callId}`,
-                );
-                await module.endCall(callId, token);
-                console.log(`Successfully ended call with callId=${callId}`);
-              } catch (err) {
-                console.error(`Error calling endCall API: ${err}`);
-              }
-
-              // Clean up the store state
-              useCallStore.getState().resetCallState();
-
-              // Finally call the callback
-              onCallEnded();
-            })
-            .catch((err) => {
-              console.error(`Error importing call.action: ${err}`);
-              onCallEnded(); // Still end the call UI
-            });
-        } else {
-          // If no token, just end the UI
-          onCallEnded();
-        }
-      } catch (error) {
-        console.error("Error in auto-ending call:", error);
-        onCallEnded(); // Still end the call UI
-      }
-
-      // Remove the timeout ID from the global registry
-      delete (window as any).__callTimeoutIds[callId];
-    }, 60000); // 60 seconds
-
-    // Store the timeout ID in the global registry
-    (window as any).__callTimeoutIds[callId] = timeoutId;
 
     // Không sử dụng sự kiện call:accepted vì backend không hỗ trợ
     // Thay vào đó, sẽ sử dụng sự kiện participantJoined từ backend
@@ -240,19 +171,9 @@ export default function CallingUI({
     window.addEventListener("call:ended", handleCallEnded as EventListener);
 
     return () => {
-      console.log(
-        "Removing event listeners for call events and clearing timeout",
-      );
-      // Clear the timeout when component unmounts
-      if (
-        (window as any).__callTimeoutIds &&
-        (window as any).__callTimeoutIds[callId]
-      ) {
-        clearTimeout((window as any).__callTimeoutIds[callId]);
-        delete (window as any).__callTimeoutIds[callId];
-      }
+      console.log("Removing event listeners for call events");
 
-      // Also dispatch an ended event to ensure cleanup on all sides
+      // Dispatch an ended event to ensure cleanup on all sides
       try {
         window.dispatchEvent(
           new CustomEvent("call:ended", {

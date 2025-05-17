@@ -29,6 +29,29 @@ export async function connectToSocket(): Promise<void> {
         return;
       }
 
+      // If we have a socket that's connecting, wait for it to connect
+      if (state.socket && state.socket.connecting) {
+        console.log(
+          "[WEBRTC] Socket is already connecting, waiting for connection...",
+        );
+
+        // Set up a one-time connect event listener
+        state.socket.once("connect", () => {
+          console.log("[WEBRTC] Socket connected successfully while waiting");
+          connectionAttempts = 0;
+          lastConnectionAttempt = 0;
+          resolve();
+        });
+
+        // Set up a one-time connect_error event listener
+        state.socket.once("connect_error", (error) => {
+          console.error("[WEBRTC] Socket connect error while waiting:", error);
+          reject(new Error("Socket connection error: " + error.message));
+        });
+
+        return;
+      }
+
       // Check if we've tried to connect too many times in a short period
       const now = Date.now();
       if (connectionAttempts >= MAX_CONNECTION_ATTEMPTS) {
@@ -186,9 +209,9 @@ export async function connectToSocket(): Promise<void> {
 
         // Add a connection timeout
         const connectionTimeout = setTimeout(() => {
-          console.error("[WEBRTC] Socket connection timeout after 15 seconds");
+          console.error("[WEBRTC] Socket connection timeout after 30 seconds");
           reject(new Error("Socket connection timeout"));
-        }, 15000); // Increased to 15 seconds timeout for better reliability
+        }, 30000); // Increased to 30 seconds timeout to match socket timeout
 
         try {
           // Create socket with robust configuration for persistent connection
@@ -199,12 +222,25 @@ export async function connectToSocket(): Promise<void> {
             },
             transports: ["websocket"], // Use only websocket to avoid polling issues
             reconnection: true, // Enable automatic reconnection for persistent connection
-            reconnectionAttempts: 5, // Limit reconnection attempts to prevent excessive retries
+            reconnectionAttempts: 8, // Increased reconnection attempts
             reconnectionDelay: 1000, // Start with 1s delay
             reconnectionDelayMax: 5000, // Maximum 5s delay between reconnection attempts
-            timeout: 20000, // 20s connection timeout
+            timeout: 30000, // Increased timeout to 30s for better reliability
             forceNew: true, // Force a new connection to avoid reusing problematic connections
             autoConnect: false, // Don't connect automatically, we'll do it manually
+          });
+
+          // Set up error handlers before connecting
+          newSocket.on("connect_error", (error) => {
+            console.error("[WEBRTC] Socket connect_error:", error);
+          });
+
+          newSocket.on("connect_timeout", () => {
+            console.error("[WEBRTC] Socket connect_timeout");
+          });
+
+          newSocket.on("error", (error) => {
+            console.error("[WEBRTC] Socket general error:", error);
           });
 
           // Assign socket to state immediately so it's available for verification

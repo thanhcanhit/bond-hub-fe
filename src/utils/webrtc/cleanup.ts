@@ -228,6 +228,17 @@ export async function cleanup(): Promise<void> {
               `[WEBRTC] Disconnecting socket with ID: ${socketId || "unknown"}`,
             );
 
+            // Set flags in sessionStorage to indicate we're intentionally disconnecting
+            try {
+              sessionStorage.setItem("intentional_disconnect", "true");
+              // We'll clear this flag after the entire cleanup process is complete
+            } catch (storageError) {
+              console.warn(
+                "[WEBRTC] Error setting intentional disconnect flag:",
+                storageError,
+              );
+            }
+
             // Use emit instead of disconnect to ensure server is notified
             state.socket.emit("clientDisconnecting", {
               reason: "cleanup",
@@ -238,35 +249,31 @@ export async function cleanup(): Promise<void> {
             setTimeout(() => {
               try {
                 if (state.socket) {
-                  // Set a flag in sessionStorage to indicate we're intentionally disconnecting
-                  try {
-                    sessionStorage.setItem("intentional_disconnect", "true");
-                    // Clear the flag after a delay
-                    setTimeout(() => {
-                      sessionStorage.removeItem("intentional_disconnect");
-                    }, 5000);
-                  } catch (storageError) {
-                    console.warn(
-                      "[WEBRTC] Error setting intentional disconnect flag:",
-                      storageError,
-                    );
-                  }
-
                   // Now disconnect the socket
                   state.socket.disconnect();
                   console.log(
                     `[WEBRTC] Socket with ID ${socketId || "unknown"} disconnected`,
                   );
+
+                  // Set socket to null immediately to prevent reconnection attempts
+                  state.socket = null;
+
+                  // Add a small delay to ensure the disconnect is processed
+                  setTimeout(() => {
+                    console.log(
+                      "[WEBRTC] Socket disconnect processing complete",
+                    );
+                  }, 500);
                 }
               } catch (disconnectError) {
                 console.error(
                   "[WEBRTC] Error during socket disconnect:",
                   disconnectError,
                 );
-              } finally {
+                // Still set socket to null even if there was an error
                 state.socket = null;
               }
-            }, 200); // Increased from 100ms to 200ms to ensure message is sent
+            }, 300); // Increased to 300ms to ensure message is sent
           } catch (socketError) {
             console.error(
               "[WEBRTC] Error with socket during cleanup:",
@@ -386,15 +393,20 @@ export async function cleanup(): Promise<void> {
         // Reset global cleanup flag
         isCleaningUpGlobal = false;
 
-        // Clear the flag in sessionStorage
+        // Clear all flags in sessionStorage
         try {
           sessionStorage.removeItem("webrtc_cleaning_up");
-          console.log("[WEBRTC] Cleared cleanup flag from sessionStorage");
+          sessionStorage.removeItem("intentional_disconnect");
+          console.log("[WEBRTC] Cleared all cleanup flags from sessionStorage");
         } catch (storageError) {
-          console.warn("[WEBRTC] Error clearing cleanup flag:", storageError);
+          console.warn("[WEBRTC] Error clearing cleanup flags:", storageError);
         }
 
-        resolve();
+        // Add a small delay before resolving to ensure all cleanup operations are complete
+        setTimeout(() => {
+          console.log("[WEBRTC] Cleanup process fully completed");
+          resolve();
+        }, 500);
       }, 800); // Increased delay to ensure queues are fully stopped
     } catch (error) {
       console.error("[WEBRTC] Unhandled error during cleanup:", error);
@@ -415,15 +427,22 @@ export async function cleanup(): Promise<void> {
       // Reset global cleanup flag even on error
       isCleaningUpGlobal = false;
 
-      // Clear the flag in sessionStorage
+      // Clear all flags in sessionStorage
       try {
         sessionStorage.removeItem("webrtc_cleaning_up");
+        sessionStorage.removeItem("intentional_disconnect");
+        console.log("[WEBRTC] Cleared all cleanup flags after error");
       } catch (storageError) {
-        console.warn("[WEBRTC] Error clearing cleanup flag:", storageError);
+        console.warn("[WEBRTC] Error clearing cleanup flags:", storageError);
       }
 
       console.log("[WEBRTC] State reset after cleanup error");
-      resolve(); // Resolve anyway to prevent hanging
+
+      // Add a small delay before resolving to ensure all cleanup operations are complete
+      setTimeout(() => {
+        console.log("[WEBRTC] Cleanup process completed with errors");
+        resolve(); // Resolve anyway to prevent hanging
+      }, 500);
     }
   });
 }

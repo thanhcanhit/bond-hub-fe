@@ -109,15 +109,468 @@ function CallPageContent({ userId }: { userId: string }) {
   }, [callStatus]);
 
   // Set up call event handlers
+  // Helper function to wait for socket and initialize WebRTC
+  const waitForSocketAndInitWebRTC = async () => {
+    try {
+      // Check if we're in cleanup mode
+      const isCleaningUp =
+        sessionStorage.getItem("webrtc_cleaning_up") === "true";
+      if (isCleaningUp) {
+        console.log(
+          "[CALL_PAGE] Cleanup in progress, waiting before initializing WebRTC",
+        );
+        // Wait for cleanup to complete
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      // Check if we already have a socket
+      const { getCallSocket, ensureCallSocket } = await import(
+        "@/lib/callSocket"
+      );
+      let socket = getCallSocket();
+
+      if (socket && socket.connected) {
+        console.log(
+          "[CALL_PAGE] Socket already connected, initializing WebRTC",
+        );
+        initWebRTC();
+        return;
+      }
+
+      console.log(
+        "[CALL_PAGE] Socket not connected, ensuring call socket is available",
+      );
+
+      // Try to ensure we have a call socket
+      try {
+        const { useAuthStore } = await import("@/stores/authStore");
+        const token = useAuthStore.getState().accessToken;
+
+        if (token) {
+          // Ensure call socket with a fresh connection
+          socket = await ensureCallSocket(true);
+
+          if (socket && socket.connected) {
+            console.log(
+              "[CALL_PAGE] Successfully ensured call socket connection",
+            );
+          } else {
+            console.warn("[CALL_PAGE] Failed to ensure call socket connection");
+          }
+        }
+      } catch (socketError) {
+        console.error("[CALL_PAGE] Error ensuring call socket:", socketError);
+      }
+
+      // Wait a moment to ensure socket initialization has completed
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Set up a listener for the socket ready event with timeout
+      const socketReady = await new Promise<boolean>((resolve) => {
+        const socketReadyHandler = () => {
+          console.log("[CALL_PAGE] Received socket ready event");
+          window.removeEventListener(
+            "call:socket:ready",
+            socketReadyHandler as EventListener,
+          );
+          clearTimeout(timeoutId);
+          resolve(true);
+        };
+
+        // Set a timeout in case the event doesn't fire
+        const timeoutId = setTimeout(() => {
+          window.removeEventListener(
+            "call:socket:ready",
+            socketReadyHandler as EventListener,
+          );
+          console.log(
+            "[CALL_PAGE] Socket ready event timeout, proceeding anyway",
+          );
+
+          // Check one more time if socket is connected
+          const currentSocket = getCallSocket();
+          if (currentSocket && currentSocket.connected) {
+            console.log(
+              "[CALL_PAGE] Socket is connected despite timeout, proceeding",
+            );
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        }, 6000);
+
+        // Add the event listener
+        window.addEventListener(
+          "call:socket:ready",
+          socketReadyHandler as EventListener,
+        );
+      });
+
+      console.log(
+        `[CALL_PAGE] Socket ready status: ${socketReady}, initializing WebRTC`,
+      );
+
+      // Final check before initializing WebRTC
+      socket = getCallSocket();
+      if (!socket || !socket.connected) {
+        console.warn(
+          "[CALL_PAGE] Socket still not connected before WebRTC initialization",
+        );
+      }
+
+      // Initialize WebRTC with a slight delay to ensure socket is stable
+      setTimeout(() => {
+        initWebRTC();
+      }, 500);
+    } catch (error) {
+      console.error("[CALL_PAGE] Error waiting for socket:", error);
+      // Initialize WebRTC anyway as a fallback, but with a delay
+      console.log(
+        "[CALL_PAGE] Initializing WebRTC despite socket error after delay",
+      );
+      setTimeout(() => {
+        initWebRTC();
+      }, 1000);
+    }
+  };
+
+  // Add a listener for the socket needed event and monitor socket connection
+  useEffect(() => {
+    if (!userId) return;
+
+    const handleSocketNeeded = (event: CustomEvent) => {
+      console.log(
+        "[CALL_PAGE] Received webrtc:socket:needed event",
+        event.detail,
+      );
+
+      // Check if we already have a socket
+      import("@/lib/callSocket").then(
+        async ({ getCallSocket, ensureCallSocket }) => {
+          const socket = getCallSocket();
+
+          if (socket && socket.connected) {
+            console.log(
+              "[CALL_PAGE] Socket already connected, no need to initialize",
+            );
+            return;
+          }
+
+          // Initialize the socket
+          console.log(
+            "[CALL_PAGE] Initializing socket in response to socket needed event",
+          );
+          const { useAuthStore } = await import("@/stores/authStore");
+          const token = useAuthStore.getState().accessToken;
+
+          if (!token) {
+            console.warn(
+              "[CALL_PAGE] No token available for socket initialization",
+            );
+            return;
+          }
+
+          // Initialize the socket
+          try {
+            const newSocket = await ensureCallSocket(true);
+
+            if (newSocket) {
+              console.log(
+                "[CALL_PAGE] Socket initialized successfully in response to socket needed event",
+              );
+
+              // Dispatch an event to notify that the socket is ready
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("call:socket:ready", {
+                    detail: {
+                      socketId: newSocket.id,
+                      timestamp: new Date().toISOString(),
+                    },
+                  }),
+                );
+                console.log("[CALL_PAGE] Dispatched call:socket:ready event");
+              } catch (eventError) {
+                console.error(
+                  "[CALL_PAGE] Error dispatching socket ready event:",
+                  eventError,
+                );
+              }
+            } else {
+              console.error(
+                "[CALL_PAGE] Failed to initialize socket in response to socket needed event",
+              );
+            }
+          } catch (error) {
+            console.error("[CALL_PAGE] Error initializing socket:", error);
+          }
+        },
+      );
+    };
+
+    // Set up a socket connection monitor
+    let socketMonitorInterval: NodeJS.Timeout | null = null;
+
+    const startSocketMonitor = async () => {
+      // Clear any existing interval
+      if (socketMonitorInterval) {
+        clearInterval(socketMonitorInterval);
+      }
+
+      // Set up a new interval to check socket connection
+      socketMonitorInterval = setInterval(async () => {
+        try {
+          const { getCallSocket, ensureCallSocket } = await import(
+            "@/lib/callSocket"
+          );
+          const socket = getCallSocket();
+
+          // Only check if we're in a connected call
+          if (callStatus === "connected") {
+            if (!socket || !socket.connected) {
+              console.warn(
+                "[CALL_PAGE] Socket disconnected during active call, attempting to reconnect",
+              );
+
+              // Check if we're in cleanup mode
+              const isCleaningUp =
+                sessionStorage.getItem("webrtc_cleaning_up") === "true";
+              if (isCleaningUp) {
+                console.log(
+                  "[CALL_PAGE] Not reconnecting socket because cleanup is in progress",
+                );
+                return;
+              }
+
+              // Get token for reconnection
+              const { useAuthStore } = await import("@/stores/authStore");
+              const token = useAuthStore.getState().accessToken;
+
+              if (token) {
+                console.log(
+                  "[CALL_PAGE] Attempting to reconnect socket during active call",
+                );
+                const newSocket = await ensureCallSocket(true);
+
+                if (newSocket && newSocket.connected) {
+                  console.log(
+                    "[CALL_PAGE] Successfully reconnected socket during active call",
+                  );
+
+                  // Dispatch an event to notify that the socket is ready
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent("call:socket:ready", {
+                        detail: {
+                          socketId: newSocket.id,
+                          timestamp: new Date().toISOString(),
+                          isReconnect: true,
+                        },
+                      }),
+                    );
+                    console.log(
+                      "[CALL_PAGE] Dispatched call:socket:ready event after reconnection",
+                    );
+                  } catch (eventError) {
+                    console.error(
+                      "[CALL_PAGE] Error dispatching socket ready event:",
+                      eventError,
+                    );
+                  }
+                } else {
+                  console.error(
+                    "[CALL_PAGE] Failed to reconnect socket during active call",
+                  );
+                }
+              }
+            } else {
+              // Socket is connected, log this occasionally (every 5 checks)
+              if (Math.random() < 0.2) {
+                console.log(
+                  "[CALL_PAGE] Socket connection verified during active call",
+                );
+              }
+            }
+          }
+        } catch (error) {
+          console.error("[CALL_PAGE] Error in socket monitor:", error);
+        }
+      }, 15000); // Check every 15 seconds
+    };
+
+    // Start the socket monitor
+    startSocketMonitor();
+
+    // Add the event listener
+    window.addEventListener(
+      "webrtc:socket:needed",
+      handleSocketNeeded as EventListener,
+    );
+
+    // Return cleanup function
+    return () => {
+      window.removeEventListener(
+        "webrtc:socket:needed",
+        handleSocketNeeded as EventListener,
+      );
+
+      // Clear the socket monitor interval
+      if (socketMonitorInterval) {
+        clearInterval(socketMonitorInterval);
+        socketMonitorInterval = null;
+      }
+    };
+  }, [userId, callStatus]);
+
+  // Main call page setup
   useEffect(() => {
     if (!userId) return;
 
     console.log(`[CALL_PAGE] Call page loaded for room ${userId}`);
 
+    // Initialize socket connection for this call page only
+    // This ensures we don't have socket connections in the main app
+    const initializeSocketForCallPage = async () => {
+      try {
+        // Import socket modules
+        const socketModule = await import("@/lib/socket");
+        const callSocketModule = await import("@/lib/callSocket");
+        const { useAuthStore } = await import("@/stores/authStore");
+
+        const token = useAuthStore.getState().accessToken;
+        if (!token) {
+          console.warn(
+            "[CALL_PAGE] No token available for socket initialization",
+          );
+          return null;
+        }
+
+        // Set up main socket first
+        console.log("[CALL_PAGE] Setting up main socket for call page");
+        socketModule.setupSocket(token);
+
+        // Then ensure call socket is initialized with retry logic
+        console.log("[CALL_PAGE] Ensuring call socket for call page");
+        let callSocket: any = null;
+        let attempts = 0;
+        const maxAttempts = 3;
+
+        while (!callSocket && attempts < maxAttempts) {
+          attempts++;
+          try {
+            console.log(
+              `[CALL_PAGE] Call socket initialization attempt ${attempts}/${maxAttempts}`,
+            );
+            callSocket = await callSocketModule.ensureCallSocket(true);
+
+            if (callSocket) {
+              console.log("[CALL_PAGE] Call socket initialized successfully");
+
+              // Store the socket ID in sessionStorage for debugging
+              try {
+                if (callSocket.id) {
+                  sessionStorage.setItem("lastCallSocketId", callSocket.id);
+                  console.log(
+                    `[CALL_PAGE] Stored call socket ID in sessionStorage: ${callSocket.id}`,
+                  );
+                }
+              } catch (storageError) {
+                console.warn(
+                  "[CALL_PAGE] Error storing socket ID in sessionStorage:",
+                  storageError,
+                );
+              }
+
+              // Wait a moment to ensure socket is stable
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+
+              // Verify socket is still connected
+              if (
+                callSocket &&
+                typeof callSocket.connected !== "undefined" &&
+                !callSocket.connected
+              ) {
+                console.warn(
+                  "[CALL_PAGE] Call socket disconnected immediately after initialization",
+                );
+                callSocket = null; // Reset to try again
+              } else {
+                console.log(
+                  "[CALL_PAGE] Call socket connection verified and stable",
+                );
+
+                // Emit a test event to verify the socket is working properly
+                try {
+                  callSocket.emit("ping", { timestamp: Date.now() });
+                  console.log("[CALL_PAGE] Test ping event sent successfully");
+                } catch (pingError) {
+                  console.error(
+                    "[CALL_PAGE] Error sending test ping event:",
+                    pingError,
+                  );
+                }
+              }
+            } else {
+              console.warn("[CALL_PAGE] ensureCallSocket returned null");
+              // Wait before retry
+              await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
+          } catch (socketError) {
+            console.error(
+              `[CALL_PAGE] Error in call socket initialization attempt ${attempts}:`,
+              socketError,
+            );
+            // Wait before retry
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+          }
+        }
+
+        if (callSocket) {
+          console.log(
+            "[CALL_PAGE] Socket initialization complete for call page",
+          );
+
+          // Dispatch an event to notify that the socket is ready
+          try {
+            window.dispatchEvent(
+              new CustomEvent("call:socket:ready", {
+                detail: {
+                  socketId: callSocket.id,
+                  timestamp: new Date().toISOString(),
+                },
+              }),
+            );
+            console.log("[CALL_PAGE] Dispatched call:socket:ready event");
+          } catch (eventError) {
+            console.error(
+              "[CALL_PAGE] Error dispatching socket ready event:",
+              eventError,
+            );
+          }
+
+          return callSocket;
+        } else {
+          console.error(
+            "[CALL_PAGE] Failed to initialize call socket after multiple attempts",
+          );
+          return null;
+        }
+      } catch (error) {
+        console.error(
+          "[CALL_PAGE] Error initializing sockets for call page:",
+          error,
+        );
+        return null;
+      }
+    };
+
+    // Initialize sockets
+    initializeSocketForCallPage();
+
     // Store important call information in sessionStorage
     if (callId) {
       console.log(`[CALL_PAGE] Storing callId in sessionStorage: ${callId}`);
-      sessionStorage.setItem("currentCallId", callId);
+      sessionStorage.setItem("currentCallId", callId || "");
     }
 
     console.log(`[CALL_PAGE] Storing roomId in sessionStorage: ${userId}`);
@@ -127,7 +580,7 @@ function CallPageContent({ userId }: { userId: string }) {
       console.log(
         `[CALL_PAGE] Storing targetId in sessionStorage: ${targetId}`,
       );
-      sessionStorage.setItem("callTargetId", targetId);
+      sessionStorage.setItem("callTargetId", targetId || "");
     }
 
     // Store call direction
@@ -205,8 +658,76 @@ function CallPageContent({ userId }: { userId: string }) {
             );
 
             if (result.success) {
-              // Initialize WebRTC but stay in waiting state
-              initWebRTC();
+              // Wait for socket to be ready before initializing WebRTC
+              console.log(
+                "[CALL_PAGE] Waiting for socket to be ready before initializing WebRTC",
+              );
+
+              // Wait for the socket initialization to complete
+              try {
+                // Wait for socket to be ready (either from our initialization or from an event)
+                const waitForSocket = async () => {
+                  // First check if we have a socket ready event
+                  return new Promise<boolean>((resolve) => {
+                    // Set up a listener for the socket ready event
+                    const socketReadyHandler = () => {
+                      console.log("[CALL_PAGE] Received socket ready event");
+                      document.removeEventListener(
+                        "call:socket:ready",
+                        socketReadyHandler,
+                      );
+                      resolve(true);
+                    };
+
+                    // Set a timeout in case the event doesn't fire
+                    const timeoutId = setTimeout(() => {
+                      document.removeEventListener(
+                        "call:socket:ready",
+                        socketReadyHandler,
+                      );
+                      console.log(
+                        "[CALL_PAGE] Socket ready event timeout, proceeding anyway",
+                      );
+                      resolve(false);
+                    }, 5000);
+
+                    // Add the event listener
+                    document.addEventListener(
+                      "call:socket:ready",
+                      socketReadyHandler,
+                    );
+
+                    // Check if we already have a socket
+                    import("@/lib/callSocket").then(({ getCallSocket }) => {
+                      const socket = getCallSocket();
+                      if (socket && socket.connected) {
+                        console.log(
+                          "[CALL_PAGE] Socket already connected, no need to wait",
+                        );
+                        clearTimeout(timeoutId);
+                        document.removeEventListener(
+                          "call:socket:ready",
+                          socketReadyHandler,
+                        );
+                        resolve(true);
+                      }
+                    });
+                  });
+                };
+
+                await waitForSocket();
+
+                // Initialize WebRTC but stay in waiting state
+                console.log("[CALL_PAGE] Socket is ready, initializing WebRTC");
+                initWebRTC();
+              } catch (error) {
+                console.error("[CALL_PAGE] Error waiting for socket:", error);
+                // Initialize WebRTC anyway as a fallback
+                console.log(
+                  "[CALL_PAGE] Initializing WebRTC despite socket error",
+                );
+                initWebRTC();
+              }
             } else {
               setCallStatus("ended");
             }
@@ -219,11 +740,18 @@ function CallPageContent({ userId }: { userId: string }) {
           }
         });
       } else {
-        // If we already have a callId, just initialize WebRTC
+        // If we already have a callId, wait for socket before initializing WebRTC
         console.log(
           `[CALL_PAGE] Using existing callId=${callId} from URL params`,
         );
-        initWebRTC();
+
+        // Wait for socket to be ready before initializing WebRTC
+        console.log(
+          "[CALL_PAGE] Waiting for socket to be ready before initializing WebRTC",
+        );
+
+        // Wait for the socket initialization to complete
+        waitForSocketAndInitWebRTC();
       }
     }
     // Special handling for recent navigations (likely from incoming call page)
@@ -232,17 +760,25 @@ function CallPageContent({ userId }: { userId: string }) {
         "[CALL_PAGE] This appears to be a recently accepted incoming call, initializing WebRTC immediately",
       );
 
-      // For recently accepted calls, we should initialize WebRTC right away
-      console.log("[CALL_PAGE] Initializing WebRTC for recently accepted call");
-      initWebRTC();
+      // Wait for socket to be ready before initializing WebRTC
+      console.log(
+        "[CALL_PAGE] Waiting for socket to be ready before initializing WebRTC",
+      );
 
-      // Also update the call status to ensure UI shows correctly
-      if (callStatus === "waiting") {
-        console.log(
-          "[CALL_PAGE] Updating call status to connecting for recently accepted call",
-        );
-        setCallStatus("connecting");
-      }
+      // Wait for the socket initialization to complete
+      const waitForSocketAndUpdateStatus = async () => {
+        await waitForSocketAndInitWebRTC();
+
+        // Also update the call status to ensure UI shows correctly
+        if (callStatus === "waiting") {
+          console.log(
+            "[CALL_PAGE] Updating call status to connecting for recently accepted call",
+          );
+          setCallStatus("connecting");
+        }
+      };
+
+      waitForSocketAndUpdateStatus();
     } else {
       // For other incoming calls or reconnections, check active call
       console.log("[CALL_PAGE] This is an incoming call or reconnection");
@@ -257,21 +793,27 @@ function CallPageContent({ userId }: { userId: string }) {
           if (result.success) {
             // We have an active call, proceed with WebRTC initialization
             console.log(
-              "[CALL_PAGE] Proceeding with WebRTC initialization for active call",
+              "[CALL_PAGE] Active call found, waiting for socket before WebRTC initialization",
             );
-            initWebRTC();
+
+            // Wait for socket to be ready before initializing WebRTC
+            waitForSocketAndInitWebRTC();
           } else {
             console.log(
-              "[CALL_PAGE] No active call found, but continuing anyway",
+              "[CALL_PAGE] No active call found, but continuing with socket check anyway",
             );
-            initWebRTC();
+
+            // Wait for socket to be ready before initializing WebRTC
+            waitForSocketAndInitWebRTC();
           }
         } else {
           console.warn("[CALL_PAGE] No token available to check active call");
           console.log(
-            "[CALL_PAGE] Proceeding with WebRTC initialization anyway",
+            "[CALL_PAGE] Proceeding with WebRTC initialization anyway after socket check",
           );
-          initWebRTC();
+
+          // Wait for socket to be ready before initializing WebRTC
+          waitForSocketAndInitWebRTC();
         }
       });
     }
@@ -285,12 +827,48 @@ function CallPageContent({ userId }: { userId: string }) {
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
+
     // Return cleanup function
     return () => {
-      console.log("[CALL_PAGE] Cleaning up event handlers");
+      console.log("[CALL_PAGE] Cleaning up event handlers and resources");
       cleanupCallEventHandlers();
       cleanupRemoteStreamHandlers();
       window.removeEventListener("beforeunload", handleBeforeUnload);
+
+      // Clean up WebRTC resources
+      const cleanupWebRTC = async () => {
+        try {
+          console.log("[CALL_PAGE] Cleaning up WebRTC resources");
+          const { cleanup } = await import("@/utils/webrtc/cleanup");
+          await cleanup();
+          console.log("[CALL_PAGE] WebRTC cleanup completed successfully");
+        } catch (error) {
+          console.error("[CALL_PAGE] Error during WebRTC cleanup:", error);
+        }
+      };
+
+      // Clean up socket connections
+      const cleanupSockets = async () => {
+        try {
+          console.log("[CALL_PAGE] Cleaning up socket connections");
+          const callSocketModule = await import("@/lib/callSocket");
+          const socket = callSocketModule.getCallSocket();
+
+          if (socket) {
+            console.log("[CALL_PAGE] Disconnecting call socket");
+            socket.disconnect();
+            socket.removeAllListeners();
+          }
+
+          console.log("[CALL_PAGE] Socket cleanup completed");
+        } catch (error) {
+          console.error("[CALL_PAGE] Error during socket cleanup:", error);
+        }
+      };
+
+      // Execute cleanup
+      cleanupWebRTC();
+      cleanupSockets();
 
       // Clean up session storage
       try {

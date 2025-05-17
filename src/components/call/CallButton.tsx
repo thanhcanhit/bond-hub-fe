@@ -117,30 +117,7 @@ export default function CallButton({
         handleCallRejected as EventListener,
       );
 
-      // Thiết lập timeout để tự động hủy cuộc gọi nếu không có phản hồi
-      setTimeout(() => {
-        // Kiểm tra xem cuộc gọi còn đang chờ không
-        const pendingCall = localStorage.getItem("pendingCall");
-        if (pendingCall) {
-          const callData = JSON.parse(pendingCall);
-          if (callData.callId === currentCall.id) {
-            // Hủy cuộc gọi nếu vẫn đang chờ
-            toast.error("Không có phản hồi từ người nhận");
-
-            // Kết thúc cuộc gọi
-            useCallStore.getState().endCall().catch(console.error);
-
-            // Xóa thông tin cuộc gọi đang chờ
-            localStorage.removeItem("pendingCall");
-
-            // Xóa event listener
-            window.removeEventListener(
-              "call:rejected",
-              handleCallRejected as EventListener,
-            );
-          }
-        }
-      }, 60000); // Timeout sau 60 giây
+      // Không sử dụng timeout tự động hủy cuộc gọi
     } catch (error) {
       console.error("Error initiating call:", error);
       toast.error("Đã xảy ra lỗi khi khởi tạo cuộc gọi");
@@ -239,30 +216,7 @@ export default function CallButton({
         handleCallRejected as EventListener,
       );
 
-      // Thiết lập timeout để tự động hủy cuộc gọi nếu không có phản hồi
-      setTimeout(() => {
-        // Kiểm tra xem cuộc gọi còn đang chờ không
-        const pendingCall = localStorage.getItem("pendingCall");
-        if (pendingCall) {
-          const callData = JSON.parse(pendingCall);
-          if (callData.callId === currentCall.id) {
-            // Hủy cuộc gọi nếu vẫn đang chờ
-            toast.error("Không có phản hồi từ người nhận");
-
-            // Kết thúc cuộc gọi
-            useCallStore.getState().endCall().catch(console.error);
-
-            // Xóa thông tin cuộc gọi đang chờ
-            localStorage.removeItem("pendingCall");
-
-            // Xóa event listener
-            window.removeEventListener(
-              "call:rejected",
-              handleCallRejected as EventListener,
-            );
-          }
-        }
-      }, 60000); // Timeout sau 60 giây
+      // Không sử dụng timeout tự động hủy cuộc gọi
     } catch (error) {
       console.error("Error initiating video call:", error);
       toast.error("Đã xảy ra lỗi khi khởi tạo cuộc gọi video");

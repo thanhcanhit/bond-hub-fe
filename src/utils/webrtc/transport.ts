@@ -83,8 +83,98 @@ export async function createSendTransport(roomId: string): Promise<void> {
   isSendTransportCreating = true;
 
   try {
+    // Check if socket and device are initialized, with retry logic
     if (!state.socket || !state.device) {
-      throw new Error("Socket or device not initialized");
+      console.log(
+        "[WEBRTC] Socket or device not initialized, attempting to recover",
+      );
+
+      // Try to recover the socket connection if needed
+      if (!state.socket) {
+        console.log("[WEBRTC] Socket is missing, attempting to reconnect");
+        try {
+          // Import socket modules
+          const callSocketModule = await import("@/lib/callSocket");
+          const socketModule = await import("@/lib/socket");
+          const { useAuthStore } = await import("@/stores/authStore");
+
+          const token = useAuthStore.getState().accessToken;
+          if (!token) {
+            console.warn("[WEBRTC] No token available for socket recovery");
+            throw new Error(
+              "Socket not initialized and no token available for recovery",
+            );
+          }
+
+          // Set up main socket first
+          console.log("[WEBRTC] Setting up main socket for recovery");
+          socketModule.setupSocket(token);
+
+          // Then ensure call socket is initialized
+          console.log("[WEBRTC] Ensuring call socket for recovery");
+          const callSocket = await callSocketModule.ensureCallSocket(true);
+
+          if (callSocket) {
+            console.log("[WEBRTC] Successfully recovered call socket");
+            state.socket = callSocket;
+
+            // Wait a moment for the socket to stabilize
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          } else {
+            throw new Error("Failed to recover socket connection");
+          }
+        } catch (socketError) {
+          console.error("[WEBRTC] Socket recovery failed:", socketError);
+          throw new Error("Socket not initialized and recovery failed");
+        }
+      }
+
+      // Try to recover the device if needed
+      if (!state.device) {
+        console.log("[WEBRTC] Device is missing, attempting to recreate");
+        try {
+          const { Device } = await import("mediasoup-client");
+          state.device = new Device();
+          console.log("[WEBRTC] Successfully created new device");
+
+          // Check if we have stored RTP capabilities
+          const storedCapabilities = sessionStorage.getItem("rtpCapabilities");
+          if (storedCapabilities) {
+            try {
+              const capabilities = JSON.parse(storedCapabilities);
+              console.log(
+                "[WEBRTC] Loading device with stored RTP capabilities",
+              );
+              await state.device.load({ routerRtpCapabilities: capabilities });
+              console.log(
+                "[WEBRTC] Successfully loaded device with stored capabilities",
+              );
+            } catch (loadError) {
+              console.error(
+                "[WEBRTC] Error loading device with stored capabilities:",
+                loadError,
+              );
+              throw new Error(
+                "Device recovery failed: could not load with stored capabilities",
+              );
+            }
+          } else {
+            throw new Error(
+              "Device recovery failed: no stored RTP capabilities",
+            );
+          }
+        } catch (deviceError) {
+          console.error("[WEBRTC] Device recovery failed:", deviceError);
+          throw new Error("Device not initialized and recovery failed");
+        }
+      }
+
+      // Final check after recovery attempts
+      if (!state.socket || !state.device) {
+        throw new Error(
+          "Socket or device not initialized after recovery attempts",
+        );
+      }
     }
 
     // Safely close existing transport if it exists
@@ -353,8 +443,98 @@ export async function createRecvTransport(roomId: string): Promise<void> {
   isRecvTransportCreating = true;
 
   try {
+    // Check if socket and device are initialized, with retry logic
     if (!state.socket || !state.device) {
-      throw new Error("Socket or device not initialized");
+      console.log(
+        "[WEBRTC] Socket or device not initialized, attempting to recover",
+      );
+
+      // Try to recover the socket connection if needed
+      if (!state.socket) {
+        console.log("[WEBRTC] Socket is missing, attempting to reconnect");
+        try {
+          // Import socket modules
+          const callSocketModule = await import("@/lib/callSocket");
+          const socketModule = await import("@/lib/socket");
+          const { useAuthStore } = await import("@/stores/authStore");
+
+          const token = useAuthStore.getState().accessToken;
+          if (!token) {
+            console.warn("[WEBRTC] No token available for socket recovery");
+            throw new Error(
+              "Socket not initialized and no token available for recovery",
+            );
+          }
+
+          // Set up main socket first
+          console.log("[WEBRTC] Setting up main socket for recovery");
+          socketModule.setupSocket(token);
+
+          // Then ensure call socket is initialized
+          console.log("[WEBRTC] Ensuring call socket for recovery");
+          const callSocket = await callSocketModule.ensureCallSocket(true);
+
+          if (callSocket) {
+            console.log("[WEBRTC] Successfully recovered call socket");
+            state.socket = callSocket;
+
+            // Wait a moment for the socket to stabilize
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          } else {
+            throw new Error("Failed to recover socket connection");
+          }
+        } catch (socketError) {
+          console.error("[WEBRTC] Socket recovery failed:", socketError);
+          throw new Error("Socket not initialized and recovery failed");
+        }
+      }
+
+      // Try to recover the device if needed
+      if (!state.device) {
+        console.log("[WEBRTC] Device is missing, attempting to recreate");
+        try {
+          const { Device } = await import("mediasoup-client");
+          state.device = new Device();
+          console.log("[WEBRTC] Successfully created new device");
+
+          // Check if we have stored RTP capabilities
+          const storedCapabilities = sessionStorage.getItem("rtpCapabilities");
+          if (storedCapabilities) {
+            try {
+              const capabilities = JSON.parse(storedCapabilities);
+              console.log(
+                "[WEBRTC] Loading device with stored RTP capabilities",
+              );
+              await state.device.load({ routerRtpCapabilities: capabilities });
+              console.log(
+                "[WEBRTC] Successfully loaded device with stored capabilities",
+              );
+            } catch (loadError) {
+              console.error(
+                "[WEBRTC] Error loading device with stored capabilities:",
+                loadError,
+              );
+              throw new Error(
+                "Device recovery failed: could not load with stored capabilities",
+              );
+            }
+          } else {
+            throw new Error(
+              "Device recovery failed: no stored RTP capabilities",
+            );
+          }
+        } catch (deviceError) {
+          console.error("[WEBRTC] Device recovery failed:", deviceError);
+          throw new Error("Device not initialized and recovery failed");
+        }
+      }
+
+      // Final check after recovery attempts
+      if (!state.socket || !state.device) {
+        throw new Error(
+          "Socket or device not initialized after recovery attempts",
+        );
+      }
     }
 
     // Safely close existing transport if it exists

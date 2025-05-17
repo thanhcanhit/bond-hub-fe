@@ -64,9 +64,42 @@ export const initCallSocket = (
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 20000,
+      timeout: 30000, // Increased timeout to 30 seconds
+      pingTimeout: 60000, // Increased ping timeout to 60 seconds
+      pingInterval: 25000, // Set ping interval to 25 seconds
       transports: ["websocket"],
       forceNew: true, // Always create a new connection for the call namespace
+    });
+
+    // Set up a keep-alive interval to prevent timeout disconnections
+    let keepAliveInterval: NodeJS.Timeout | null = null;
+
+    // Start the keep-alive when connected
+    callSocket.on("connect", () => {
+      // Clear any existing interval
+      if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+      }
+
+      // Set up a new keep-alive interval
+      keepAliveInterval = setInterval(() => {
+        if (callSocket && callSocket.connected) {
+          console.log("[WEBRTC] Sending keep-alive ping to prevent timeout");
+          callSocket.emit("ping", { timestamp: Date.now() });
+        } else if (keepAliveInterval) {
+          // Clear the interval if socket is no longer connected
+          clearInterval(keepAliveInterval);
+          keepAliveInterval = null;
+        }
+      }, 30000); // Send a ping every 30 seconds
+    });
+
+    // Clear the keep-alive interval when disconnected
+    callSocket.on("disconnect", () => {
+      if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+        keepAliveInterval = null;
+      }
     });
   } catch (error) {
     console.error("[WEBRTC] Error creating call socket:", error);
@@ -89,14 +122,36 @@ export const initCallSocket = (
 
     // Try to reconnect after a delay if the disconnect wasn't intentional
     if (reason !== "io client disconnect") {
+      // Check if we're in cleanup mode
+      try {
+        const isCleaningUp =
+          sessionStorage.getItem("webrtc_cleaning_up") === "true";
+        const intentionalDisconnect =
+          sessionStorage.getItem("intentional_disconnect") === "true";
+
+        if (isCleaningUp || intentionalDisconnect) {
+          console.log(
+            "[WEBRTC] Not reconnecting after disconnect because cleanup is in progress or disconnect was intentional",
+          );
+          return;
+        }
+      } catch (storageError) {
+        console.warn("[WEBRTC] Error checking cleanup status:", storageError);
+      }
+
+      // Add a longer delay before reconnection attempt
       setTimeout(() => {
         console.log(
           "[WEBRTC] Attempting to reconnect call socket after disconnect...",
         );
-        if (callSocket) {
+        if (callSocket && !callSocket.connected) {
           callSocket.connect();
         }
-      }, 2000);
+      }, 3000);
+    } else {
+      console.log(
+        "[WEBRTC] Not reconnecting after intentional disconnect (io client disconnect)",
+      );
     }
   });
 
@@ -112,6 +167,21 @@ export const initCallSocket = (
         callSocket.connect();
       }
     }, 2000);
+  });
+
+  // Add a pong listener to confirm server connection is active
+  callSocket.on("pong", (data) => {
+    // Only log occasionally to avoid console spam
+    if (Math.random() < 0.2) {
+      console.log("[WEBRTC] Received pong from server:", data);
+    }
+
+    // Store the last pong timestamp in sessionStorage
+    try {
+      sessionStorage.setItem("last_socket_pong", Date.now().toString());
+    } catch (storageError) {
+      // Ignore storage errors
+    }
   });
 
   // Track active calls to prevent duplicate notifications
