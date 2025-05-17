@@ -41,41 +41,30 @@ export async function initiateCall(
     // Đảm bảo token không có khoảng trắng ở đầu hoặc cuối
     const cleanToken = token.trim();
 
-    // Đảm bảo API URL không bị undefined
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-    console.log(`Using API URL: ${apiUrl}`);
+    // Import axios instance
+    const { createAxiosInstance } = await import("@/lib/axios");
 
-    // Log thông tin request để debug
-    console.log(`Making request to ${apiUrl}/api/v1/calls`);
-    console.log(`Authorization header: Bearer ${cleanToken}`);
+    // Create a custom axios instance with the token
+    const axiosInstance = createAxiosInstance(cleanToken);
 
     // Lấy ID người dùng hiện tại từ token JWT
     const initiatorId = extractUserIdFromToken(cleanToken);
     console.log(`Extracted initiatorId from token: ${initiatorId}`);
 
+    // Log thông tin request để debug
+    console.log(`Making request to /calls using axios`);
+    console.log(
+      `Request body: { receiverId: ${receiverId}, type: ${type}, initiatorId: ${initiatorId} }`,
+    );
+
     // Gửi request với initiatorId
-    const response = await fetch(`${apiUrl}/api/v1/calls`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${cleanToken}`,
-      },
-      body: JSON.stringify({
-        receiverId,
-        type,
-        initiatorId, // Thêm initiatorId vào request
-      }),
+    const response = await axiosInstance.post("/calls", {
+      receiverId,
+      type,
+      initiatorId, // Thêm initiatorId vào request
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      return {
-        success: false,
-        message: errorData.message || "Failed to create call",
-      };
-    }
-
-    const data = await response.json();
+    const data = response.data;
     return {
       success: true,
       callId: data.id,
@@ -95,7 +84,9 @@ export async function initiateCall(
  * Accept an incoming call
  * @param callId ID of the call to accept
  * @param token Authentication token (passed from client)
- * @returns Success status
+ * @param initiatorId Optional ID of the call initiator
+ * @param roomId Optional room ID for the call
+ * @returns Success status and call details
  */
 export async function acceptCall(
   callId: string,
@@ -117,17 +108,27 @@ export async function acceptCall(
     // Đảm bảo token không có khoảng trắng ở đầu hoặc cuối
     const cleanToken = token.trim();
 
-    // Đảm bảo API URL không bị undefined
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+    // Import axios instance
+    const { createAxiosInstance } = await import("@/lib/axios");
+
+    // Create a custom axios instance with the token
+    const axiosInstance = createAxiosInstance(cleanToken);
 
     // Extract user ID from token
     const userId = extractUserIdFromToken(cleanToken);
     console.log(`Extracted userId from token for call acceptance: ${userId}`);
 
-    // Prepare request body with all available information
+    if (!userId) {
+      console.error("Failed to extract user ID from token");
+      return { success: false, message: "Invalid authentication token" };
+    }
+
+    // Prepare request body with minimal required information
+    // The backend will use the user ID from the token for validation
     const requestBody: any = {
       callId,
-      userId, // Include the user ID in the request
+      // Only include userId from the token - the backend will validate this
+      userId,
     };
 
     // Add optional parameters if provided
@@ -142,88 +143,130 @@ export async function acceptCall(
     }
 
     // Log request details for debugging
-    console.log(`Making request to ${apiUrl}/api/v1/calls/join`);
-    console.log(`Authorization header: Bearer ${cleanToken}`);
+    console.log(`Making request to /calls/join using axios`);
     console.log(`Request body:`, requestBody);
 
-    const response = await fetch(`${apiUrl}/api/v1/calls/join`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${cleanToken}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
+    try {
+      const response = await axiosInstance.post("/calls/join", requestBody);
+      const data = response.data;
 
-    if (!response.ok) {
-      const errorData = await response.json();
+      // Thêm thông tin về loại cuộc gọi nếu có
+      const callType = data.type || "AUDIO";
+
+      // Tạo URL cuộc gọi dựa trên loại cuộc gọi
+      const callUrl =
+        callType === "VIDEO"
+          ? `/video-call/${data.roomId}`
+          : `/call/${data.roomId}`;
+
+      // Dispatch a global event to notify that the call has been accepted
+      // This helps ensure that all open windows (including the caller's window) are notified
+      if (typeof window !== "undefined") {
+        try {
+          console.log(
+            `Dispatching call:accepted event for call ID: ${callId}, roomId: ${data.roomId}`,
+          );
+          window.dispatchEvent(
+            new CustomEvent("call:accepted", {
+              detail: {
+                callId,
+                roomId: data.roomId,
+                initiatorId: initiatorId || undefined,
+                receiverId: userId,
+                timestamp: new Date().toISOString(),
+              },
+            }),
+          );
+
+          // Also dispatch a participant joined event to ensure the UI updates
+          console.log(
+            `Dispatching call:participant:joined event for roomId: ${data.roomId}`,
+          );
+          window.dispatchEvent(
+            new CustomEvent("call:participant:joined", {
+              detail: {
+                roomId: data.roomId,
+                userId: userId,
+                timestamp: new Date().toISOString(),
+              },
+            }),
+          );
+        } catch (eventError) {
+          console.error(
+            "Error dispatching call acceptance events:",
+            eventError,
+          );
+          // Continue anyway, as this is just an additional notification mechanism
+        }
+      }
+
+      return {
+        success: true,
+        roomId: data.roomId,
+        type: callType,
+        callUrl: callUrl,
+        acceptedAt: new Date().toISOString(),
+      };
+    } catch (axiosError: any) {
+      // Extract error message from the response if available
+      let errorMessage =
+        axiosError.response?.data?.message ||
+        axiosError.message ||
+        "Failed to accept call";
+
+      // Log the detailed error information
+      console.error(`API error accepting call: ${errorMessage}`, {
+        status: axiosError.response?.status,
+        statusText: axiosError.response?.statusText,
+        data: axiosError.response?.data,
+        headers: axiosError.response?.headers,
+        config: {
+          url: axiosError.config?.url,
+          method: axiosError.config?.method,
+          baseURL: axiosError.config?.baseURL,
+        },
+      });
+
+      // Enhance error message for better user experience
+      if (axiosError.response?.status === 403) {
+        errorMessage = "User is not allowed to join this call";
+      } else if (axiosError.response?.status === 404) {
+        errorMessage = "Call not found or already ended";
+      } else if (axiosError.response?.status === 401) {
+        errorMessage = "Authentication failed. Please log in again";
+      }
+
+      // Dispatch an event to notify that the call acceptance failed
+      if (typeof window !== "undefined") {
+        try {
+          window.dispatchEvent(
+            new CustomEvent("call:error", {
+              detail: {
+                callId,
+                errorType: "accept_failed",
+                errorMessage,
+                timestamp: new Date().toISOString(),
+              },
+            }),
+          );
+          console.log("Dispatched call:error event for failed call acceptance");
+        } catch (eventError) {
+          console.error("Error dispatching call error event:", eventError);
+        }
+      }
+
       return {
         success: false,
-        message: errorData.message || "Failed to join call",
+        message: errorMessage,
       };
     }
-
-    const data = await response.json();
-
-    // Thêm thông tin về loại cuộc gọi nếu có
-    const callType = data.type || "AUDIO";
-
-    // Tạo URL cuộc gọi dựa trên loại cuộc gọi
-    const callUrl =
-      callType === "VIDEO"
-        ? `/video-call/${data.roomId}`
-        : `/call/${data.roomId}`;
-
-    // Dispatch a global event to notify that the call has been accepted
-    // This helps ensure that all open windows (including the caller's window) are notified
-    if (typeof window !== "undefined") {
-      try {
-        console.log(
-          `Dispatching call:accepted event for call ID: ${callId}, roomId: ${data.roomId}`,
-        );
-        window.dispatchEvent(
-          new CustomEvent("call:accepted", {
-            detail: {
-              callId,
-              roomId: data.roomId,
-              initiatorId: initiatorId || undefined,
-              receiverId: userId,
-              timestamp: new Date().toISOString(),
-            },
-          }),
-        );
-
-        // Also dispatch a participant joined event to ensure the UI updates
-        console.log(
-          `Dispatching call:participant:joined event for roomId: ${data.roomId}`,
-        );
-        window.dispatchEvent(
-          new CustomEvent("call:participant:joined", {
-            detail: {
-              roomId: data.roomId,
-              userId: userId,
-              timestamp: new Date().toISOString(),
-            },
-          }),
-        );
-      } catch (eventError) {
-        console.error("Error dispatching call acceptance events:", eventError);
-        // Continue anyway, as this is just an additional notification mechanism
-      }
-    }
-
-    return {
-      success: true,
-      roomId: data.roomId,
-      type: callType,
-      callUrl: callUrl,
-      acceptedAt: new Date().toISOString(),
-    };
   } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     console.error("Error accepting call:", error);
     return {
       success: false,
-      message: "Internal server error",
+      message: errorMessage,
     };
   }
 }
@@ -246,24 +289,16 @@ export async function rejectCall(callId: string, token: string) {
     // Đảm bảo token không có khoảng trắng ở đầu hoặc cuối
     const cleanToken = token.trim();
 
-    // Đảm bảo API URL không bị undefined
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+    // Import axios instance
+    const { createAxiosInstance } = await import("@/lib/axios");
 
-    const response = await fetch(`${apiUrl}/api/v1/calls/${callId}/reject`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${cleanToken}`,
-      },
-    });
+    // Create a custom axios instance with the token
+    const axiosInstance = createAxiosInstance(cleanToken);
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      return {
-        success: false,
-        message: errorData.message || "Failed to reject call",
-      };
-    }
+    // Log thông tin request để debug
+    console.log(`Making request to /calls/${callId}/reject using axios`);
+
+    await axiosInstance.post(`/calls/${callId}/reject`);
 
     return { success: true };
   } catch (error) {
@@ -298,44 +333,24 @@ export async function endCall(callId: string, token: string) {
     // Đảm bảo token không có khoảng trắng ở đầu hoặc cuối
     const cleanToken = token.trim();
 
-    // Đảm bảo API URL không bị undefined
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-    console.log(`Using API URL: ${apiUrl}`);
+    // Import axios instance
+    const { createAxiosInstance } = await import("@/lib/axios");
 
-    // Log thông tin request để debug
-    console.log(`Making request to ${apiUrl}/api/v1/calls/end`);
-    console.log(`Authorization header: Bearer ${cleanToken}`);
-    console.log(`Request body: { callId: ${callId} }`);
+    // Create a custom axios instance with the token
+    const axiosInstance = createAxiosInstance(cleanToken);
 
     // Extract user ID from token
     const userId = extractUserIdFromToken(cleanToken);
     console.log(`Extracted userId from token for ending call: ${userId}`);
 
     // Log request details for debugging
+    console.log(`Making request to /calls/end using axios`);
     console.log(`Request body: { callId: ${callId}, userId: ${userId} }`);
 
-    const response = await fetch(`${apiUrl}/api/v1/calls/end`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${cleanToken}`,
-      },
-      body: JSON.stringify({
-        callId,
-        userId, // Include the user ID in the request
-      }),
+    await axiosInstance.post("/calls/end", {
+      callId,
+      userId, // Include the user ID in the request
     });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error(
-        `Error ending call: ${errorData.message || "Unknown error"}`,
-      );
-      return {
-        success: false,
-        message: errorData.message || "Failed to end call",
-      };
-    }
 
     console.log("Call ended successfully");
 
@@ -386,40 +401,30 @@ export async function initiateGroupCall(
     // Đảm bảo token không có khoảng trắng ở đầu hoặc cuối
     const cleanToken = token.trim();
 
-    // Đảm bảo API URL không bị undefined
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+    // Import axios instance
+    const { createAxiosInstance } = await import("@/lib/axios");
 
-    // Log thông tin request để debug
-    console.log(`Making request to ${apiUrl}/api/v1/calls`);
-    console.log(`Authorization header: Bearer ${cleanToken}`);
+    // Create a custom axios instance with the token
+    const axiosInstance = createAxiosInstance(cleanToken);
 
     // Lấy ID người dùng hiện tại từ token JWT
     const initiatorId = extractUserIdFromToken(cleanToken);
     console.log(`Extracted initiatorId from token: ${initiatorId}`);
 
+    // Log thông tin request để debug
+    console.log(`Making request to /calls using axios for group call`);
+    console.log(
+      `Request body: { groupId: ${groupId}, type: ${type}, initiatorId: ${initiatorId} }`,
+    );
+
     // Gửi request với initiatorId
-    const response = await fetch(`${apiUrl}/api/v1/calls`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${cleanToken}`,
-      },
-      body: JSON.stringify({
-        groupId,
-        type,
-        initiatorId, // Thêm initiatorId vào request
-      }),
+    const response = await axiosInstance.post("/calls", {
+      groupId,
+      type,
+      initiatorId, // Thêm initiatorId vào request
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      return {
-        success: false,
-        message: errorData.message || "Failed to create group call",
-      };
-    }
-
-    const data = await response.json();
+    const data = response.data;
     return {
       success: true,
       callId: data.id,
@@ -446,64 +451,108 @@ export async function initiateGroupCall(
  * @param token Authentication token (passed from client)
  * @returns Success status and call details
  */
-export async function joinCall(callId: string, token: string) {
+export async function joinCall(
+  callId: string,
+  token: string,
+  alreadyAccepted: boolean = false,
+) {
   try {
-    console.log(`Joining call ${callId}`);
+    console.log(`Joining call ${callId}, alreadyAccepted: ${alreadyAccepted}`);
     console.log(`Token received: ${token ? "Token exists" : "No token"}`);
 
     if (!token) {
       return { success: false, message: "Unauthorized" };
     }
 
+    // Nếu cuộc gọi đã được chấp nhận trước đó, trả về thành công ngay lập tức
+    if (alreadyAccepted) {
+      console.log(
+        `Call ${callId} was already accepted, returning success without API call`,
+      );
+      return {
+        success: true,
+        roomId: callId, // Sử dụng callId làm roomId trong trường hợp này
+        type: "AUDIO", // Mặc định là AUDIO, có thể được ghi đè bởi dữ liệu từ sessionStorage
+      };
+    }
+
     // Đảm bảo token không có khoảng trắng ở đầu hoặc cuối
     const cleanToken = token.trim();
 
-    // Đảm bảo API URL không bị undefined
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+    // Import axios instance
+    const { createAxiosInstance } = await import("@/lib/axios");
+
+    // Create a custom axios instance with the token
+    const axiosInstance = createAxiosInstance(cleanToken);
 
     // Extract user ID from token
     const userId = extractUserIdFromToken(cleanToken);
     console.log(`Extracted userId from token for call join: ${userId}`);
 
-    // Prepare request body
+    if (!userId) {
+      console.error("Failed to extract user ID from token");
+      return { success: false, message: "Invalid authentication token" };
+    }
+
+    // Prepare request body with only the essential information
     const requestBody = {
       callId,
       userId,
     };
 
     // Log request details for debugging
-    console.log(`Making request to ${apiUrl}/api/v1/calls/join`);
-    console.log(`Authorization header: Bearer ${cleanToken}`);
+    console.log(`Making request to /calls/join using axios`);
     console.log(`Request body:`, requestBody);
 
-    const response = await fetch(`${apiUrl}/api/v1/calls/join`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${cleanToken}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
+    try {
+      const response = await axiosInstance.post("/calls/join", requestBody);
+      const data = response.data;
+      return {
+        success: true,
+        roomId: data.roomId,
+        type: data.type || "AUDIO",
+      };
+    } catch (axiosError: any) {
+      // Extract error message from the response if available
+      let errorMessage =
+        axiosError.response?.data?.message ||
+        axiosError.message ||
+        "Failed to join call";
 
-    if (!response.ok) {
-      const errorData = await response.json();
+      // Log the detailed error information
+      console.error(`API error joining call: ${errorMessage}`, {
+        status: axiosError.response?.status,
+        statusText: axiosError.response?.statusText,
+        data: axiosError.response?.data,
+        headers: axiosError.response?.headers,
+        config: {
+          url: axiosError.config?.url,
+          method: axiosError.config?.method,
+          baseURL: axiosError.config?.baseURL,
+        },
+      });
+
+      // Enhance error message for better user experience
+      if (axiosError.response?.status === 403) {
+        errorMessage = "User is not allowed to join this call";
+      } else if (axiosError.response?.status === 404) {
+        errorMessage = "Call not found or already ended";
+      } else if (axiosError.response?.status === 401) {
+        errorMessage = "Authentication failed. Please log in again";
+      }
+
       return {
         success: false,
-        message: errorData.message || "Failed to join call",
+        message: errorMessage,
       };
     }
-
-    const data = await response.json();
-    return {
-      success: true,
-      roomId: data.roomId,
-      type: data.type || "AUDIO",
-    };
   } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     console.error("Error joining call:", error);
     return {
       success: false,
-      message: "Internal server error",
+      message: errorMessage,
     };
   }
 }
@@ -526,8 +575,11 @@ export async function createCallRoom(callId: string, token: string) {
     // Đảm bảo token không có khoảng trắng ở đầu hoặc cuối
     const cleanToken = token.trim();
 
-    // Đảm bảo API URL không bị undefined
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+    // Import axios instance
+    const { createAxiosInstance } = await import("@/lib/axios");
+
+    // Create a custom axios instance with the token
+    const axiosInstance = createAxiosInstance(cleanToken);
 
     // Extract user ID from token
     const userId = extractUserIdFromToken(cleanToken);
@@ -540,28 +592,11 @@ export async function createCallRoom(callId: string, token: string) {
     };
 
     // Log request details for debugging
-    console.log(`Making request to ${apiUrl}/api/v1/calls/room`);
-    console.log(`Authorization header: Bearer ${cleanToken}`);
+    console.log(`Making request to /calls/room using axios`);
     console.log(`Request body:`, requestBody);
 
-    const response = await fetch(`${apiUrl}/api/v1/calls/room`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${cleanToken}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return {
-        success: false,
-        message: errorData.message || "Failed to create call room",
-      };
-    }
-
-    const data = await response.json();
+    const response = await axiosInstance.post("/calls/room", requestBody);
+    const data = response.data;
     return {
       success: true,
       roomId: data.roomId,
@@ -587,39 +622,36 @@ export async function getActiveCall(token: string) {
     // Đảm bảo token không có khoảng trắng ở đầu hoặc cuối
     const cleanToken = token.trim();
 
-    // Đảm bảo API URL không bị undefined
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+    // Import axios instance
+    const { createAxiosInstance } = await import("@/lib/axios");
+
+    // Create a custom axios instance with the token
+    const axiosInstance = createAxiosInstance(cleanToken);
 
     // Log thông tin request để debug
-    console.log(`Making request to ${apiUrl}/api/v1/calls/user/active`);
-    console.log(`Authorization header: Bearer ${cleanToken}`);
+    console.log(`Making request to /calls/user/active using axios`);
 
-    const response = await fetch(`${apiUrl}/api/v1/calls/user/active`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${cleanToken}`,
-      },
-    });
+    try {
+      const response = await axiosInstance.get("/calls/user/active");
+      const data = response.data;
 
-    if (!response.ok) {
-      if (response.status === 404) {
+      return {
+        success: true,
+        activeCall: data,
+      };
+    } catch (error: any) {
+      // Check if it's a 404 error (no active call)
+      if (error.response && error.response.status === 404) {
         // No active call is not an error
         return { success: true, activeCall: null };
       }
 
-      const errorData = await response.json();
+      // Other errors
       return {
         success: false,
-        message: errorData.message || "Failed to get active call",
+        message: error.response?.data?.message || "Failed to get active call",
       };
     }
-
-    const data = await response.json();
-    return {
-      success: true,
-      activeCall: data,
-    };
   } catch (error) {
     console.error("Error getting active call:", error);
     return {
