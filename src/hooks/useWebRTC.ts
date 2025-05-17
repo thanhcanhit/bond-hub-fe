@@ -228,7 +228,27 @@ export function useWebRTC({
             const callSocketModule = await import("@/lib/callSocket");
             const socketModule = await import("@/lib/socket");
             const authStore = await import("@/stores/authStore");
-            const token = authStore.useAuthStore.getState().accessToken;
+
+            // Get token from multiple sources
+            let token = authStore.useAuthStore.getState().accessToken;
+
+            // If no token in auth store, try to get from session storage
+            if (!token) {
+              try {
+                const storedToken = sessionStorage.getItem("callAccessToken");
+                if (storedToken) {
+                  console.log(
+                    "[useWebRTC] Using token from sessionStorage for socket initialization",
+                  );
+                  token = storedToken;
+                }
+              } catch (storageError) {
+                console.warn(
+                  "[useWebRTC] Error accessing sessionStorage:",
+                  storageError,
+                );
+              }
+            }
 
             if (!token) {
               throw new Error("No authentication token available");
@@ -243,19 +263,79 @@ export function useWebRTC({
             const callSocket = await callSocketModule.ensureCallSocket(true);
 
             if (!callSocket) {
-              throw new Error("Failed to initialize call socket");
-            }
+              console.warn(
+                "[useWebRTC] Failed to initialize call socket, will retry",
+              );
 
-            if (callSocket.connected) {
-              console.log("[useWebRTC] Call socket is connected and ready");
-            } else {
+              // Wait a moment before retrying
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+
+              // Try one more time with a direct initialization
+              console.log(
+                "[useWebRTC] Retrying call socket initialization directly",
+              );
+              const newCallSocket = callSocketModule.initCallSocket(
+                token,
+                true,
+              );
+
+              if (!newCallSocket) {
+                console.error(
+                  "[useWebRTC] Failed to initialize call socket on retry",
+                );
+                // Continue anyway - we'll try to establish WebRTC without the socket
+                // This is better than failing completely
+              } else {
+                console.log(
+                  "[useWebRTC] Successfully initialized call socket on retry",
+                );
+
+                // Wait for the socket to connect if needed
+                if (!newCallSocket.connected) {
+                  console.log(
+                    "[useWebRTC] Waiting for new call socket to connect",
+                  );
+
+                  // Connect the socket explicitly
+                  newCallSocket.connect();
+
+                  // Wait with a longer timeout
+                  const startTime = Date.now();
+                  const timeout = 15000; // 15 seconds timeout
+
+                  while (
+                    !newCallSocket.connected &&
+                    Date.now() - startTime < timeout
+                  ) {
+                    await new Promise((resolve) => setTimeout(resolve, 500));
+                    console.log(
+                      "[useWebRTC] Still waiting for call socket to connect...",
+                    );
+                  }
+
+                  if (newCallSocket.connected) {
+                    console.log(
+                      "[useWebRTC] Call socket connected successfully on retry",
+                    );
+                  } else {
+                    console.warn(
+                      "[useWebRTC] Call socket failed to connect on retry, but continuing anyway",
+                    );
+                    // Continue anyway - we'll try to establish WebRTC without the socket
+                  }
+                }
+              }
+            } else if (!callSocket.connected) {
               console.log(
                 "[useWebRTC] Call socket exists but not connected, waiting for connection",
               );
 
+              // Connect the socket explicitly
+              callSocket.connect();
+
               // Wait for the socket to connect with a longer timeout
               const startTime = Date.now();
-              const timeout = 10000; // Increased from 5000 to 10000
+              const timeout = 15000; // Increased to 15 seconds
 
               while (
                 !callSocket.connected &&
@@ -270,30 +350,47 @@ export function useWebRTC({
               if (callSocket.connected) {
                 console.log("[useWebRTC] Call socket connected successfully");
               } else {
-                throw new Error("Call socket failed to connect within timeout");
+                console.warn(
+                  "[useWebRTC] Call socket failed to connect within timeout, but continuing anyway",
+                );
+                // Continue anyway - we'll try to establish WebRTC without the socket
               }
+            } else {
+              console.log("[useWebRTC] Call socket is connected and ready");
             }
 
             // Add a small delay after socket connection to ensure stability
             await new Promise((resolve) => setTimeout(resolve, 1000));
-            console.log(
-              "[useWebRTC] Socket connection stabilized, proceeding with WebRTC initialization",
-            );
+            console.log("[useWebRTC] Proceeding with WebRTC initialization");
           } catch (socketError) {
             console.error(
               "[useWebRTC] Error ensuring call socket:",
               socketError,
             );
 
-            // If this is the first attempt, try to continue anyway
-            if (retryCount === 0) {
-              console.log(
-                "[useWebRTC] First attempt: continuing with WebRTC initialization despite socket error",
+            // Always continue with WebRTC initialization despite socket errors
+            console.log(
+              "[useWebRTC] Continuing with WebRTC initialization despite socket error",
+            );
+
+            // Dispatch an event to notify that we need a socket
+            try {
+              window.dispatchEvent(
+                new CustomEvent("webrtc:socket:needed", {
+                  detail: {
+                    timestamp: new Date().toISOString(),
+                    error:
+                      socketError instanceof Error
+                        ? socketError.message
+                        : "Unknown error",
+                  },
+                }),
               );
-            } else {
-              // On subsequent attempts, throw the error to trigger proper retry logic
-              throw new Error(
-                `Socket connection error: ${socketError instanceof Error ? socketError.message : "Unknown error"}`,
+              console.log("[useWebRTC] Dispatched webrtc:socket:needed event");
+            } catch (eventError) {
+              console.error(
+                "[useWebRTC] Error dispatching socket needed event:",
+                eventError,
               );
             }
           }

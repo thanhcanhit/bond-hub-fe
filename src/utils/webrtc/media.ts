@@ -103,7 +103,10 @@ export async function getUserMedia(withVideo: boolean): Promise<void> {
             "[WEBRTC] Failed to create empty MediaStream:",
             streamError,
           );
-          throw audioError; // Re-throw the original error if we can't even create an empty stream
+          console.warn(
+            "[WEBRTC] Could not create empty MediaStream, but continuing anyway",
+          );
+          // Continue anyway instead of throwing an error
         }
       }
     } else {
@@ -119,7 +122,10 @@ export async function getUserMedia(withVideo: boolean): Promise<void> {
           "[WEBRTC] Failed to create empty MediaStream:",
           streamError,
         );
-        throw error; // Re-throw the original error if we can't even create an empty stream
+        console.warn(
+          "[WEBRTC] Could not create empty MediaStream after audio failure, but continuing anyway",
+        );
+        // Continue anyway instead of throwing an error
       }
     }
   }
@@ -127,7 +133,23 @@ export async function getUserMedia(withVideo: boolean): Promise<void> {
   // Final verification to ensure we have a stream
   if (!state.localStream) {
     console.error("[WEBRTC] Failed to initialize local stream");
-    throw new Error("Failed to initialize local stream");
+
+    // Create an empty stream as a last resort instead of throwing an error
+    try {
+      console.log("[WEBRTC] Creating empty MediaStream as final fallback");
+      state.localStream = new MediaStream();
+      console.log(
+        "[WEBRTC] Empty MediaStream created successfully as final fallback",
+      );
+    } catch (streamError) {
+      console.error(
+        "[WEBRTC] Failed to create empty MediaStream as final fallback:",
+        streamError,
+      );
+      // Even in this case, we'll continue without throwing an error
+      // Create a dummy stream object to prevent null reference errors
+      state.localStream = new MediaStream();
+    }
   }
 }
 

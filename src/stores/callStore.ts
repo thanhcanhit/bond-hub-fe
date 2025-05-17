@@ -81,9 +81,28 @@ export const useCallStore = create<CallState>((set, get) => ({
         return false;
       }
 
-      // Call the action
-      logCall("CALLING_INITIATE_CALL_ACTION", { receiverId, type });
-      const result = await initiateCall(receiverId, type, token);
+      // Get current user ID from authStore
+      const currentUserId = useAuthStore.getState().user?.id;
+      logCall("GOT_USER_ID", { userId: currentUserId });
+
+      if (!currentUserId) {
+        const errorMsg =
+          "Không thể thực hiện cuộc gọi: Không tìm thấy thông tin người dùng";
+        logCall("ERROR_NO_USER_ID", { error: errorMsg });
+        set({
+          isLoading: false,
+          error: errorMsg,
+        });
+        return false;
+      }
+
+      // Call the action with initiatorId
+      logCall("CALLING_INITIATE_CALL_ACTION", {
+        receiverId,
+        type,
+        initiatorId: currentUserId,
+      });
+      const result = await initiateCall(receiverId, type, token, currentUserId);
       logCall("INITIATE_CALL_RESULT", result);
 
       if (result.success) {
@@ -143,11 +162,35 @@ export const useCallStore = create<CallState>((set, get) => ({
         return false;
       }
 
+      // Get current user ID from authStore
+      const currentUserId = useAuthStore.getState().user?.id;
+      logCall("GOT_USER_ID", { userId: currentUserId });
+
+      if (!currentUserId) {
+        const errorMsg =
+          "Không thể thực hiện cuộc gọi nhóm: Không tìm thấy thông tin người dùng";
+        logCall("ERROR_NO_USER_ID", { error: errorMsg });
+        set({
+          isLoading: false,
+          error: errorMsg,
+        });
+        return false;
+      }
+
       // Call the action
       logCall("IMPORTING_GROUP_CALL_ACTION");
       const { initiateGroupCall } = await import("@/actions/call.action");
-      logCall("CALLING_INITIATE_GROUP_CALL_ACTION", { groupId, type });
-      const result = await initiateGroupCall(groupId, type, token);
+      logCall("CALLING_INITIATE_GROUP_CALL_ACTION", {
+        groupId,
+        type,
+        initiatorId: currentUserId,
+      });
+      const result = await initiateGroupCall(
+        groupId,
+        type,
+        token,
+        currentUserId,
+      );
       logCall("INITIATE_GROUP_CALL_RESULT", result);
 
       if (result.success) {
@@ -207,9 +250,36 @@ export const useCallStore = create<CallState>((set, get) => ({
         return false;
       }
 
-      // Call the action with all available parameters
-      logCall("CALLING_ACCEPT_CALL_ACTION", { callId, initiatorId, roomId });
-      const result = await acceptCall(callId, token, initiatorId, roomId);
+      // Get current user ID from authStore
+      const currentUserId = useAuthStore.getState().user?.id;
+      logCall("GOT_USER_ID", { userId: currentUserId });
+
+      if (!currentUserId) {
+        const errorMsg =
+          "Không thể tham gia cuộc gọi: Không tìm thấy thông tin người dùng";
+        logCall("ERROR_NO_USER_ID", { error: errorMsg });
+        set({
+          isLoading: false,
+          error: errorMsg,
+        });
+        return false;
+      }
+
+      // Call the action with all parameters including initiatorId and roomId
+      // These are needed for the backend to properly identify the call
+      logCall("CALLING_ACCEPT_CALL_ACTION", {
+        callId,
+        initiatorId,
+        roomId,
+        userId: currentUserId,
+      });
+      const result = await acceptCall(
+        callId,
+        token,
+        initiatorId,
+        roomId,
+        currentUserId,
+      );
       logCall("ACCEPT_CALL_RESULT", result);
 
       if (result.success) {
@@ -281,9 +351,24 @@ export const useCallStore = create<CallState>((set, get) => ({
         return false;
       }
 
-      // Call the action
-      logCall("CALLING_REJECT_CALL_ACTION", { callId });
-      const result = await rejectCall(callId, token);
+      // Get current user ID from authStore
+      const currentUserId = useAuthStore.getState().user?.id;
+      logCall("GOT_USER_ID", { userId: currentUserId });
+
+      if (!currentUserId) {
+        const errorMsg =
+          "Không thể từ chối cuộc gọi: Không tìm thấy thông tin người dùng";
+        logCall("ERROR_NO_USER_ID", { error: errorMsg });
+        set({
+          isLoading: false,
+          error: errorMsg,
+        });
+        return false;
+      }
+
+      // Call the action with userId
+      logCall("CALLING_REJECT_CALL_ACTION", { callId, userId: currentUserId });
+      const result = await rejectCall(callId, token, currentUserId);
       logCall("REJECT_CALL_RESULT", result);
 
       set({ isLoading: false });
@@ -325,6 +410,19 @@ export const useCallStore = create<CallState>((set, get) => ({
         return true;
       }
 
+      // Get current user ID from authStore
+      const currentUserId = useAuthStore.getState().user?.id;
+      logCall("GOT_USER_ID", { userId: currentUserId });
+
+      if (!currentUserId) {
+        const errorMsg =
+          "Không thể kết thúc cuộc gọi: Không tìm thấy thông tin người dùng";
+        logCall("ERROR_NO_USER_ID", { error: errorMsg });
+        // Still reset call state to ensure UI is updated
+        get().resetCallState();
+        return false;
+      }
+
       // Stop media streams
       const localStream = get().localStream;
       logCall("GOT_LOCAL_STREAM", { hasLocalStream: !!localStream });
@@ -338,9 +436,12 @@ export const useCallStore = create<CallState>((set, get) => ({
         });
       }
 
-      // Call the action
-      logCall("CALLING_END_CALL_ACTION", { callId: currentCall.id });
-      const result = await endCall(currentCall.id, token);
+      // Call the action with userId
+      logCall("CALLING_END_CALL_ACTION", {
+        callId: currentCall.id,
+        userId: currentUserId,
+      });
+      const result = await endCall(currentCall.id, token, currentUserId);
       logCall("END_CALL_RESULT", result);
 
       // Reset call state regardless of result

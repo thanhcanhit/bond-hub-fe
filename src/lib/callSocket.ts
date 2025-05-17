@@ -2,7 +2,8 @@
 
 import { Socket } from "socket.io-client";
 import io from "socket.io-client";
-import { useAuthStore } from "@/stores/authStore";
+// Fix import path with dynamic import to avoid TypeScript error
+// We'll use dynamic import in the functions that need it
 
 // Create a dedicated socket for call namespace
 let callSocket: Socket | null = null;
@@ -18,12 +19,12 @@ export const getCallSocket = (): Socket | null => {
 /**
  * Initialize a new call socket with the provided token
  * @param token Authentication token
- * @param forceInit Force initialization even if not on a call page
+ * @param _forceInit Force initialization even if not on a call page (unused but kept for API compatibility)
  * @returns The initialized call socket
  */
 export const initCallSocket = (
   token: string,
-  forceInit: boolean = false,
+  _forceInit: boolean = false, // Renamed to _forceInit to indicate it's not used
 ): Socket | null => {
   console.log(
     `[WEBRTC] Setting up call socket with token: ${token ? "Token exists" : "No token"}`,
@@ -61,17 +62,20 @@ export const initCallSocket = (
     callSocket = io(callSocketUrl, {
       auth: { token },
       reconnection: true,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: Infinity, // Vô hạn số lần thử kết nối lại
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 30000, // Increased timeout to 30 seconds
-      pingTimeout: 60000, // Increased ping timeout to 60 seconds
-      pingInterval: 25000, // Set ping interval to 25 seconds
+      timeout: 60000, // Tăng timeout lên 60 giây
+      // pingTimeout is not in the type definition, but it's a valid option
+      // @ts-ignore - socket.io does support this option
+      pingTimeout: 120000, // Tăng ping timeout lên 120 giây
+      pingInterval: 15000, // Giảm ping interval xuống 15 giây để ping thường xuyên hơn
       transports: ["websocket"],
       forceNew: true, // Always create a new connection for the call namespace
+      autoConnect: true, // Tự động kết nối ngay khi khởi tạo
     });
 
-    // Set up a keep-alive interval to prevent timeout disconnections
+    // Set up a more aggressive keep-alive interval to prevent timeout disconnections
     let keepAliveInterval: NodeJS.Timeout | null = null;
 
     // Start the keep-alive when connected
@@ -81,7 +85,7 @@ export const initCallSocket = (
         clearInterval(keepAliveInterval);
       }
 
-      // Set up a new keep-alive interval
+      // Set up a new keep-alive interval with more frequent pings
       keepAliveInterval = setInterval(() => {
         if (callSocket && callSocket.connected) {
           console.log("[WEBRTC] Sending keep-alive ping to prevent timeout");
@@ -90,15 +94,37 @@ export const initCallSocket = (
           // Clear the interval if socket is no longer connected
           clearInterval(keepAliveInterval);
           keepAliveInterval = null;
+
+          // Try to reconnect if socket is disconnected unexpectedly
+          if (callSocket && !callSocket.connected) {
+            console.log(
+              "[WEBRTC] Socket disconnected, attempting to reconnect",
+            );
+            callSocket.connect();
+          }
         }
-      }, 30000); // Send a ping every 30 seconds
+      }, 15000); // Send a ping every 15 seconds (reduced from 30 seconds)
     });
 
-    // Clear the keep-alive interval when disconnected
-    callSocket.on("disconnect", () => {
+    // Clear the keep-alive interval when disconnected but try to reconnect
+    callSocket.on("disconnect", (reason) => {
+      console.log(`[WEBRTC] Socket disconnected. Reason: ${reason}`);
+
       if (keepAliveInterval) {
         clearInterval(keepAliveInterval);
         keepAliveInterval = null;
+      }
+
+      // Only try to reconnect if the disconnect wasn't intentional
+      if (reason !== "io client disconnect" && reason !== "transport close") {
+        console.log(
+          "[WEBRTC] Attempting to reconnect after unintentional disconnect",
+        );
+        setTimeout(() => {
+          if (callSocket && !callSocket.connected) {
+            callSocket.connect();
+          }
+        }, 1000);
       }
     });
   } catch (error) {
@@ -267,23 +293,26 @@ export const ensureCallSocket = async (
   // If we already have a connected socket, return it
   if (callSocket && callSocket.connected) {
     console.log(
-      "[WEBRTC] Call socket already connected, reusing existing socket",
+      "[WEBRTC] Call socket already connected, reusing existing socket with ID:",
+      callSocket.id,
     );
     return callSocket;
   }
 
-  // If we have a socket that's connecting, wait for it
-  if (callSocket && callSocket.connecting) {
+  // If we have a socket that's not yet connected, wait for it
+  if (callSocket) {
     console.log(
-      "[WEBRTC] Call socket is in connecting state, waiting for connection",
+      "[WEBRTC] Call socket exists but not connected, waiting for connection",
     );
 
-    // Wait for the socket to connect with timeout
-    const connectionTimeout = 5000;
+    // Wait for the socket to connect with increased timeout
+    const connectionTimeout = 10000; // Increased from 5000 to 10000
     const startTime = Date.now();
 
+    // Wait for the socket to connect or timeout
     while (
-      callSocket.connecting &&
+      callSocket &&
+      !callSocket.connected &&
       Date.now() - startTime < connectionTimeout
     ) {
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -291,32 +320,77 @@ export const ensureCallSocket = async (
     }
 
     // Check if connection was successful
-    if (callSocket.connected) {
-      console.log("[WEBRTC] Call socket connected successfully while waiting");
+    if (callSocket && callSocket.connected) {
+      console.log(
+        "[WEBRTC] Call socket connected successfully while waiting with ID:",
+        callSocket.id,
+      );
       return callSocket;
     } else {
       console.log(
-        "[WEBRTC] Call socket failed to connect while waiting, will try to initialize a new one",
+        "[WEBRTC] Call socket failed to connect while waiting, cleaning up and creating a new one",
       );
+
+      // Clean up the existing socket before creating a new one
+      try {
+        if (callSocket) {
+          callSocket.disconnect();
+          callSocket.removeAllListeners();
+          callSocket = null;
+        }
+      } catch (cleanupError) {
+        console.error(
+          "[WEBRTC] Error cleaning up existing socket:",
+          cleanupError,
+        );
+      }
     }
   }
 
   // Try to initialize with token from auth store
-  const authStore = useAuthStore.getState();
-  if (authStore.accessToken) {
-    const newSocket = initCallSocket(authStore.accessToken, forceInit);
+  try {
+    // Get token from multiple sources
+    let token: string | null = null;
+
+    // First try auth store
+    const { useAuthStore } = await import("../stores/authStore");
+    const authStore = useAuthStore.getState();
+    token = authStore.accessToken;
+
+    // If no token in auth store, try session storage
+    if (!token) {
+      try {
+        const storedToken = sessionStorage.getItem("callAccessToken");
+        if (storedToken) {
+          console.log(
+            "[WEBRTC] Using token from sessionStorage for call socket",
+          );
+          token = storedToken;
+        }
+      } catch (storageError) {
+        console.warn("[WEBRTC] Error accessing sessionStorage:", storageError);
+      }
+    }
+
+    if (!token) {
+      console.error(
+        "[WEBRTC] No authentication token available for call socket",
+      );
+      return null;
+    }
+
+    console.log("[WEBRTC] Creating new call socket with token");
+    const newSocket = initCallSocket(token, forceInit);
 
     if (newSocket) {
-      // Wait for the socket to connect with timeout
+      // Wait for the socket to connect with increased timeout
       if (!newSocket.connected) {
         console.log("[WEBRTC] Waiting for new call socket to connect...");
 
-        // Connect the socket if it's not already connecting
-        if (!newSocket.connecting) {
-          newSocket.connect();
-        }
+        // Connect the socket explicitly
+        newSocket.connect();
 
-        const connectionTimeout = 5000;
+        const connectionTimeout = 10000; // Increased from 5000 to 10000
         const startTime = Date.now();
 
         while (
@@ -331,17 +405,43 @@ export const ensureCallSocket = async (
       }
 
       if (newSocket.connected) {
-        console.log("[WEBRTC] New call socket connected successfully");
+        console.log(
+          "[WEBRTC] New call socket connected successfully with ID:",
+          newSocket.id,
+        );
+
+        // Dispatch an event to notify that the socket is ready
+        try {
+          window.dispatchEvent(
+            new CustomEvent("call:socket:ready", {
+              detail: {
+                socketId: newSocket.id,
+                timestamp: new Date().toISOString(),
+              },
+            }),
+          );
+          console.log("[WEBRTC] Dispatched call:socket:ready event");
+        } catch (eventError) {
+          console.error(
+            "[WEBRTC] Error dispatching socket ready event:",
+            eventError,
+          );
+        }
+
+        return newSocket;
       } else {
         console.warn(
           "[WEBRTC] New call socket failed to connect within timeout",
         );
+        return null;
       }
-
-      return newSocket;
     }
+  } catch (error) {
+    console.error("[WEBRTC] Error ensuring call socket:", error);
   }
 
-  console.error("[WEBRTC] Cannot ensure call socket: No auth token available");
+  console.error(
+    "[WEBRTC] Cannot ensure call socket: No auth token available or connection failed",
+  );
   return null;
 };

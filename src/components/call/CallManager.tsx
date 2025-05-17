@@ -13,33 +13,10 @@ import CallingUI from "./CallingUI";
 // Import call actions dynamically to prevent chunk loading errors
 import dynamic from "next/dynamic";
 
-// Define a type for the call actions
-type CallActions = {
-  initiateCall: (
-    receiverId: string,
-    type: "AUDIO" | "VIDEO",
-    token: string,
-  ) => Promise<any>;
-  initiateGroupCall: (
-    groupId: string,
-    type: "AUDIO" | "VIDEO",
-    token: string,
-  ) => Promise<any>;
-};
-
-// Create a placeholder for the call actions
-let callActions: CallActions = {
-  initiateCall: async () => ({
-    success: false,
-    message: "Call actions not loaded yet",
-  }),
-  initiateGroupCall: async () => ({
-    success: false,
-    message: "Call actions not loaded yet",
-  }),
-};
+// Import actions directly
+import { initiateCall, initiateGroupCall } from "@/actions/call.action";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+// No need for router import
 
 interface CallData {
   callId: string;
@@ -60,27 +37,12 @@ export default function CallManager() {
   } | null>(null);
   const [activeCallIds, setActiveCallIds] = useState<Set<string>>(new Set());
   const { accessToken, isAuthenticated } = useAuthStore();
-  const router = useRouter();
 
-  // Load call actions dynamically
+  // No need to load call actions dynamically anymore
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // Import the call actions dynamically
-    import("@/actions/call.action")
-      .then((module) => {
-        console.log("Call actions loaded successfully");
-        callActions = {
-          initiateCall: module.initiateCall,
-          initiateGroupCall: module.initiateGroupCall,
-        };
-      })
-      .catch((error) => {
-        console.error("Failed to load call actions:", error);
-        toast.error(
-          "Failed to load call functionality. Please refresh the page.",
-        );
-      });
+    console.log("Call actions are available");
   }, [isAuthenticated]);
 
   // Initialize socket handlers
@@ -141,13 +103,26 @@ export default function CallManager() {
         console.log("Incoming call URL:", incomingCallUrl);
 
         // Check if a window for this call is already open
-        const existingWindow = Array.from(window.opener?.window || []).find(
-          (w: any) => w.location.href.includes(`/call/incoming/${callId}`),
-        );
+        let existingWindow: Window | null = null;
+        try {
+          // Try to find an existing window
+          if (window.opener && window.opener.window) {
+            const windows = Array.from(window.opener.window);
+            existingWindow = windows.find((w: any) =>
+              w.location.href.includes(`/call/incoming/${callId}`),
+            ) as Window | null;
+          }
+        } catch (e) {
+          console.error("Error checking for existing windows:", e);
+        }
 
         if (existingWindow) {
           console.log(`Window for call ${callId} already exists, focusing it`);
-          existingWindow.focus();
+          try {
+            existingWindow.focus();
+          } catch (e) {
+            console.error("Error focusing existing window:", e);
+          }
           return;
         }
 
@@ -217,11 +192,13 @@ export default function CallManager() {
     }
 
     console.log("Call accepted, preparing to navigate to call page");
-    const { callId, roomId, type } = outgoingCall;
+    // Extract only the properties we need
+    const { targetId, type } = outgoingCall;
 
     // Determine the appropriate call URL
+    // Use targetId as roomId
     const callUrl =
-      type === "VIDEO" ? `/video-call/${roomId}` : `/call/${roomId}`;
+      type === "VIDEO" ? `/video-call/${targetId}` : `/call/${targetId}`;
     console.log(`Navigating to call page: ${callUrl}`);
 
     // Clear outgoing call state first to prevent UI issues
@@ -305,11 +282,25 @@ export default function CallManager() {
         `Calling initiateCall with userId=${userId}, type=${callType}, token=${accessToken ? "exists" : "missing"}`,
       );
 
-      // Use the dynamically loaded call actions
-      const result = await callActions.initiateCall(
+      // Get current user ID from authStore
+      const currentUserId = useAuthStore.getState().user?.id;
+
+      if (!currentUserId) {
+        console.error(
+          "Cannot initiate call: No user ID available in authStore",
+        );
+        toast.error(
+          "Không thể thực hiện cuộc gọi: Không tìm thấy thông tin người dùng",
+        );
+        return;
+      }
+
+      // Call the server action directly
+      const result = await initiateCall(
         userId,
         callType,
         accessToken,
+        currentUserId,
       );
       console.log("Call initiation result:", result);
 
@@ -351,11 +342,25 @@ export default function CallManager() {
         `Calling initiateGroupCall with groupId=${groupId}, type=${callType}, token=${accessToken ? "exists" : "missing"}`,
       );
 
-      // Use the dynamically loaded call actions
-      const result = await callActions.initiateGroupCall(
+      // Get current user ID from authStore
+      const currentUserId = useAuthStore.getState().user?.id;
+
+      if (!currentUserId) {
+        console.error(
+          "Cannot initiate group call: No user ID available in authStore",
+        );
+        toast.error(
+          "Không thể thực hiện cuộc gọi nhóm: Không tìm thấy thông tin người dùng",
+        );
+        return;
+      }
+
+      // Call the server action directly
+      const result = await initiateGroupCall(
         groupId,
         callType,
         accessToken,
+        currentUserId,
       );
       console.log("Group call initiation result:", result);
 

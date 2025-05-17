@@ -105,10 +105,16 @@ export default function FloatingIncomingCall({
     console.log("[INCOMING_CALL] Set isProcessing to true");
 
     try {
-      // Get token for API call
-      const token = useAuthStore.getState().accessToken;
+      // Get token and user ID for API call
+      const authState = useAuthStore.getState();
+      const token = authState.accessToken;
+      const currentUserId = authState.user?.id;
+
       console.log(
         `[INCOMING_CALL] Got token from auth store: ${token ? "Token exists" : "No token"}`,
+      );
+      console.log(
+        `[INCOMING_CALL] Got user ID from auth store: ${currentUserId || "No user ID"}`,
       );
 
       if (!token) {
@@ -120,9 +126,29 @@ export default function FloatingIncomingCall({
         return;
       }
 
+      if (!currentUserId) {
+        console.error(
+          "[INCOMING_CALL] Cannot accept call: No user ID available",
+        );
+        toast.error(
+          "Không thể chấp nhận cuộc gọi: Không tìm thấy thông tin người dùng",
+        );
+        onClose();
+        return;
+      }
+
       // Make the API call first to ensure the backend knows the call is accepted
-      console.log(`[INCOMING_CALL] Calling acceptCall with callId=${callId}`);
-      const result = await acceptCall(callId, token);
+      // Pass all parameters including initiatorId and roomId
+      console.log(
+        `[INCOMING_CALL] Calling acceptCall with callId=${callId}, initiatorId=${initiatorId}, roomId=${roomId}`,
+      );
+      const result = await acceptCall(
+        callId,
+        token,
+        initiatorId,
+        roomId,
+        currentUserId,
+      );
       console.log("[INCOMING_CALL] Call acceptance result:", result);
 
       if (result.success) {
@@ -318,10 +344,16 @@ export default function FloatingIncomingCall({
     console.log("[INCOMING_CALL] Set isProcessing to true");
 
     try {
-      // Get token for API call
-      const token = useAuthStore.getState().accessToken;
+      // Get token and user ID for API call
+      const authState = useAuthStore.getState();
+      const token = authState.accessToken;
+      const currentUserId = authState.user?.id;
+
       console.log(
         `[INCOMING_CALL] Got token from auth store: ${token ? "Token exists" : "No token"}`,
+      );
+      console.log(
+        `[INCOMING_CALL] Got user ID from auth store: ${currentUserId || "No user ID"}`,
       );
 
       if (!token) {
@@ -329,6 +361,17 @@ export default function FloatingIncomingCall({
           "[INCOMING_CALL] Cannot reject call: No authentication token",
         );
         toast.error("Bạn cần đăng nhập để từ chối cuộc gọi");
+        onClose();
+        return;
+      }
+
+      if (!currentUserId) {
+        console.error(
+          "[INCOMING_CALL] Cannot reject call: No user ID available",
+        );
+        toast.error(
+          "Không thể từ chối cuộc gọi: Không tìm thấy thông tin người dùng",
+        );
         onClose();
         return;
       }
@@ -360,7 +403,7 @@ export default function FloatingIncomingCall({
 
       // Then make the API call
       console.log(`[INCOMING_CALL] Calling rejectCall with callId=${callId}`);
-      const result = await rejectCall(callId, token);
+      const result = await rejectCall(callId, token, currentUserId);
       console.log("[INCOMING_CALL] Call rejected result:", result);
 
       // Store rejection timestamp in sessionStorage for debugging

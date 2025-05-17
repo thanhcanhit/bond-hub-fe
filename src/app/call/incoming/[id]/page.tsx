@@ -404,100 +404,54 @@ function IncomingCallContent({ callId }: { callId: string }) {
       console.log("Attempting direct API call to accept the call");
 
       try {
-        // Define the API URL
-        const apiUrl =
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-
-        // Log the request details
-        console.log(`Making direct API call to ${apiUrl}/api/v1/calls/join`);
-        console.log(`Authorization header: Bearer ${accessToken}`);
-
-        // Prepare the request body with all available information
-        const requestBody: any = {
-          callId,
-          userId: currentUserId,
-          receiverId: currentUserId,
-          initiatorId: initiatorId || undefined,
-          roomId: roomId || undefined,
-        };
-
-        console.log("Request body:", requestBody);
-
-        // Use the standard join endpoint directly
-        console.log("Using standard join endpoint directly");
-        const response = await fetch(`${apiUrl}/api/v1/calls/join`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(requestBody),
-        });
-
-        // Log the response status
-        console.log(`API response status: ${response.status}`);
-
-        // Parse the response
-        const responseData = await response.json();
-        console.log("API response data:", responseData);
-
-        // Check if the call was accepted successfully
-        if (response.ok) {
-          console.log("Direct API call succeeded");
-          directResult = {
-            success: true,
-            roomId: responseData.roomId || roomId || "",
-            type: responseData.type || callType || "AUDIO",
-            callUrl: `/call/${responseData.roomId || roomId || ""}`,
-            acceptedAt: new Date().toISOString(),
-          };
-        } else {
-          console.error(
-            "Direct API call failed:",
-            responseData.message || "Unknown error",
-          );
-          directResult = {
-            success: false,
-            message: responseData.message || "Failed to accept call",
-          };
-        }
-      } catch (apiError) {
-        console.error("Error making direct API call:", apiError);
-
-        // Fall back to the standard method
-        console.log("Falling back to standard acceptCall method");
+        // Use the Server Action directly instead of API route
+        console.log("Using acceptCall Server Action");
         const { acceptCall } = await import("@/actions/call.action");
+
+        // Log detailed information about the call parameters
+        console.log(`Current user ID: ${currentUserId || "unknown"}`);
+        console.log(`Token available: ${accessToken ? "yes" : "no"}`);
+        console.log(
+          `Token first chars: ${accessToken ? accessToken.substring(0, 10) + "..." : "no token"}`,
+        );
         console.log(
           `Calling acceptCall with parameters: callId=${callId}, initiatorId=${initiatorId || "null"}, roomId=${roomId || "null"}`,
         );
 
-        try {
-          const result = await acceptCall(
-            callId,
-            accessToken,
-            initiatorId || undefined,
-            roomId || undefined,
-          );
+        // Pass all parameters including initiatorId and roomId
+        // These are needed for the backend to properly identify the call
+        console.log(
+          `Passing initiatorId=${initiatorId} and roomId=${roomId} to acceptCall`,
+        );
+        const result = await acceptCall(
+          callId,
+          accessToken,
+          initiatorId || undefined, // Pass initiatorId if available
+          roomId || undefined, // Pass roomId if available
+          currentUserId,
+        );
 
-          // Convert the result to our standard format
-          directResult = {
-            success: result.success,
-            message: result.message,
-            roomId: result.roomId,
-            type: result.type,
-            callUrl: result.callUrl,
-            acceptedAt: result.acceptedAt,
-          };
-        } catch (acceptError) {
-          console.error("Error in fallback acceptCall method:", acceptError);
-          directResult = {
-            success: false,
-            message:
-              acceptError instanceof Error
-                ? acceptError.message
-                : "Unknown error in fallback method",
-          };
-        }
+        // Log the detailed result
+        console.log("Call acceptance result:", result);
+
+        // Convert the result to our standard format
+        directResult = {
+          success: result.success,
+          message: result.message,
+          roomId: result.roomId,
+          type: result.type,
+          callUrl: result.callUrl,
+          acceptedAt: result.acceptedAt,
+        };
+      } catch (error) {
+        console.error("Error in acceptCall method:", error);
+        directResult = {
+          success: false,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Unknown error accepting call",
+        };
       }
 
       console.log("Call acceptance result:", directResult);
@@ -671,9 +625,13 @@ function IncomingCallContent({ callId }: { callId: string }) {
           console.error(`Error message from server: ${directResult.message}`);
         }
 
-        toast.error(errorMessage);
+        // Show a more prominent error message to the user
+        toast.error(errorMessage, {
+          duration: 5000, // Show for 5 seconds
+          position: "top-center",
+        });
 
-        // Don't close the window so we can debug the issue
+        // Reset processing state to allow the user to try again or close the window
         setIsProcessing(false);
 
         // Log detailed information about the call state
@@ -708,141 +666,26 @@ function IncomingCallContent({ callId }: { callId: string }) {
           console.error("Error checking active call:", activeCallError);
         }
 
-        // Try using the store method as a fallback
+        // Dispatch call ended event to clean up on the initiator side
         try {
-          console.log("Trying fallback method: Using call store directly");
-          const storeResult = await useCallStore.getState().acceptCall(callId);
-          console.log("Fallback method result:", storeResult);
-
-          if (storeResult) {
-            console.log(
-              "Fallback method succeeded, proceeding with navigation",
-            );
-
-            // Determine the appropriate call URL
-            const callUrl = `/call/${roomId}`;
-            const timestamp = Date.now();
-
-            // Create URL with parameters
-            const queryParams = new URLSearchParams({
-              callId: callId,
-              targetId: initiatorId || "",
-              type: callType || "AUDIO",
-              direction: "incoming",
-              t: timestamp.toString(),
-              userId: currentUserId,
-            }).toString();
-
-            const absoluteCallUrl = `${window.location.origin}${callUrl}?${queryParams}`;
-            console.log(
-              `Navigating to ${absoluteCallUrl} using fallback method`,
-            );
-
-            // Navigate to the call page
-            window.location.href = absoluteCallUrl;
-          } else {
-            console.log("Fallback method also failed");
-
-            // As a last resort, try direct navigation without waiting for API success
-            console.log("Trying direct navigation as last resort");
-
-            // Determine the appropriate call URL
-            const callUrl = `/call/${roomId}`;
-            const timestamp = Date.now();
-
-            // Create URL with parameters
-            const queryParams = new URLSearchParams({
-              callId: callId,
-              targetId: initiatorId || "",
-              type: callType || "AUDIO",
-              direction: "incoming",
-              t: timestamp.toString(),
-              userId: currentUserId,
-              forceConnect: "true", // Add a parameter to indicate this is a forced connection
-            }).toString();
-
-            const absoluteCallUrl = `${window.location.origin}${callUrl}?${queryParams}`;
-            console.log(
-              `Navigating to ${absoluteCallUrl} using direct navigation as last resort`,
-            );
-
-            // Store important information in sessionStorage before navigating
-            try {
-              sessionStorage.setItem("pendingCallRedirect", absoluteCallUrl);
-              sessionStorage.setItem("currentCallId", callId);
-              sessionStorage.setItem(
-                "callAcceptedAt",
-                new Date().toISOString(),
-              );
-              if (initiatorId)
-                sessionStorage.setItem("callInitiatorId", initiatorId);
-              if (roomId) sessionStorage.setItem("callRoomId", roomId);
-              sessionStorage.setItem("currentUserId", currentUserId);
-              sessionStorage.setItem("callAccessToken", accessToken);
-              sessionStorage.setItem("forceConnect", "true");
-              console.log(
-                "Stored call data in sessionStorage for direct navigation",
-              );
-            } catch (storageError) {
-              console.error(
-                "Error storing data in sessionStorage:",
-                storageError,
-              );
-            }
-
-            // Navigate to the call page
-            window.location.href = absoluteCallUrl;
-          }
-        } catch (fallbackError) {
-          console.error("Error using fallback method:", fallbackError);
-
-          // As a last resort, try direct navigation without waiting for API success
-          console.log("Trying direct navigation after fallback error");
-
-          // Determine the appropriate call URL
-          const callUrl = `/call/${roomId}`;
-          const timestamp = Date.now();
-
-          // Create URL with parameters
-          const queryParams = new URLSearchParams({
-            callId: callId,
-            targetId: initiatorId || "",
-            type: callType || "AUDIO",
-            direction: "incoming",
-            t: timestamp.toString(),
-            userId: currentUserId,
-            forceConnect: "true", // Add a parameter to indicate this is a forced connection
-          }).toString();
-
-          const absoluteCallUrl = `${window.location.origin}${callUrl}?${queryParams}`;
-          console.log(
-            `Navigating to ${absoluteCallUrl} using direct navigation after fallback error`,
+          window.dispatchEvent(
+            new CustomEvent("call:ended", {
+              detail: { callId },
+            }),
           );
-
-          // Store important information in sessionStorage before navigating
-          try {
-            sessionStorage.setItem("pendingCallRedirect", absoluteCallUrl);
-            sessionStorage.setItem("currentCallId", callId);
-            sessionStorage.setItem("callAcceptedAt", new Date().toISOString());
-            if (initiatorId)
-              sessionStorage.setItem("callInitiatorId", initiatorId);
-            if (roomId) sessionStorage.setItem("callRoomId", roomId);
-            sessionStorage.setItem("currentUserId", currentUserId);
-            sessionStorage.setItem("callAccessToken", accessToken);
-            sessionStorage.setItem("forceConnect", "true");
-            console.log(
-              "Stored call data in sessionStorage for direct navigation",
-            );
-          } catch (storageError) {
-            console.error(
-              "Error storing data in sessionStorage:",
-              storageError,
-            );
-          }
-
-          // Navigate to the call page
-          window.location.href = absoluteCallUrl;
+          console.log(
+            "[INCOMING_CALL] Dispatched call:ended event after failure",
+          );
+        } catch (e) {
+          console.error(
+            "[INCOMING_CALL] Error dispatching call:ended event:",
+            e,
+          );
         }
+
+        // IMPORTANT: We do NOT navigate to the call page when the API call fails
+        // This prevents the issue where users are redirected to the call page
+        // even though they're not properly joined to the call
       }
     } catch (error) {
       console.error("Error accepting call:", error);
@@ -889,6 +732,18 @@ function IncomingCallContent({ callId }: { callId: string }) {
         console.error("Error getting call store state:", storeError);
       }
 
+      // Dispatch call ended event to clean up on the initiator side
+      try {
+        window.dispatchEvent(
+          new CustomEvent("call:ended", {
+            detail: { callId },
+          }),
+        );
+        console.log("[INCOMING_CALL] Dispatched call:ended event after error");
+      } catch (e) {
+        console.error("[INCOMING_CALL] Error dispatching call:ended event:", e);
+      }
+
       // Try to call the API directly to see if there's a connection issue
       try {
         if (accessToken) {
@@ -923,6 +778,10 @@ function IncomingCallContent({ callId }: { callId: string }) {
       } catch (apiError) {
         console.error("Error making direct API call:", apiError);
       }
+
+      // IMPORTANT: We do NOT navigate to the call page when there's an error
+      // This prevents the issue where users are redirected to the call page
+      // even though they're not properly joined to the call
     }
   };
 

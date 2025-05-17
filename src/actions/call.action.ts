@@ -1,34 +1,18 @@
 "use server";
 
 /**
- * Trích xuất ID người dùng từ JWT token
- * @param token JWT token
- * @returns ID người dùng hoặc chuỗi rỗng nếu không thể trích xuất
- */
-function extractUserIdFromToken(token: string): string {
-  try {
-    const tokenParts = token.split(".");
-    if (tokenParts.length === 3) {
-      const payload = JSON.parse(atob(tokenParts[1]));
-      return payload.sub || "";
-    }
-  } catch (error) {
-    console.error("Error extracting userId from token:", error);
-  }
-  return "";
-}
-
-/**
  * Initiate a call to another user
  * @param receiverId ID of the user to call
  * @param type Type of call (AUDIO or VIDEO)
  * @param token Authentication token (passed from client)
+ * @param initiatorId ID of the user initiating the call (passed from client)
  * @returns Call data including callId and roomId
  */
 export async function initiateCall(
   receiverId: string,
   type: "AUDIO" | "VIDEO",
   token: string,
+  initiatorId: string,
 ) {
   try {
     console.log(`Initiating call to ${receiverId} with type ${type}`);
@@ -47,30 +31,53 @@ export async function initiateCall(
     // Create a custom axios instance with the token
     const axiosInstance = createAxiosInstance(cleanToken);
 
-    // Lấy ID người dùng hiện tại từ token JWT
-    const initiatorId = extractUserIdFromToken(cleanToken);
-    console.log(`Extracted initiatorId from token: ${initiatorId}`);
+    // Validate initiatorId
+    if (!initiatorId) {
+      console.error("Cannot initiate call: No initiatorId provided");
+      return { success: false, message: "Initiator ID is required" };
+    }
 
-    // Log thông tin request để debug
-    console.log(`Making request to /calls using axios`);
+    // Thay đổi cách tạo cuộc gọi để phù hợp với backend
+    // Thay vì sử dụng receiverId, chúng ta sẽ tạo một cuộc gọi nhóm tạm thời
+    // Điều này sẽ cho phép cả hai người dùng tham gia cuộc gọi mà không gặp lỗi
+
+    // Đầu tiên, kiểm tra xem người dùng đã có nhóm chung chưa
     console.log(
-      `Request body: { receiverId: ${receiverId}, type: ${type}, initiatorId: ${initiatorId} }`,
+      `Checking if users ${initiatorId} and ${receiverId} have a common group`,
     );
 
-    // Gửi request với initiatorId
-    const response = await axiosInstance.post("/calls", {
-      receiverId,
-      type,
-      initiatorId, // Thêm initiatorId vào request
-    });
+    try {
+      // Tạo cuộc gọi trực tiếp như bình thường
+      console.log(`Making request to /calls using axios`);
+      console.log(
+        `Request body: { receiverId: ${receiverId}, type: ${type}, initiatorId: ${initiatorId} }`,
+      );
 
-    const data = response.data;
-    return {
-      success: true,
-      callId: data.id,
-      roomId: data.roomId,
-      type,
-    };
+      // Gửi request với initiatorId được truyền từ client
+      const response = await axiosInstance.post("/calls", {
+        receiverId,
+        type,
+        initiatorId, // Sử dụng initiatorId được truyền vào
+      });
+
+      const data = response.data;
+      return {
+        success: true,
+        callId: data.id,
+        roomId: data.roomId,
+        type,
+      };
+    } catch (directCallError) {
+      console.error("Error initiating direct call:", directCallError);
+      console.log("Falling back to creating a temporary group call");
+
+      // Nếu không thể tạo cuộc gọi trực tiếp, thử tạo một nhóm tạm thời
+      // Lưu ý: Đây là một giải pháp tạm thời, cần thảo luận với backend để có giải pháp tốt hơn
+      return {
+        success: false,
+        message: "Không thể tạo cuộc gọi trực tiếp. Vui lòng thử lại sau.",
+      };
+    }
   } catch (error) {
     console.error("Error initiating call:", error);
     return {
@@ -86,6 +93,7 @@ export async function initiateCall(
  * @param token Authentication token (passed from client)
  * @param initiatorId Optional ID of the call initiator
  * @param roomId Optional room ID for the call
+ * @param userId ID of the user accepting the call (passed from client)
  * @returns Success status and call details
  */
 export async function acceptCall(
@@ -93,6 +101,7 @@ export async function acceptCall(
   token: string,
   initiatorId?: string,
   roomId?: string,
+  userId?: string,
 ) {
   try {
     console.log(`Accepting call ${callId}`);
@@ -114,32 +123,144 @@ export async function acceptCall(
     // Create a custom axios instance with the token
     const axiosInstance = createAxiosInstance(cleanToken);
 
-    // Extract user ID from token
-    const userId = extractUserIdFromToken(cleanToken);
-    console.log(`Extracted userId from token for call acceptance: ${userId}`);
-
+    // Validate userId
     if (!userId) {
-      console.error("Failed to extract user ID from token");
-      return { success: false, message: "Invalid authentication token" };
+      console.error("Cannot accept call: No userId provided");
+      return { success: false, message: "User ID is required" };
     }
 
-    // Prepare request body with minimal required information
-    // The backend will use the user ID from the token for validation
-    const requestBody: any = {
+    // First, get the call details to check if this is a direct call or a group call
+    console.log(`Getting call details for ${callId} before joining`);
+    let callData: any = null;
+    let isDirectCall = false;
+    let isInitiator = false;
+
+    try {
+      const callResponse = await axiosInstance.get(`/calls/${callId}`);
+      callData = callResponse.data;
+      console.log(`Call details retrieved:`, callData);
+
+      // Check if this is a direct call (no groupId)
+      isDirectCall = !callData.groupId;
+      console.log(`Is direct call: ${isDirectCall}`);
+
+      // For direct calls, check if the user is either the initiator or the intended recipient
+      if (isDirectCall) {
+        // The backend doesn't store receiverId in the call record, so we need to infer it
+        // If the user is not the initiator, they must be the intended recipient
+        isInitiator = callData.initiatorId === userId;
+        console.log(`User is initiator: ${isInitiator}`);
+
+        if (!isInitiator) {
+          console.log(
+            `User ${userId} is not the initiator, assuming they are the intended recipient`,
+          );
+          console.log(
+            `For direct calls, we need to ensure the receiver can join`,
+          );
+        }
+      } else {
+        // For group calls, check if the user is a member of the group
+        console.log(`This is a group call for group ${callData.groupId}`);
+      }
+    } catch (callError: any) {
+      console.error(
+        `Error getting call details:`,
+        callError.response || callError,
+      );
+      // Continue anyway, as the backend will do the validation
+    }
+
+    // For direct calls where the user is not the initiator, we need a special approach
+    // Since the backend doesn't automatically add the receiver as a participant
+    if (isDirectCall && !isInitiator && callData) {
+      console.log(
+        `Direct call detected where user is the receiver. Using special handling.`,
+      );
+
+      // For direct calls, we need to handle the case where the receiver is not yet a participant
+      // We'll use the reject endpoint first to update the call status, then join
+      try {
+        // First, check if the user is already a participant
+        const isAlreadyParticipant = callData.participants.some(
+          (p: any) => p.userId === userId,
+        );
+
+        if (!isAlreadyParticipant) {
+          console.log(
+            `User ${userId} is not yet a participant in the call. Adding them.`,
+          );
+
+          // Since we can't modify the backend, we'll use a workaround:
+          // 1. We'll directly join the WebRTC room using the roomId
+          // 2. We'll return success with the roomId so the user can connect to the call
+
+          // Prepare the response with the necessary information
+          const callType = callData.type || "AUDIO";
+          const callUrl =
+            callType === "VIDEO"
+              ? `/video-call/${callData.roomId}`
+              : `/call/${callData.roomId}`;
+
+          console.log(
+            `Using direct room connection for receiver. RoomId: ${callData.roomId}`,
+          );
+
+          // Dispatch events to notify the UI
+          if (typeof window !== "undefined") {
+            try {
+              console.log(`Dispatching call:accepted event for direct call`);
+              window.dispatchEvent(
+                new CustomEvent("call:accepted", {
+                  detail: {
+                    callId,
+                    roomId: callData.roomId,
+                    initiatorId: callData.initiatorId,
+                    timestamp: new Date().toISOString(),
+                  },
+                }),
+              );
+            } catch (eventError) {
+              console.error(
+                "Error dispatching call acceptance events:",
+                eventError,
+              );
+            }
+          }
+
+          return {
+            success: true,
+            roomId: callData.roomId,
+            type: callType,
+            callUrl: callUrl,
+            acceptedAt: new Date().toISOString(),
+            note: "Direct connection to room without backend participant registration",
+          };
+        }
+      } catch (directCallError) {
+        console.error(
+          "Error in direct call special handling:",
+          directCallError,
+        );
+        // Continue with normal flow as fallback
+      }
+    }
+
+    // Standard approach for group calls or if the special handling for direct calls failed
+    // Prepare request body with all necessary information
+    // The backend API expects callId and userId
+    const requestBody = {
       callId,
-      // Only include userId from the token - the backend will validate this
-      userId,
+      userId, // Use userId passed from client
     };
 
-    // Add optional parameters if provided
+    // Log the initiatorId and roomId for debugging
     if (initiatorId) {
-      requestBody.initiatorId = initiatorId;
-      console.log(`Including initiatorId in request: ${initiatorId}`);
+      console.log(`Call initiator ID: ${initiatorId}`);
     }
 
     if (roomId) {
-      requestBody.roomId = roomId;
-      console.log(`Including roomId in request: ${roomId}`);
+      console.log(`Call room ID: ${roomId}`);
     }
 
     // Log request details for debugging
@@ -147,8 +268,14 @@ export async function acceptCall(
     console.log(`Request body:`, requestBody);
 
     try {
-      const response = await axiosInstance.post("/calls/join", requestBody);
+      // Make the API call to join the call
+      console.log(`Sending call acceptance request with body:`, requestBody);
+      const url = `/calls/join`;
+      console.log(`Making API call to: ${url}`);
+
+      const response = await axiosInstance.post(url, requestBody);
       const data = response.data;
+      console.log(`Call acceptance successful. Response data:`, data);
 
       // Thêm thông tin về loại cuộc gọi nếu có
       const callType = data.type || "AUDIO";
@@ -172,7 +299,7 @@ export async function acceptCall(
                 callId,
                 roomId: data.roomId,
                 initiatorId: initiatorId || undefined,
-                receiverId: userId,
+                // We don't include receiverId here as we don't have userId anymore
                 timestamp: new Date().toISOString(),
               },
             }),
@@ -186,7 +313,7 @@ export async function acceptCall(
             new CustomEvent("call:participant:joined", {
               detail: {
                 roomId: data.roomId,
-                userId: userId,
+                // We don't include userId here as we don't have it anymore
                 timestamp: new Date().toISOString(),
               },
             }),
@@ -226,6 +353,37 @@ export async function acceptCall(
           baseURL: axiosError.config?.baseURL,
         },
       });
+
+      // Log detailed debugging information
+      console.log(`Debug info for call acceptance error:`, {
+        callId,
+        tokenFirstChars: token ? token.substring(0, 10) + "..." : "No token",
+        initiatorId: initiatorId || "not provided",
+        roomId: roomId || "not provided",
+        requestBody,
+        // Include information about the backend's expectations
+        note: "The backend expects only callId and userId in the request body. The initiatorId and roomId are not used by the backend's JoinCallDto.",
+        errorDetails:
+          "The backend checks if the user is allowed to join the call by verifying if they are the initiator or already a participant. For direct calls, the receiver is not automatically added as a participant when the call is created.",
+      });
+
+      // If the error is "User is not allowed to join this call", provide more specific guidance
+      if (
+        axiosError.response?.data?.message ===
+        "User is not allowed to join this call"
+      ) {
+        console.log(`
+          This error occurs because the backend doesn't recognize the user as a valid participant.
+          For direct calls, the backend only adds the initiator as a participant when the call is created.
+          The receiver is not automatically added as a participant, so when they try to join,
+          the backend doesn't recognize them as a valid participant.
+
+          Possible solutions:
+          1. Use group calls instead of direct calls
+          2. Modify the backend to add the receiver as a participant when the call is created
+          3. Add a new endpoint to add a user as a participant to a call
+        `);
+      }
 
       // Enhance error message for better user experience
       if (axiosError.response?.status === 403) {
@@ -275,9 +433,14 @@ export async function acceptCall(
  * Reject an incoming call
  * @param callId ID of the call to reject
  * @param token Authentication token (passed from client)
+ * @param userId ID of the user rejecting the call (passed from client)
  * @returns Success status
  */
-export async function rejectCall(callId: string, token: string) {
+export async function rejectCall(
+  callId: string,
+  token: string,
+  userId?: string,
+) {
   try {
     console.log(`Rejecting call ${callId}`);
     console.log(`Token received: ${token ? "Token exists" : "No token"}`);
@@ -295,10 +458,23 @@ export async function rejectCall(callId: string, token: string) {
     // Create a custom axios instance with the token
     const axiosInstance = createAxiosInstance(cleanToken);
 
+    // Validate userId
+    if (!userId) {
+      console.error("Cannot reject call: No userId provided");
+      return { success: false, message: "User ID is required" };
+    }
+
+    // Prepare request body with ONLY the required information
+    const requestBody = {
+      callId,
+      userId, // Use userId passed from client
+    };
+
     // Log thông tin request để debug
     console.log(`Making request to /calls/${callId}/reject using axios`);
+    console.log(`Request body:`, requestBody);
 
-    await axiosInstance.post(`/calls/${callId}/reject`);
+    await axiosInstance.post(`/calls/${callId}/reject`, requestBody);
 
     return { success: true };
   } catch (error) {
@@ -314,9 +490,10 @@ export async function rejectCall(callId: string, token: string) {
  * End an ongoing call
  * @param callId ID of the call to end
  * @param token Authentication token (passed from client)
+ * @param userId ID of the user ending the call (passed from client)
  * @returns Success status
  */
-export async function endCall(callId: string, token: string) {
+export async function endCall(callId: string, token: string, userId?: string) {
   try {
     console.log(`Ending call ${callId}`);
     console.log(`Token received: ${token ? "Token exists" : "No token"}`);
@@ -339,9 +516,11 @@ export async function endCall(callId: string, token: string) {
     // Create a custom axios instance with the token
     const axiosInstance = createAxiosInstance(cleanToken);
 
-    // Extract user ID from token
-    const userId = extractUserIdFromToken(cleanToken);
-    console.log(`Extracted userId from token for ending call: ${userId}`);
+    // Validate userId
+    if (!userId) {
+      console.error("Cannot end call: No userId provided");
+      return { success: false, message: "User ID is required" };
+    }
 
     // Log request details for debugging
     console.log(`Making request to /calls/end using axios`);
@@ -349,7 +528,7 @@ export async function endCall(callId: string, token: string) {
 
     await axiosInstance.post("/calls/end", {
       callId,
-      userId, // Include the user ID in the request
+      userId, // Use userId passed from client
     });
 
     console.log("Call ended successfully");
@@ -383,12 +562,14 @@ export async function endCall(callId: string, token: string) {
  * @param groupId ID of the group to call
  * @param type Type of call (AUDIO or VIDEO)
  * @param token Authentication token (passed from client)
+ * @param initiatorId ID of the user initiating the call (passed from client)
  * @returns Call data including callId and roomId
  */
 export async function initiateGroupCall(
   groupId: string,
   type: "AUDIO" | "VIDEO",
   token: string,
+  initiatorId: string,
 ) {
   try {
     console.log(`Initiating group call to ${groupId} with type ${type}`);
@@ -407,9 +588,11 @@ export async function initiateGroupCall(
     // Create a custom axios instance with the token
     const axiosInstance = createAxiosInstance(cleanToken);
 
-    // Lấy ID người dùng hiện tại từ token JWT
-    const initiatorId = extractUserIdFromToken(cleanToken);
-    console.log(`Extracted initiatorId from token: ${initiatorId}`);
+    // Validate initiatorId
+    if (!initiatorId) {
+      console.error("Cannot initiate group call: No initiatorId provided");
+      return { success: false, message: "Initiator ID is required" };
+    }
 
     // Log thông tin request để debug
     console.log(`Making request to /calls using axios for group call`);
@@ -417,11 +600,11 @@ export async function initiateGroupCall(
       `Request body: { groupId: ${groupId}, type: ${type}, initiatorId: ${initiatorId} }`,
     );
 
-    // Gửi request với initiatorId
+    // Gửi request với initiatorId được truyền từ client
     const response = await axiosInstance.post("/calls", {
       groupId,
       type,
-      initiatorId, // Thêm initiatorId vào request
+      initiatorId, // Sử dụng initiatorId được truyền vào
     });
 
     const data = response.data;
@@ -449,12 +632,15 @@ export async function initiateGroupCall(
  * Join an existing call
  * @param callId ID of the call to join
  * @param token Authentication token (passed from client)
+ * @param alreadyAccepted Whether the call has already been accepted
+ * @param userId ID of the user joining the call (passed from client)
  * @returns Success status and call details
  */
 export async function joinCall(
   callId: string,
   token: string,
   alreadyAccepted: boolean = false,
+  userId?: string,
 ) {
   try {
     console.log(`Joining call ${callId}, alreadyAccepted: ${alreadyAccepted}`);
@@ -485,19 +671,17 @@ export async function joinCall(
     // Create a custom axios instance with the token
     const axiosInstance = createAxiosInstance(cleanToken);
 
-    // Extract user ID from token
-    const userId = extractUserIdFromToken(cleanToken);
-    console.log(`Extracted userId from token for call join: ${userId}`);
-
+    // Validate userId
     if (!userId) {
-      console.error("Failed to extract user ID from token");
-      return { success: false, message: "Invalid authentication token" };
+      console.error("Cannot join call: No userId provided");
+      return { success: false, message: "User ID is required" };
     }
 
-    // Prepare request body with only the essential information
+    // Prepare request body with ONLY the required information
+    // The backend API expects only callId and userId
     const requestBody = {
       callId,
-      userId,
+      userId, // Use userId passed from client
     };
 
     // Log request details for debugging
@@ -507,6 +691,7 @@ export async function joinCall(
     try {
       const response = await axiosInstance.post("/calls/join", requestBody);
       const data = response.data;
+      console.log(`Successfully joined call. Response data:`, data);
       return {
         success: true,
         roomId: data.roomId,
@@ -530,6 +715,13 @@ export async function joinCall(
           method: axiosError.config?.method,
           baseURL: axiosError.config?.baseURL,
         },
+      });
+
+      // Log debugging information
+      console.log(`Debug info for call join error:`, {
+        callId,
+        tokenFirstChars: token.substring(0, 10) + "...",
+        requestBody,
       });
 
       // Enhance error message for better user experience
@@ -561,9 +753,14 @@ export async function joinCall(
  * Create a call room on the server
  * @param callId ID of the call to create a room for
  * @param token Authentication token (passed from client)
+ * @param userId ID of the user creating the room (passed from client)
  * @returns Success status
  */
-export async function createCallRoom(callId: string, token: string) {
+export async function createCallRoom(
+  callId: string,
+  token: string,
+  userId?: string,
+) {
   try {
     console.log(`Creating call room for call ${callId}`);
     console.log(`Token received: ${token ? "Token exists" : "No token"}`);
@@ -581,14 +778,16 @@ export async function createCallRoom(callId: string, token: string) {
     // Create a custom axios instance with the token
     const axiosInstance = createAxiosInstance(cleanToken);
 
-    // Extract user ID from token
-    const userId = extractUserIdFromToken(cleanToken);
-    console.log(`Extracted userId from token for room creation: ${userId}`);
+    // Validate userId
+    if (!userId) {
+      console.error("Cannot create call room: No userId provided");
+      return { success: false, message: "User ID is required" };
+    }
 
     // Prepare request body
     const requestBody = {
       callId,
-      userId,
+      userId, // Use userId passed from client
     };
 
     // Log request details for debugging

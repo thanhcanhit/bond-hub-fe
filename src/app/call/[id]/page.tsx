@@ -17,7 +17,6 @@ import AudioCallControls from "@/components/call/AudioCallControls";
 // Import utilities
 import { setupCallEventHandlers } from "@/utils/callEventHandlers";
 import { setupRemoteStreamHandlers } from "@/utils/remoteStreamHandlers";
-import { initiateOutgoingCall, checkActiveCall } from "@/utils/callActions";
 import { endCall as endCallAction } from "@/actions/call.action";
 
 // Create a wrapper component to handle the params
@@ -108,10 +107,210 @@ function CallPageContent({ userId }: { userId: string }) {
     };
   }, [callStatus]);
 
+  // Helper function to check if the user is allowed to join the call
+  const checkUserCanJoinCall = async (): Promise<boolean> => {
+    try {
+      if (!callId) {
+        console.log(
+          "[CALL_PAGE] No callId provided, skipping permission check",
+        );
+        return true;
+      }
+
+      // Kiểm tra xem cuộc gọi đã được chấp nhận trước đó chưa
+      const callAcceptedAt = sessionStorage.getItem("callAcceptedAt");
+      const currentCallId = sessionStorage.getItem("currentCallId");
+      let alreadyAccepted = false;
+
+      // Nếu cuộc gọi đã được chấp nhận và callId khớp, bỏ qua việc kiểm tra lại
+      if (callAcceptedAt && currentCallId === callId) {
+        const acceptedTime = new Date(callAcceptedAt).getTime();
+        const currentTime = new Date().getTime();
+        const timeDiff = currentTime - acceptedTime;
+
+        // Nếu cuộc gọi được chấp nhận trong vòng 30 giây gần đây, bỏ qua kiểm tra
+        if (timeDiff < 30000) {
+          // 30 seconds
+          console.log(
+            "[CALL_PAGE] Call was recently accepted, skipping permission check",
+          );
+          alreadyAccepted = true;
+          return true;
+        }
+      }
+
+      const { useAuthStore } = await import("@/stores/authStore");
+      const token = useAuthStore.getState().accessToken;
+
+      if (!token) {
+        console.warn(
+          "[CALL_PAGE] No token available to check call permissions",
+        );
+        toast.error("Không thể tham gia cuộc gọi: Bạn cần đăng nhập lại");
+        return false;
+      }
+
+      // Kiểm tra xem URL có chứa tham số forceConnect không
+      const searchParams = new URLSearchParams(window.location.search);
+      const hasForceConnect = searchParams.get("forceConnect") === "true";
+
+      if (hasForceConnect) {
+        console.log(
+          "[CALL_PAGE] forceConnect parameter detected, skipping permission check",
+        );
+        alreadyAccepted = true;
+        return true;
+      }
+
+      // Import the joinCall function
+      const { joinCall } = await import("@/actions/call.action");
+
+      // Đã kiểm tra forceConnect ở trên, không cần kiểm tra lại
+
+      // Try to join the call to check permissions
+      console.log(
+        `[CALL_PAGE] Checking if user is allowed to join call ${callId}, alreadyAccepted: ${alreadyAccepted}`,
+      );
+
+      // Log additional information about the current user and call
+      console.log(
+        `[CALL_PAGE] Current user ID: ${useAuthStore.getState().user?.id || "unknown"}`,
+      );
+      console.log(`[CALL_PAGE] Call parameters:`, {
+        callId,
+        roomId: userId, // This is the roomId in this context
+        tokenAvailable: !!token,
+        tokenFirstChars: token ? token.substring(0, 10) + "..." : "no token",
+        searchParams: Object.fromEntries(searchParams.entries()),
+      });
+
+      // Get current user ID from authStore
+      const currentUserId = useAuthStore.getState().user?.id;
+
+      if (!currentUserId) {
+        console.error(
+          "[CALL_PAGE] Cannot join call: No user ID available in authStore",
+        );
+        toast.error(
+          "Không thể tham gia cuộc gọi: Không tìm thấy thông tin người dùng",
+        );
+        return false;
+      }
+
+      const joinResult = await joinCall(
+        callId,
+        token,
+        alreadyAccepted,
+        currentUserId,
+      );
+
+      if (!joinResult.success) {
+        console.error(
+          `[CALL_PAGE] User is not allowed to join call: ${joinResult.message}`,
+        );
+        console.error(`[CALL_PAGE] Join call failure details:`, joinResult);
+
+        // Show a more prominent error message with specific details
+        let errorMessage = `Không thể tham gia cuộc gọi: ${joinResult.message}`;
+
+        // Add more specific guidance based on the error message
+        if (joinResult.message.includes("not allowed")) {
+          errorMessage =
+            "Bạn không có quyền tham gia cuộc gọi này. Vui lòng kiểm tra lại thông tin.";
+
+          // Try to get more information about the call
+          try {
+            const { getActiveCall } = await import("@/actions/call.action");
+            console.log(
+              "[CALL_PAGE] Checking for active calls that might be conflicting...",
+            );
+            const activeCallResult = await getActiveCall(token);
+            console.log(
+              "[CALL_PAGE] Active call check result:",
+              activeCallResult,
+            );
+          } catch (activeCallError) {
+            console.error(
+              "[CALL_PAGE] Error checking active call:",
+              activeCallError,
+            );
+          }
+        } else if (joinResult.message.includes("not found")) {
+          errorMessage = "Cuộc gọi không tồn tại hoặc đã kết thúc.";
+        } else if (joinResult.message.includes("already ended")) {
+          errorMessage = "Cuộc gọi đã kết thúc.";
+        }
+
+        toast.error(errorMessage, {
+          duration: 5000, // Show for 5 seconds
+          position: "top-center",
+        });
+
+        return false;
+      }
+
+      console.log("[CALL_PAGE] User is allowed to join the call");
+      return true;
+    } catch (error) {
+      console.error("[CALL_PAGE] Error checking if user can join call:", error);
+
+      // Show a more detailed error message
+      let errorMessage = "Không thể kiểm tra quyền tham gia cuộc gọi";
+      if (error instanceof Error) {
+        errorMessage = `Lỗi: ${error.message}`;
+      }
+
+      toast.error(errorMessage, {
+        duration: 5000,
+        position: "top-center",
+      });
+
+      return false;
+    }
+  };
+
   // Set up call event handlers
   // Helper function to wait for socket and initialize WebRTC
   const waitForSocketAndInitWebRTC = async () => {
     try {
+      // First check if the user is allowed to join the call
+      const canJoinCall = await checkUserCanJoinCall();
+
+      if (!canJoinCall) {
+        console.error("[CALL_PAGE] User is not allowed to join this call");
+
+        // Update call status to ended
+        setCallStatus("ended");
+
+        // Show a more prominent error message
+        toast.error("Không thể tham gia cuộc gọi. Vui lòng thử lại sau.", {
+          duration: 5000,
+          position: "top-center",
+        });
+
+        // Add a button to close the window
+        const closeButton = document.createElement("button");
+        closeButton.innerText = "Đóng cửa sổ";
+        closeButton.className =
+          "mt-4 px-4 py-2 bg-blue-500 text-white rounded-md";
+        closeButton.onclick = () => window.close();
+
+        // Find a suitable container to append the button
+        setTimeout(() => {
+          const container = document.querySelector(
+            ".flex.flex-col.items-center",
+          );
+          if (container) {
+            container.appendChild(closeButton);
+          }
+        }, 500);
+
+        // Don't automatically close the window - let the user see the error message
+        // and decide when to close the window themselves
+
+        return;
+      }
+
       // Check if we're in cleanup mode
       const isCleaningUp =
         sessionStorage.getItem("webrtc_cleaning_up") === "true";
@@ -233,6 +432,41 @@ function CallPageContent({ userId }: { userId: string }) {
       }, 1000);
     }
   };
+
+  // Listen for call error events
+  useEffect(() => {
+    const handleCallError = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const data = customEvent.detail;
+
+      console.log("[CALL_PAGE] Received call:error event:", data);
+
+      // Show an error message to the user
+      toast.error(`Lỗi cuộc gọi: ${data.errorMessage}`, {
+        duration: 5000,
+        position: "top-center",
+      });
+
+      // Update call status to ended if this is a critical error
+      if (
+        data.errorType === "accept_failed" ||
+        data.errorType === "join_failed"
+      ) {
+        setCallStatus("ended");
+      }
+    };
+
+    // Add the event listener
+    window.addEventListener("call:error", handleCallError as EventListener);
+
+    // Return cleanup function
+    return () => {
+      window.removeEventListener(
+        "call:error",
+        handleCallError as EventListener,
+      );
+    };
+  }, []);
 
   // Add a listener for the socket needed event and monitor socket connection
   useEffect(() => {
@@ -651,10 +885,28 @@ function CallPageContent({ userId }: { userId: string }) {
           const token = useAuthStore.getState().accessToken;
 
           if (token && targetId) {
-            const result = await initiateOutgoingCall(
+            // Import the initiateCall action
+            const { initiateCall } = await import("@/actions/call.action");
+
+            // Get current user ID from authStore
+            const currentUserId = useAuthStore.getState().user?.id;
+
+            if (!currentUserId) {
+              console.error(
+                "[CALL_PAGE] Cannot initiate call: No user ID available in authStore",
+              );
+              toast.error(
+                "Không thể thực hiện cuộc gọi: Không tìm thấy thông tin người dùng",
+              );
+              return;
+            }
+
+            // Call the server action directly
+            const result = await initiateCall(
               targetId,
               callType,
               token,
+              currentUserId,
             );
 
             if (result.success) {
@@ -788,7 +1040,11 @@ function CallPageContent({ userId }: { userId: string }) {
         const token = useAuthStore.getState().accessToken;
 
         if (token) {
-          const result = await checkActiveCall(token);
+          // Import the getActiveCall action
+          const { getActiveCall } = await import("@/actions/call.action");
+
+          // Call the server action directly
+          const result = await getActiveCall(token);
 
           if (result.success) {
             // We have an active call, proceed with WebRTC initialization
@@ -959,7 +1215,11 @@ function CallPageContent({ userId }: { userId: string }) {
           const { endCall: endCallActionDirect } = await import(
             "@/actions/call.action"
           );
-          const result = await endCallActionDirect(currentCallId, token);
+          const result = await endCallActionDirect(
+            currentCallId,
+            token,
+            myUserId,
+          );
           console.log(`[CALL_PAGE] End call API result:`, result);
         } catch (endCallError) {
           console.error(
@@ -969,7 +1229,7 @@ function CallPageContent({ userId }: { userId: string }) {
 
           // Try the original method as fallback
           try {
-            const result = await endCallAction(currentCallId, token);
+            const result = await endCallAction(currentCallId, token, myUserId);
             console.log(`[CALL_PAGE] End call API result (fallback):`, result);
           } catch (fallbackError) {
             console.error(
@@ -1001,6 +1261,7 @@ function CallPageContent({ userId }: { userId: string }) {
             const result = await endCallActionDirect(
               activeCallResult.activeCall.id,
               token,
+              myUserId,
             );
             console.log(`[CALL_PAGE] End call API result:`, result);
           } else {
