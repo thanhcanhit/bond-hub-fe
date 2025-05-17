@@ -322,10 +322,23 @@ function CallPageContent({ userId }: { userId: string }) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
-      // Check if we already have a socket
-      const { getCallSocket, ensureCallSocket } = await import(
+      // Import socket modules
+      const { getCallSocket, ensureCallSocket, initCallSocket } = await import(
         "@/lib/callSocket"
       );
+      const { useAuthStore } = await import("@/stores/authStore");
+      const token = useAuthStore.getState().accessToken;
+
+      if (!token) {
+        console.error(
+          "[CALL_PAGE] No token available for socket initialization",
+        );
+        toast.error("Không thể kết nối: Bạn cần đăng nhập lại");
+        setCallStatus("ended");
+        return;
+      }
+
+      // Check if we already have a socket
       let socket = getCallSocket();
 
       if (socket && socket.connected) {
@@ -340,86 +353,135 @@ function CallPageContent({ userId }: { userId: string }) {
         "[CALL_PAGE] Socket not connected, ensuring call socket is available",
       );
 
-      // Try to ensure we have a call socket
+      // Multi-stage socket initialization approach
+      // Stage 1: Try to ensure call socket with normal approach
       try {
-        const { useAuthStore } = await import("@/stores/authStore");
-        const token = useAuthStore.getState().accessToken;
+        console.log(
+          "[CALL_PAGE] Stage 1: Ensuring call socket with normal approach",
+        );
+        socket = await ensureCallSocket(true);
 
-        if (token) {
-          // Ensure call socket with a fresh connection
-          socket = await ensureCallSocket(true);
+        if (socket && socket.connected) {
+          console.log(
+            "[CALL_PAGE] Successfully ensured call socket connection in Stage 1",
+          );
+        } else {
+          console.warn(
+            "[CALL_PAGE] Failed to ensure call socket in Stage 1, trying Stage 2",
+          );
 
-          if (socket && socket.connected) {
-            console.log(
-              "[CALL_PAGE] Successfully ensured call socket connection",
-            );
-          } else {
-            console.warn("[CALL_PAGE] Failed to ensure call socket connection");
+          // Stage 2: Try direct initialization
+          console.log(
+            "[CALL_PAGE] Stage 2: Trying direct socket initialization",
+          );
+          socket = initCallSocket(token, true);
+
+          if (socket) {
+            // Connect explicitly
+            socket.connect();
+
+            // Wait for connection with timeout
+            console.log("[CALL_PAGE] Waiting for direct socket to connect");
+            const connectionTimeout = 10000; // 10 seconds
+            const startTime = Date.now();
+
+            while (
+              !socket.connected &&
+              Date.now() - startTime < connectionTimeout
+            ) {
+              await new Promise((resolve) => setTimeout(resolve, 300));
+
+              // Log occasionally
+              if ((Date.now() - startTime) % 3000 < 300) {
+                console.log(
+                  "[CALL_PAGE] Still waiting for socket to connect...",
+                );
+              }
+            }
+
+            if (socket.connected) {
+              console.log(
+                "[CALL_PAGE] Successfully connected socket in Stage 2",
+              );
+            } else {
+              console.warn(
+                "[CALL_PAGE] Failed to connect socket in Stage 2, trying Stage 3",
+              );
+
+              // Stage 3: Last resort - create a simpler socket
+              console.log(
+                "[CALL_PAGE] Stage 3: Creating a simpler socket as last resort",
+              );
+              const { io } = await import("socket.io-client");
+              const socketUrl = `${process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"}/call`;
+
+              // Disconnect the previous socket if it exists
+              if (socket) {
+                socket.disconnect();
+              }
+
+              // Create a simpler socket
+              const lastResortSocket = io(socketUrl, {
+                auth: { token },
+                transports: ["websocket"],
+                forceNew: true,
+                reconnection: true,
+                timeout: 20000,
+              });
+
+              // Connect and wait
+              lastResortSocket.connect();
+              await new Promise((resolve) => setTimeout(resolve, 5000));
+
+              if (lastResortSocket.connected) {
+                console.log(
+                  "[CALL_PAGE] Successfully connected socket in Stage 3",
+                );
+                socket = lastResortSocket;
+              } else {
+                console.error(
+                  "[CALL_PAGE] All socket connection attempts failed",
+                );
+              }
+            }
           }
         }
       } catch (socketError) {
-        console.error("[CALL_PAGE] Error ensuring call socket:", socketError);
-      }
-
-      // Wait a moment to ensure socket initialization has completed
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      // Set up a listener for the socket ready event with timeout
-      const socketReady = await new Promise<boolean>((resolve) => {
-        const socketReadyHandler = () => {
-          console.log("[CALL_PAGE] Received socket ready event");
-          window.removeEventListener(
-            "call:socket:ready",
-            socketReadyHandler as EventListener,
-          );
-          clearTimeout(timeoutId);
-          resolve(true);
-        };
-
-        // Set a timeout in case the event doesn't fire
-        const timeoutId = setTimeout(() => {
-          window.removeEventListener(
-            "call:socket:ready",
-            socketReadyHandler as EventListener,
-          );
-          console.log(
-            "[CALL_PAGE] Socket ready event timeout, proceeding anyway",
-          );
-
-          // Check one more time if socket is connected
-          const currentSocket = getCallSocket();
-          if (currentSocket && currentSocket.connected) {
-            console.log(
-              "[CALL_PAGE] Socket is connected despite timeout, proceeding",
-            );
-            resolve(true);
-          } else {
-            resolve(false);
-          }
-        }, 6000);
-
-        // Add the event listener
-        window.addEventListener(
-          "call:socket:ready",
-          socketReadyHandler as EventListener,
+        console.error(
+          "[CALL_PAGE] Error during socket initialization:",
+          socketError,
         );
-      });
-
-      console.log(
-        `[CALL_PAGE] Socket ready status: ${socketReady}, initializing WebRTC`,
-      );
+      }
 
       // Final check before initializing WebRTC
       socket = getCallSocket();
       if (!socket || !socket.connected) {
         console.warn(
-          "[CALL_PAGE] Socket still not connected before WebRTC initialization",
+          "[CALL_PAGE] Socket still not connected before WebRTC initialization, but proceeding anyway",
         );
+      } else {
+        console.log(
+          "[CALL_PAGE] Socket is connected and ready for WebRTC initialization",
+        );
+
+        // Store the socket ID in sessionStorage for debugging
+        try {
+          if (socket.id) {
+            sessionStorage.setItem("call_page_socket_id", socket.id);
+            sessionStorage.setItem(
+              "call_page_socket_connect_time",
+              Date.now().toString(),
+            );
+          }
+        } catch (storageError) {
+          // Ignore storage errors
+        }
       }
 
       // Initialize WebRTC with a slight delay to ensure socket is stable
+      console.log("[CALL_PAGE] Initializing WebRTC after socket setup");
       setTimeout(() => {
-        initWebRTC();
+        initWebRTC(true); // Pass forceConnect=true to ensure connection even with socket issues
       }, 500);
     } catch (error) {
       console.error("[CALL_PAGE] Error waiting for socket:", error);
@@ -428,7 +490,7 @@ function CallPageContent({ userId }: { userId: string }) {
         "[CALL_PAGE] Initializing WebRTC despite socket error after delay",
       );
       setTimeout(() => {
-        initWebRTC();
+        initWebRTC(true); // Pass forceConnect=true to ensure connection even with socket issues
       }, 1000);
     }
   };

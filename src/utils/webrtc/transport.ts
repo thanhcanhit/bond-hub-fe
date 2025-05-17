@@ -110,22 +110,106 @@ export async function createSendTransport(roomId: string): Promise<void> {
           console.log("[WEBRTC] Setting up main socket for recovery");
           socketModule.setupSocket(token);
 
-          // Then ensure call socket is initialized
+          // Then ensure call socket is initialized with more aggressive approach
           console.log("[WEBRTC] Ensuring call socket for recovery");
+
+          // First try with normal approach
           const callSocket = await callSocketModule.ensureCallSocket(true);
 
-          if (callSocket) {
-            console.log("[WEBRTC] Successfully recovered call socket");
+          if (callSocket && callSocket.connected) {
+            console.log(
+              "[WEBRTC] Successfully recovered call socket on first attempt",
+            );
             state.socket = callSocket;
 
             // Wait a moment for the socket to stabilize
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 500));
           } else {
-            throw new Error("Failed to recover socket connection");
+            console.log(
+              "[WEBRTC] First socket recovery attempt failed, trying direct initialization",
+            );
+
+            // Try direct initialization as a fallback
+            const directSocket = callSocketModule.initCallSocket(token, true);
+
+            if (directSocket) {
+              // Wait for the socket to connect
+              console.log("[WEBRTC] Waiting for direct socket to connect");
+
+              // Connect explicitly
+              directSocket.connect();
+
+              // Wait for connection with timeout
+              let connected = false;
+              const startTime = Date.now();
+              const timeout = 10000; // 10 seconds timeout
+
+              while (!connected && Date.now() - startTime < timeout) {
+                if (directSocket.connected) {
+                  connected = true;
+                } else {
+                  await new Promise((resolve) => setTimeout(resolve, 300));
+                }
+              }
+
+              if (connected) {
+                console.log("[WEBRTC] Successfully connected direct socket");
+                state.socket = directSocket;
+
+                // Wait a moment for the socket to stabilize
+                await new Promise((resolve) => setTimeout(resolve, 500));
+              } else {
+                throw new Error(
+                  "Failed to connect direct socket within timeout",
+                );
+              }
+            } else {
+              throw new Error("Failed to create direct socket");
+            }
           }
         } catch (socketError) {
           console.error("[WEBRTC] Socket recovery failed:", socketError);
-          throw new Error("Socket not initialized and recovery failed");
+
+          // Try one last approach with a simpler socket
+          try {
+            console.log("[WEBRTC] Attempting last resort socket recovery");
+            const { io } = await import("socket.io-client");
+            const { useAuthStore } = await import("@/stores/authStore");
+
+            const token = useAuthStore.getState().accessToken;
+            if (!token) {
+              throw new Error("No token available for last resort recovery");
+            }
+
+            const socketUrl = `${process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"}/call`;
+            const lastResortSocket = io(socketUrl, {
+              auth: { token },
+              transports: ["websocket"],
+              forceNew: true,
+              reconnection: true,
+              timeout: 20000,
+            });
+
+            // Connect and wait
+            lastResortSocket.connect();
+            await new Promise((resolve) => setTimeout(resolve, 5000));
+
+            if (lastResortSocket.connected) {
+              console.log("[WEBRTC] Last resort socket connected successfully");
+              state.socket = lastResortSocket;
+              return;
+            } else {
+              throw new Error("Last resort socket failed to connect");
+            }
+          } catch (lastError) {
+            console.error(
+              "[WEBRTC] Last resort socket recovery failed:",
+              lastError,
+            );
+            throw new Error(
+              "Socket not initialized and all recovery attempts failed",
+            );
+          }
         }
       }
 
@@ -470,22 +554,106 @@ export async function createRecvTransport(roomId: string): Promise<void> {
           console.log("[WEBRTC] Setting up main socket for recovery");
           socketModule.setupSocket(token);
 
-          // Then ensure call socket is initialized
+          // Then ensure call socket is initialized with more aggressive approach
           console.log("[WEBRTC] Ensuring call socket for recovery");
+
+          // First try with normal approach
           const callSocket = await callSocketModule.ensureCallSocket(true);
 
-          if (callSocket) {
-            console.log("[WEBRTC] Successfully recovered call socket");
+          if (callSocket && callSocket.connected) {
+            console.log(
+              "[WEBRTC] Successfully recovered call socket on first attempt",
+            );
             state.socket = callSocket;
 
             // Wait a moment for the socket to stabilize
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 500));
           } else {
-            throw new Error("Failed to recover socket connection");
+            console.log(
+              "[WEBRTC] First socket recovery attempt failed, trying direct initialization",
+            );
+
+            // Try direct initialization as a fallback
+            const directSocket = callSocketModule.initCallSocket(token, true);
+
+            if (directSocket) {
+              // Wait for the socket to connect
+              console.log("[WEBRTC] Waiting for direct socket to connect");
+
+              // Connect explicitly
+              directSocket.connect();
+
+              // Wait for connection with timeout
+              let connected = false;
+              const startTime = Date.now();
+              const timeout = 10000; // 10 seconds timeout
+
+              while (!connected && Date.now() - startTime < timeout) {
+                if (directSocket.connected) {
+                  connected = true;
+                } else {
+                  await new Promise((resolve) => setTimeout(resolve, 300));
+                }
+              }
+
+              if (connected) {
+                console.log("[WEBRTC] Successfully connected direct socket");
+                state.socket = directSocket;
+
+                // Wait a moment for the socket to stabilize
+                await new Promise((resolve) => setTimeout(resolve, 500));
+              } else {
+                throw new Error(
+                  "Failed to connect direct socket within timeout",
+                );
+              }
+            } else {
+              throw new Error("Failed to create direct socket");
+            }
           }
         } catch (socketError) {
           console.error("[WEBRTC] Socket recovery failed:", socketError);
-          throw new Error("Socket not initialized and recovery failed");
+
+          // Try one last approach with a simpler socket
+          try {
+            console.log("[WEBRTC] Attempting last resort socket recovery");
+            const { io } = await import("socket.io-client");
+            const { useAuthStore } = await import("@/stores/authStore");
+
+            const token = useAuthStore.getState().accessToken;
+            if (!token) {
+              throw new Error("No token available for last resort recovery");
+            }
+
+            const socketUrl = `${process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"}/call`;
+            const lastResortSocket = io(socketUrl, {
+              auth: { token },
+              transports: ["websocket"],
+              forceNew: true,
+              reconnection: true,
+              timeout: 20000,
+            });
+
+            // Connect and wait
+            lastResortSocket.connect();
+            await new Promise((resolve) => setTimeout(resolve, 5000));
+
+            if (lastResortSocket.connected) {
+              console.log("[WEBRTC] Last resort socket connected successfully");
+              state.socket = lastResortSocket;
+              return;
+            } else {
+              throw new Error("Last resort socket failed to connect");
+            }
+          } catch (lastError) {
+            console.error(
+              "[WEBRTC] Last resort socket recovery failed:",
+              lastError,
+            );
+            throw new Error(
+              "Socket not initialized and all recovery attempts failed",
+            );
+          }
         }
       }
 

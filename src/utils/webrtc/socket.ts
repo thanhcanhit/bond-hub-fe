@@ -222,10 +222,13 @@ export async function connectToSocket(): Promise<void> {
             },
             transports: ["websocket"], // Use only websocket to avoid polling issues
             reconnection: true, // Enable automatic reconnection for persistent connection
-            reconnectionAttempts: 8, // Increased reconnection attempts
+            reconnectionAttempts: Infinity, // Unlimited reconnection attempts
             reconnectionDelay: 1000, // Start with 1s delay
             reconnectionDelayMax: 5000, // Maximum 5s delay between reconnection attempts
-            timeout: 30000, // Increased timeout to 30s for better reliability
+            timeout: 60000, // Increased timeout to 60s for better reliability
+            // @ts-ignore - socket.io does support this option
+            pingTimeout: 180000, // Increased ping timeout to 3 minutes
+            pingInterval: 10000, // More frequent pings (every 10 seconds)
             forceNew: true, // Force a new connection to avoid reusing problematic connections
             autoConnect: false, // Don't connect automatically, we'll do it manually
           });
@@ -290,6 +293,34 @@ export async function connectToSocket(): Promise<void> {
 
           // Set up event listeners
           setupSocketListeners(state.socket);
+
+          // Set up a keep-alive ping interval to prevent timeouts
+          const keepAliveInterval = setInterval(() => {
+            if (state.socket && state.socket.connected) {
+              console.log(
+                "[WEBRTC] Sending keep-alive ping to prevent timeout",
+              );
+              state.socket.emit("ping", { timestamp: Date.now() });
+
+              // Store the last ping timestamp in sessionStorage
+              try {
+                sessionStorage.setItem(
+                  "last_webrtc_socket_ping",
+                  Date.now().toString(),
+                );
+              } catch (storageError) {
+                // Ignore storage errors
+              }
+            } else if (state.socket && !state.socket.connected) {
+              console.log(
+                "[WEBRTC] Socket disconnected, clearing keep-alive interval",
+              );
+              clearInterval(keepAliveInterval);
+            }
+          }, 8000); // Send a ping every 8 seconds
+
+          // Store the interval ID in the state for cleanup
+          state.keepAliveInterval = keepAliveInterval;
 
           resolve();
         });

@@ -384,6 +384,13 @@ export async function cleanup(): Promise<void> {
         console.log("[WEBRTC] Clearing device");
         state.device = null;
 
+        // Clear keep-alive interval if it exists
+        if (state.keepAliveInterval) {
+          console.log("[WEBRTC] Clearing keep-alive interval");
+          clearInterval(state.keepAliveInterval);
+          state.keepAliveInterval = null;
+        }
+
         // Clear current room ID
         setCurrentRoomId(null);
 
@@ -420,6 +427,13 @@ export async function cleanup(): Promise<void> {
       state.localStream = null;
       state.socket = null;
       state.device = null;
+
+      // Clear keep-alive interval if it exists
+      if (state.keepAliveInterval) {
+        console.log("[WEBRTC] Clearing keep-alive interval after error");
+        clearInterval(state.keepAliveInterval);
+        state.keepAliveInterval = null;
+      }
 
       // Clear current room ID
       setCurrentRoomId(null);

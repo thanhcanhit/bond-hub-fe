@@ -62,17 +62,17 @@ export const initCallSocket = (
     callSocket = io(callSocketUrl, {
       auth: { token },
       reconnection: true,
-      reconnectionAttempts: Infinity, // Vô hạn số lần thử kết nối lại
+      reconnectionAttempts: Infinity, // Unlimited reconnection attempts
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 60000, // Tăng timeout lên 60 giây
+      timeout: 60000, // 60 second timeout
       // pingTimeout is not in the type definition, but it's a valid option
       // @ts-ignore - socket.io does support this option
-      pingTimeout: 120000, // Tăng ping timeout lên 120 giây
-      pingInterval: 15000, // Giảm ping interval xuống 15 giây để ping thường xuyên hơn
+      pingTimeout: 180000, // Increased ping timeout to 3 minutes
+      pingInterval: 10000, // More frequent pings (every 10 seconds)
       transports: ["websocket"],
       forceNew: true, // Always create a new connection for the call namespace
-      autoConnect: true, // Tự động kết nối ngay khi khởi tạo
+      autoConnect: true, // Auto connect when initialized
     });
 
     // Set up a more aggressive keep-alive interval to prevent timeout disconnections
@@ -85,11 +85,18 @@ export const initCallSocket = (
         clearInterval(keepAliveInterval);
       }
 
-      // Set up a new keep-alive interval with more frequent pings
+      // Set up a more aggressive keep-alive interval with more frequent pings
       keepAliveInterval = setInterval(() => {
         if (callSocket && callSocket.connected) {
           console.log("[WEBRTC] Sending keep-alive ping to prevent timeout");
           callSocket.emit("ping", { timestamp: Date.now() });
+
+          // Store the last ping timestamp in sessionStorage
+          try {
+            sessionStorage.setItem("last_socket_ping", Date.now().toString());
+          } catch (storageError) {
+            // Ignore storage errors
+          }
         } else if (keepAliveInterval) {
           // Clear the interval if socket is no longer connected
           clearInterval(keepAliveInterval);
@@ -103,7 +110,7 @@ export const initCallSocket = (
             callSocket.connect();
           }
         }
-      }, 15000); // Send a ping every 15 seconds (reduced from 30 seconds)
+      }, 8000); // Send a ping every 8 seconds (more aggressive)
     });
 
     // Clear the keep-alive interval when disconnected but try to reconnect
@@ -305,8 +312,18 @@ export const ensureCallSocket = async (
       "[WEBRTC] Call socket exists but not connected, waiting for connection",
     );
 
+    // Try to connect explicitly if it's not already connected
+    // Socket.io doesn't expose 'connecting' property in the type definitions
+    // but we can check the connected state and call connect() if needed
+    if (!callSocket.connected) {
+      console.log(
+        "[WEBRTC] Socket not connected, calling connect() explicitly",
+      );
+      callSocket.connect();
+    }
+
     // Wait for the socket to connect with increased timeout
-    const connectionTimeout = 10000; // Increased from 5000 to 10000
+    const connectionTimeout = 15000; // Increased to 15 seconds
     const startTime = Date.now();
 
     // Wait for the socket to connect or timeout
@@ -315,8 +332,12 @@ export const ensureCallSocket = async (
       !callSocket.connected &&
       Date.now() - startTime < connectionTimeout
     ) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      console.log("[WEBRTC] Waiting for call socket to finish connecting...");
+      await new Promise((resolve) => setTimeout(resolve, 300)); // Shorter intervals for more responsive waiting
+
+      // Only log occasionally to avoid console spam
+      if ((Date.now() - startTime) % 3000 < 300) {
+        console.log("[WEBRTC] Waiting for call socket to finish connecting...");
+      }
     }
 
     // Check if connection was successful
@@ -325,6 +346,27 @@ export const ensureCallSocket = async (
         "[WEBRTC] Call socket connected successfully while waiting with ID:",
         callSocket.id,
       );
+
+      // Dispatch an event to notify that the socket is ready
+      try {
+        window.dispatchEvent(
+          new CustomEvent("call:socket:ready", {
+            detail: {
+              socketId: callSocket.id,
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        );
+        console.log(
+          "[WEBRTC] Dispatched call:socket:ready event for existing socket",
+        );
+      } catch (eventError) {
+        console.error(
+          "[WEBRTC] Error dispatching socket ready event:",
+          eventError,
+        );
+      }
+
       return callSocket;
     } else {
       console.log(
@@ -390,17 +432,21 @@ export const ensureCallSocket = async (
         // Connect the socket explicitly
         newSocket.connect();
 
-        const connectionTimeout = 10000; // Increased from 5000 to 10000
+        const connectionTimeout = 15000; // Increased to 15 seconds
         const startTime = Date.now();
 
         while (
           !newSocket.connected &&
           Date.now() - startTime < connectionTimeout
         ) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          console.log(
-            "[WEBRTC] Still waiting for new call socket to connect...",
-          );
+          await new Promise((resolve) => setTimeout(resolve, 300)); // Shorter intervals
+
+          // Only log occasionally to avoid console spam
+          if ((Date.now() - startTime) % 3000 < 300) {
+            console.log(
+              "[WEBRTC] Still waiting for new call socket to connect...",
+            );
+          }
         }
       }
 
@@ -409,6 +455,19 @@ export const ensureCallSocket = async (
           "[WEBRTC] New call socket connected successfully with ID:",
           newSocket.id,
         );
+
+        // Store the socket ID in sessionStorage for debugging
+        try {
+          if (newSocket.id) {
+            sessionStorage.setItem("last_connected_socket_id", newSocket.id);
+            sessionStorage.setItem(
+              "last_socket_connect_time",
+              Date.now().toString(),
+            );
+          }
+        } catch (storageError) {
+          // Ignore storage errors
+        }
 
         // Dispatch an event to notify that the socket is ready
         try {
@@ -420,7 +479,9 @@ export const ensureCallSocket = async (
               },
             }),
           );
-          console.log("[WEBRTC] Dispatched call:socket:ready event");
+          console.log(
+            "[WEBRTC] Dispatched call:socket:ready event for new socket",
+          );
         } catch (eventError) {
           console.error(
             "[WEBRTC] Error dispatching socket ready event:",
@@ -433,7 +494,52 @@ export const ensureCallSocket = async (
         console.warn(
           "[WEBRTC] New call socket failed to connect within timeout",
         );
-        return null;
+
+        // Try one more time with a different approach
+        try {
+          console.log(
+            "[WEBRTC] Attempting one more connection with direct approach",
+          );
+
+          // Disconnect and clean up the failed socket
+          if (newSocket) {
+            newSocket.disconnect();
+            newSocket.removeAllListeners();
+          }
+
+          // Create a new socket with a simpler configuration
+          const lastAttemptSocket = io(
+            `${process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"}/call`,
+            {
+              auth: { token },
+              transports: ["websocket"],
+              forceNew: true,
+              reconnection: true,
+              timeout: 20000,
+            },
+          );
+
+          // Connect and wait a bit
+          lastAttemptSocket.connect();
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+
+          if (lastAttemptSocket.connected) {
+            console.log("[WEBRTC] Last attempt socket connected successfully!");
+            callSocket = lastAttemptSocket;
+            return lastAttemptSocket;
+          } else {
+            console.error(
+              "[WEBRTC] Last attempt socket also failed to connect",
+            );
+            return null;
+          }
+        } catch (lastError) {
+          console.error(
+            "[WEBRTC] Error in last connection attempt:",
+            lastError,
+          );
+          return null;
+        }
       }
     }
   } catch (error) {

@@ -20,6 +20,7 @@ export interface WebRTCState {
   recvTransport: any;
   producers: Map<string, any>;
   consumers: Map<string, any>;
+  keepAliveInterval: NodeJS.Timeout | null;
 }
 
 /**
@@ -34,4 +35,5 @@ export const createInitialState = (): WebRTCState => ({
   recvTransport: null,
   producers: new Map(),
   consumers: new Map(),
+  keepAliveInterval: null,
 });
