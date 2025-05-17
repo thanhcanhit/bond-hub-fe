@@ -18,9 +18,13 @@ export const getCallSocket = (): Socket | null => {
 /**
  * Initialize a new call socket with the provided token
  * @param token Authentication token
+ * @param forceInit Force initialization even if not on a call page
  * @returns The initialized call socket
  */
-export const initCallSocket = (token: string): Socket | null => {
+export const initCallSocket = (
+  token: string,
+  forceInit: boolean = false,
+): Socket | null => {
   console.log(
     `[WEBRTC] Setting up call socket with token: ${token ? "Token exists" : "No token"}`,
   );
@@ -30,13 +34,7 @@ export const initCallSocket = (token: string): Socket | null => {
     return null;
   }
 
-  // Disconnect existing call socket if any
-  if (callSocket && callSocket.connected) {
-    console.log(
-      "[WEBRTC] Disconnecting existing call socket before creating a new one",
-    );
-    callSocket.disconnect();
-  }
+  // This section is now handled in the try/catch block below
 
   // Get the socket URL
   const baseSocketUrl =
@@ -51,16 +49,29 @@ export const initCallSocket = (token: string): Socket | null => {
   );
 
   // Create a new socket for the call namespace
-  callSocket = io(callSocketUrl, {
-    auth: { token },
-    reconnection: true,
-    reconnectionAttempts: 10,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-    timeout: 20000,
-    transports: ["websocket", "polling"],
-    forceNew: true, // Always create a new connection for the call namespace
-  });
+  try {
+    // Disconnect any existing socket first
+    if (callSocket) {
+      callSocket.disconnect();
+      callSocket.removeAllListeners();
+      callSocket = null;
+    }
+
+    console.log("[WEBRTC] Creating new call socket connection");
+    callSocket = io(callSocketUrl, {
+      auth: { token },
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+      transports: ["websocket"],
+      forceNew: true, // Always create a new connection for the call namespace
+    });
+  } catch (error) {
+    console.error("[WEBRTC] Error creating call socket:", error);
+    return null;
+  }
 
   // Set up event listeners for debugging
   callSocket.on("connect", () => {
@@ -75,10 +86,32 @@ export const initCallSocket = (token: string): Socket | null => {
       "❌ [WEBRTC] Disconnected from Call WebSocket server. Reason:",
       reason,
     );
+
+    // Try to reconnect after a delay if the disconnect wasn't intentional
+    if (reason !== "io client disconnect") {
+      setTimeout(() => {
+        console.log(
+          "[WEBRTC] Attempting to reconnect call socket after disconnect...",
+        );
+        if (callSocket) {
+          callSocket.connect();
+        }
+      }, 2000);
+    }
   });
 
   callSocket.on("connect_error", (error) => {
     console.error("⚠️ [WEBRTC] Call Socket connection error:", error);
+
+    // Try to reconnect after a delay
+    setTimeout(() => {
+      console.log(
+        "[WEBRTC] Attempting to reconnect call socket after error...",
+      );
+      if (callSocket) {
+        callSocket.connect();
+      }
+    }, 2000);
   });
 
   // Track active calls to prevent duplicate notifications
@@ -155,18 +188,88 @@ export const initCallSocket = (token: string): Socket | null => {
 
 /**
  * Ensure call socket is initialized and connected
+ * @param forceInit Force initialization even if not on a call page
  * @returns The call socket instance
  */
-export const ensureCallSocket = async (): Promise<Socket | null> => {
+export const ensureCallSocket = async (
+  forceInit: boolean = false,
+): Promise<Socket | null> => {
   // If we already have a connected socket, return it
   if (callSocket && callSocket.connected) {
+    console.log(
+      "[WEBRTC] Call socket already connected, reusing existing socket",
+    );
     return callSocket;
+  }
+
+  // If we have a socket that's connecting, wait for it
+  if (callSocket && callSocket.connecting) {
+    console.log(
+      "[WEBRTC] Call socket is in connecting state, waiting for connection",
+    );
+
+    // Wait for the socket to connect with timeout
+    const connectionTimeout = 5000;
+    const startTime = Date.now();
+
+    while (
+      callSocket.connecting &&
+      Date.now() - startTime < connectionTimeout
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      console.log("[WEBRTC] Waiting for call socket to finish connecting...");
+    }
+
+    // Check if connection was successful
+    if (callSocket.connected) {
+      console.log("[WEBRTC] Call socket connected successfully while waiting");
+      return callSocket;
+    } else {
+      console.log(
+        "[WEBRTC] Call socket failed to connect while waiting, will try to initialize a new one",
+      );
+    }
   }
 
   // Try to initialize with token from auth store
   const authStore = useAuthStore.getState();
   if (authStore.accessToken) {
-    return initCallSocket(authStore.accessToken);
+    const newSocket = initCallSocket(authStore.accessToken, forceInit);
+
+    if (newSocket) {
+      // Wait for the socket to connect with timeout
+      if (!newSocket.connected) {
+        console.log("[WEBRTC] Waiting for new call socket to connect...");
+
+        // Connect the socket if it's not already connecting
+        if (!newSocket.connecting) {
+          newSocket.connect();
+        }
+
+        const connectionTimeout = 5000;
+        const startTime = Date.now();
+
+        while (
+          !newSocket.connected &&
+          Date.now() - startTime < connectionTimeout
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          console.log(
+            "[WEBRTC] Still waiting for new call socket to connect...",
+          );
+        }
+      }
+
+      if (newSocket.connected) {
+        console.log("[WEBRTC] New call socket connected successfully");
+      } else {
+        console.warn(
+          "[WEBRTC] New call socket failed to connect within timeout",
+        );
+      }
+
+      return newSocket;
+    }
   }
 
   console.error("[WEBRTC] Cannot ensure call socket: No auth token available");

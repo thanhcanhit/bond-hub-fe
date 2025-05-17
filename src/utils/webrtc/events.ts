@@ -145,7 +145,7 @@ export function setupSocketListeners(socket: Socket): void {
     }
   });
 
-  socket.on("newProducer", async (data) => {
+  socket.on("newProducer", (data) => {
     try {
       const { producerId, producerUserId, kind } = data;
       console.log(
@@ -161,63 +161,85 @@ export function setupSocketListeners(socket: Socket): void {
         return;
       }
 
-      await consume(producerId, kind);
-
-      // Dispatch an event to notify that a new producer was consumed
-      try {
-        window.dispatchEvent(
-          new CustomEvent("webrtc:producerConsumed", {
-            detail: {
-              producerId,
-              kind,
-              producerUserId,
-              timestamp: new Date().toISOString(),
-            },
-          }),
-        );
-        console.log(
-          `[WEBRTC] Dispatched webrtc:producerConsumed event for ${kind}`,
-        );
-      } catch (eventError) {
-        console.error(
-          "[WEBRTC] Error dispatching webrtc:producerConsumed event:",
-          eventError,
-        );
-      }
+      // Use Promise instead of await
+      consume(producerId, kind)
+        .then(() => {
+          // Dispatch an event to notify that a new producer was consumed
+          try {
+            window.dispatchEvent(
+              new CustomEvent("webrtc:producerConsumed", {
+                detail: {
+                  producerId,
+                  kind,
+                  producerUserId,
+                  timestamp: new Date().toISOString(),
+                },
+              }),
+            );
+            console.log(
+              `[WEBRTC] Dispatched webrtc:producerConsumed event for ${kind}`,
+            );
+          } catch (eventError) {
+            console.error(
+              "[WEBRTC] Error dispatching webrtc:producerConsumed event:",
+              eventError,
+            );
+          }
+        })
+        .catch((error) => {
+          console.error("[WEBRTC] Error consuming producer:", error);
+        });
     } catch (error) {
       console.error("[WEBRTC] Error handling newProducer event:", error);
     }
   });
 
-  socket.on("call:ended", async (data) => {
+  socket.on("call:ended", (data) => {
     console.log(
       "[WEBRTC] Call ended by server:",
       data?.reason || "No reason provided",
     );
-    await cleanup();
 
-    // Notify the UI that the call has ended
-    window.dispatchEvent(
-      new CustomEvent("webrtc:callEnded", {
-        detail: {
-          reason: data?.reason || "ended_by_server",
-          timestamp: new Date().toISOString(),
-        },
-      }),
-    );
+    // Use Promise instead of await
+    cleanup()
+      .then(() => {
+        // Notify the UI that the call has ended
+        window.dispatchEvent(
+          new CustomEvent("webrtc:callEnded", {
+            detail: {
+              reason: data?.reason || "ended_by_server",
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        );
 
-    // Also dispatch a more general call:ended event for broader compatibility
-    window.dispatchEvent(
-      new CustomEvent("call:ended", {
-        detail: {
-          reason: data?.reason || "ended_by_server",
-          timestamp: new Date().toISOString(),
-        },
-      }),
-    );
+        // Also dispatch a more general call:ended event for broader compatibility
+        window.dispatchEvent(
+          new CustomEvent("call:ended", {
+            detail: {
+              reason: data?.reason || "ended_by_server",
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        );
+      })
+      .catch((error) => {
+        console.error("[WEBRTC] Error during cleanup after call ended:", error);
+
+        // Still dispatch events even if cleanup fails
+        window.dispatchEvent(
+          new CustomEvent("call:ended", {
+            detail: {
+              reason: data?.reason || "ended_by_server",
+              timestamp: new Date().toISOString(),
+              cleanupFailed: true,
+            },
+          }),
+        );
+      });
   });
 
-  socket.on("call:error", async (data) => {
+  socket.on("call:error", (data) => {
     console.error("[WEBRTC] Call error from server:", data.error);
 
     // Notify the UI about the error
@@ -241,7 +263,7 @@ export function setupSocketListeners(socket: Socket): void {
     );
   });
 
-  socket.on("participantLeft", async (data) => {
+  socket.on("participantLeft", (data) => {
     console.log("[WEBRTC] Participant left:", data.userId);
 
     // Notify the UI that a participant has left
@@ -267,7 +289,7 @@ export function setupSocketListeners(socket: Socket): void {
     );
   });
 
-  socket.on("participantJoined", async (data) => {
+  socket.on("participantJoined", (data) => {
     console.log("[WEBRTC] Participant joined:", data.userId);
 
     // Store information about participant joining in sessionStorage for debugging
@@ -346,7 +368,7 @@ export function setupSocketListeners(socket: Socket): void {
     }
   });
 
-  socket.on("call:accepted", async (data) => {
+  socket.on("call:accepted", (data) => {
     console.log("[WEBRTC] Call accepted:", data);
 
     // Dispatch event to notify that call was accepted
@@ -360,7 +382,7 @@ export function setupSocketListeners(socket: Socket): void {
     );
   });
 
-  socket.on("call:rejected", async (data) => {
+  socket.on("call:rejected", (data) => {
     console.log("[WEBRTC] Call rejected:", data);
 
     // Dispatch event to notify that call was rejected

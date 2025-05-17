@@ -11,7 +11,7 @@ import { io, Socket } from "socket.io-client";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import dynamic from "next/dynamic";
-import { setupSocket } from "@/lib/socket";
+import { setupSocket, setupCallSocket } from "@/lib/socket";
 
 // Dynamically import CallManager with no SSR
 const CallManager = dynamic(() => import("@/components/call/CallManager"), {
@@ -63,69 +63,53 @@ export function CallSocketProvider({ children }: CallSocketProviderProps) {
       `[CallSocketProvider] Current user ID: ${currentUser?.id || "Unknown"}`,
     );
 
-    const socket = io(socketUrl, {
-      auth: {
-        token: accessToken,
-        userId: currentUser.id,
-      },
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-      transports: ["websocket", "polling"], // Support both for better reliability
-    });
+    // Set up call socket using the setupCallSocket function
+    setupCallSocket(accessToken);
 
-    // Set up event listeners
-    socket.on("connect", () => {
-      console.log(
-        "[CallSocketProvider] Connected to call socket server with ID:",
-        socket.id,
-      );
-      setIsConnected(true);
+    // Get the call socket from the global variable
+    const socket = callSocket;
 
-      // Initialize call socket handlers when connected
-      import("@/utils/callSocketHandler").then(({ initCallSocketHandlers }) => {
-        console.log(
-          "[CallSocketProvider] Initializing call socket handlers after connection",
-        );
-        initCallSocketHandlers();
-      });
-    });
-
-    socket.on("disconnect", (reason) => {
-      console.log(
-        "[CallSocketProvider] Disconnected from call socket server. Reason:",
-        reason,
-      );
-      setIsConnected(false);
-    });
-
-    socket.on("connect_error", (error) => {
-      console.error("[CallSocketProvider] Connection error:", error);
-      setIsConnected(false);
-
-      // Try to reconnect after a delay
-      setTimeout(() => {
-        console.log("[CallSocketProvider] Attempting to reconnect after error");
-        socket.connect();
-      }, 5000);
+    // Initialize call socket handlers
+    import("@/utils/callSocketHandler").then(({ initCallSocketHandlers }) => {
+      console.log("[CallSocketProvider] Initializing call socket handlers");
+      initCallSocketHandlers();
     });
 
     // Store socket in state
     setCallSocket(socket);
+    setIsConnected(socket?.connected || false);
 
-    // Set up a periodic check to ensure socket is connected
-    const checkInterval = setInterval(() => {
-      if (!socket.connected) {
+    // Set up event listeners if socket exists
+    if (socket) {
+      socket.on("connect", () => {
         console.log(
-          "[CallSocketProvider] Socket disconnected, attempting to reconnect",
+          "[CallSocketProvider] Connected to call socket server with ID:",
+          socket.id,
         );
-        socket.connect();
+        setIsConnected(true);
+      });
 
-        // Also ensure main socket is connected
-        setupSocket(accessToken);
-      }
+      socket.on("disconnect", (reason) => {
+        console.log(
+          "[CallSocketProvider] Disconnected from call socket server. Reason:",
+          reason,
+        );
+        setIsConnected(false);
+      });
+
+      socket.on("connect_error", (error) => {
+        console.error("[CallSocketProvider] Connection error:", error);
+        setIsConnected(false);
+      });
+    }
+
+    // Set up a periodic check to ensure sockets are connected
+    const checkInterval = setInterval(() => {
+      // Ensure main socket is connected
+      setupSocket(accessToken);
+
+      // Ensure call socket is connected
+      setupCallSocket(accessToken);
     }, 30000); // Check every 30 seconds
 
     // Cleanup on unmount
@@ -133,7 +117,9 @@ export function CallSocketProvider({ children }: CallSocketProviderProps) {
       console.log("[CallSocketProvider] Cleaning up socket connection");
       clearInterval(checkInterval);
       if (socket) {
-        socket.disconnect();
+        socket.off("connect");
+        socket.off("disconnect");
+        socket.off("connect_error");
       }
     };
   }, [isAuthenticated, accessToken, currentUser]);

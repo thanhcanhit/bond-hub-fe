@@ -220,6 +220,69 @@ export function useWebRTC({
             }
           }
 
+          // Ensure call socket is connected first
+          try {
+            console.log(
+              "[useWebRTC] Ensuring call socket is connected before WebRTC initialization",
+            );
+            const callSocketModule = await import("@/lib/callSocket");
+            const socketModule = await import("@/lib/socket");
+            const authStore = await import("@/stores/authStore");
+            const token = authStore.useAuthStore.getState().accessToken;
+
+            if (token) {
+              console.log("[useWebRTC] Initializing sockets with token");
+
+              // First set up the main socket
+              socketModule.setupSocket(token);
+
+              // Then set up the call socket
+              const callSocket = await callSocketModule.ensureCallSocket(true);
+
+              if (callSocket && callSocket.connected) {
+                console.log("[useWebRTC] Call socket is connected and ready");
+              } else if (callSocket) {
+                console.log(
+                  "[useWebRTC] Call socket exists but not connected, waiting for connection",
+                );
+
+                // Wait for the socket to connect with timeout
+                const startTime = Date.now();
+                const timeout = 5000;
+
+                while (
+                  !callSocket.connected &&
+                  Date.now() - startTime < timeout
+                ) {
+                  console.log(
+                    "[useWebRTC] Waiting for call socket to connect...",
+                  );
+                  await new Promise((resolve) => setTimeout(resolve, 500));
+                }
+
+                if (callSocket.connected) {
+                  console.log("[useWebRTC] Call socket connected successfully");
+                } else {
+                  console.warn(
+                    "[useWebRTC] Call socket failed to connect within timeout",
+                  );
+                }
+              } else {
+                console.error("[useWebRTC] Failed to initialize call socket");
+              }
+            } else {
+              console.error(
+                "[useWebRTC] No token available for socket initialization",
+              );
+            }
+          } catch (socketError) {
+            console.error(
+              "[useWebRTC] Error ensuring call socket:",
+              socketError,
+            );
+            // Continue anyway, as the WebRTC initialization will try to set up the socket
+          }
+
           // Initialize WebRTC with timeout
           const initPromise = initializeWebRTC(
             roomId,

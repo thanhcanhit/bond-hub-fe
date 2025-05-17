@@ -32,18 +32,18 @@ export function setupRemoteStreamHandlers(): () => void {
 
       // Try to play the audio immediately
       try {
-        audioElement
-          .play()
-          .then(() =>
+        (async () => {
+          try {
+            await audioElement.play();
             console.log(
               `[REMOTE_STREAM] Audio playback started for stream: ${id}`,
-            ),
-          )
-          .catch((error) =>
+            );
+          } catch (error) {
             console.error(
               `[REMOTE_STREAM] Error starting audio playback: ${error}`,
-            ),
-          );
+            );
+          }
+        })();
       } catch (error) {
         console.error(
           `[REMOTE_STREAM] Exception when trying to play audio: ${error}`,

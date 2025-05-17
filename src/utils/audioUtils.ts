@@ -4,13 +4,15 @@
  * Play notification sound
  * @param volume Volume level (0.0 to 1.0)
  */
-export const playNotificationSound = (volume: number = 0.5) => {
+export const playNotificationSound = async (volume: number = 0.5) => {
   try {
     const audio = new Audio("/sounds/notification.mp3");
     audio.volume = Math.min(Math.max(volume, 0), 1); // Ensure volume is between 0 and 1
-    audio.play().catch((error) => {
+    try {
+      await audio.play();
+    } catch (error) {
       console.error("Error playing notification sound:", error);
-    });
+    }
   } catch (error) {
     console.error("Error creating Audio object:", error);
   }
@@ -32,25 +34,18 @@ export function playCallRingtone(volume: number = 0.7): HTMLAudioElement {
     audio.preload = "auto";
 
     // Add a small delay before playing to ensure the audio is loaded
-    setTimeout(() => {
+    setTimeout(async () => {
       console.log("Attempting to play call ringtone");
-      const playPromise = audio.play();
+      try {
+        await audio.play();
+        console.log("Call ringtone playing successfully");
+      } catch (error) {
+        console.error("Error playing call ringtone:", error);
 
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            console.log("Call ringtone playing successfully");
-          })
-          .catch((error) => {
-            console.error("Error playing call ringtone:", error);
-
-            // Try again with user interaction if autoplay was blocked
-            if (error.name === "NotAllowedError") {
-              console.log(
-                "Autoplay blocked, will try again with user interaction",
-              );
-            }
-          });
+        // Try again with user interaction if autoplay was blocked
+        if (error.name === "NotAllowedError") {
+          console.log("Autoplay blocked, will try again with user interaction");
+        }
       }
     }, 100);
 
@@ -78,25 +73,18 @@ export function playCallDialTone(volume: number = 0.5): HTMLAudioElement {
     audio.preload = "auto";
 
     // Add a small delay before playing to ensure the audio is loaded
-    setTimeout(() => {
+    setTimeout(async () => {
       console.log("Attempting to play dial tone");
-      const playPromise = audio.play();
+      try {
+        await audio.play();
+        console.log("Dial tone playing successfully");
+      } catch (error) {
+        console.error("Error playing dial tone:", error);
 
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            console.log("Dial tone playing successfully");
-          })
-          .catch((error) => {
-            console.error("Error playing dial tone:", error);
-
-            // Try again with user interaction if autoplay was blocked
-            if (error.name === "NotAllowedError") {
-              console.log(
-                "Autoplay blocked, will try again with user interaction",
-              );
-            }
-          });
+        // Try again with user interaction if autoplay was blocked
+        if (error.name === "NotAllowedError") {
+          console.log("Autoplay blocked, will try again with user interaction");
+        }
       }
     }, 100);
 

@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import { toast } from "sonner";
-import { use } from "react";
 import { useSearchParams } from "next/navigation";
 import { playCallDialTone, stopAudio } from "@/utils/audioUtils";
 
@@ -21,13 +20,8 @@ import { setupRemoteStreamHandlers } from "@/utils/remoteStreamHandlers";
 import { initiateOutgoingCall, checkActiveCall } from "@/utils/callActions";
 import { endCall as endCallAction } from "@/actions/call.action";
 
-export default function CallPage({ params }: { params: { id: string } }) {
-  // Unwrap params using React.use()
-  // @ts-ignore - Bỏ qua lỗi TypeScript với use()
-  const unwrappedParams = use(params);
-  // @ts-ignore - Bỏ qua lỗi TypeScript với unwrappedParams
-  const userId = unwrappedParams.id;
-
+// Create a wrapper component to handle the params
+function CallPageContent({ userId }: { userId: string }) {
   // Get URL parameters
   const searchParams = useSearchParams();
   const callId = searchParams.get("callId");
@@ -65,15 +59,29 @@ export default function CallPage({ params }: { params: { id: string } }) {
     if (isOutgoing && callStatus === "waiting") {
       console.log("Starting call dial tone for outgoing call");
       let audio: HTMLAudioElement | null = null;
+      let timeoutId: NodeJS.Timeout | null = null;
 
-      try {
-        audio = playCallDialTone(0.5);
-      } catch (error) {
-        console.error("Exception when trying to play dial tone:", error);
-      }
+      const setupAudio = () => {
+        try {
+          audio = playCallDialTone(0.5);
+        } catch (error) {
+          console.error("Exception when trying to play dial tone:", error);
+        }
+      };
+
+      // Set up audio with a small delay to ensure component is fully mounted
+      timeoutId = setTimeout(() => {
+        setupAudio();
+      }, 100);
 
       return () => {
         console.log("Cleaning up call dial tone");
+
+        // Clear the timeout if component unmounts before timeout completes
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+
         if (audio) {
           try {
             stopAudio(audio);
@@ -517,4 +525,15 @@ export default function CallPage({ params }: { params: { id: string } }) {
       />
     </div>
   );
+}
+
+// Main component that will be exported
+export default function CallPage({ params }: { params: { id: string } }) {
+  // Unwrap params using React.use() to avoid the warning
+  // @ts-ignore - Ignore TypeScript error with use()
+  const unwrappedParams = use(params);
+  // @ts-ignore - Ignore TypeScript error with unwrappedParams
+  const id = unwrappedParams.id;
+
+  return <CallPageContent userId={id} />;
 }

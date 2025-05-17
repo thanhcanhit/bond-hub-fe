@@ -46,11 +46,16 @@ export default function IncomingCallModal({
 
   // Play notification sound when call is received
   useEffect(() => {
-    playNotificationSound(0.7);
+    // Initial sound
+    playNotificationSound(0.7).catch((error) => {
+      console.error("Error playing initial notification sound:", error);
+    });
 
     // Set up interval to play sound every 3 seconds
     const soundInterval = setInterval(() => {
-      playNotificationSound(0.5);
+      playNotificationSound(0.5).catch((error) => {
+        console.error("Error playing interval notification sound:", error);
+      });
     }, 3000);
 
     return () => {

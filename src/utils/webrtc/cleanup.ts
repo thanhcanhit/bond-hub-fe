@@ -1,6 +1,17 @@
 import { state } from "./state";
 import { setCurrentRoomId } from "./state";
 
+// Global flag to track if cleanup is in progress
+let isCleaningUpGlobal = false;
+
+/**
+ * Check if cleanup is in progress
+ * @returns boolean indicating if cleanup is in progress
+ */
+export function isCleanupInProgress(): boolean {
+  return isCleaningUpGlobal;
+}
+
 /**
  * Clean up WebRTC resources
  * @returns Promise that resolves when cleanup is complete
@@ -10,7 +21,20 @@ export async function cleanup(): Promise<void> {
     try {
       console.log("[WEBRTC] Starting cleanup process");
 
-      // Create a flag to track if we're already cleaning up
+      // Set global cleanup flag
+      isCleaningUpGlobal = true;
+
+      // Also set a flag in sessionStorage for cross-component awareness
+      try {
+        sessionStorage.setItem("webrtc_cleaning_up", "true");
+      } catch (storageError) {
+        console.warn(
+          "[WEBRTC] Error setting cleanup flag in storage:",
+          storageError,
+        );
+      }
+
+      // Create a local flag to track if we're already cleaning up
       let isCleaningUp = false;
 
       // First, safely stop any await queues before doing anything else
@@ -358,6 +382,18 @@ export async function cleanup(): Promise<void> {
 
         console.log("[WEBRTC] Cleanup completed successfully");
         isCleaningUp = false;
+
+        // Reset global cleanup flag
+        isCleaningUpGlobal = false;
+
+        // Clear the flag in sessionStorage
+        try {
+          sessionStorage.removeItem("webrtc_cleaning_up");
+          console.log("[WEBRTC] Cleared cleanup flag from sessionStorage");
+        } catch (storageError) {
+          console.warn("[WEBRTC] Error clearing cleanup flag:", storageError);
+        }
+
         resolve();
       }, 800); // Increased delay to ensure queues are fully stopped
     } catch (error) {
@@ -375,6 +411,16 @@ export async function cleanup(): Promise<void> {
 
       // Clear current room ID
       setCurrentRoomId(null);
+
+      // Reset global cleanup flag even on error
+      isCleaningUpGlobal = false;
+
+      // Clear the flag in sessionStorage
+      try {
+        sessionStorage.removeItem("webrtc_cleaning_up");
+      } catch (storageError) {
+        console.warn("[WEBRTC] Error clearing cleanup flag:", storageError);
+      }
 
       console.log("[WEBRTC] State reset after cleanup error");
       resolve(); // Resolve anyway to prevent hanging

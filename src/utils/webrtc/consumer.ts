@@ -1,5 +1,6 @@
 import { Device } from "mediasoup-client";
 import { state } from "./state";
+import { isCleanupInProgress } from "./cleanup";
 
 /**
  * Consume a producer
@@ -9,6 +10,33 @@ import { state } from "./state";
  */
 export async function consume(producerId: string, kind: string): Promise<void> {
   return new Promise<void>((resolve) => {
+    // Check if cleanup is in progress
+    if (isCleanupInProgress()) {
+      console.warn(
+        `[WEBRTC] Cannot consume producer ${producerId} while cleanup is in progress`,
+      );
+      resolve(); // Resolve instead of reject to prevent call from failing
+      return;
+    }
+
+    // Also check sessionStorage as a fallback
+    try {
+      const isCleaningUp =
+        sessionStorage.getItem("webrtc_cleaning_up") === "true";
+      if (isCleaningUp) {
+        console.warn(
+          `[WEBRTC] Cannot consume producer ${producerId} while cleanup is in progress (from sessionStorage)`,
+        );
+        resolve();
+        return;
+      }
+    } catch (storageError) {
+      console.warn(
+        "[WEBRTC] Error checking cleanup status from sessionStorage:",
+        storageError,
+      );
+    }
+
     if (!state.recvTransport) {
       console.error("[WEBRTC] Receive transport not created");
       resolve(); // Resolve instead of reject to prevent call from failing
@@ -201,13 +229,58 @@ export async function handleConsumerSetup(
   kind: string,
 ): Promise<void> {
   try {
-    // Create consumer
-    const consumer = await state.recvTransport!.consume({
+    // Check if cleanup is in progress
+    if (isCleanupInProgress()) {
+      console.warn(
+        `[WEBRTC] Cannot set up consumer for producer ${producerId} while cleanup is in progress`,
+      );
+      return;
+    }
+
+    // Also check sessionStorage as a fallback
+    try {
+      const isCleaningUp =
+        sessionStorage.getItem("webrtc_cleaning_up") === "true";
+      if (isCleaningUp) {
+        console.warn(
+          `[WEBRTC] Cannot set up consumer for producer ${producerId} while cleanup is in progress (from sessionStorage)`,
+        );
+        return;
+      }
+    } catch (storageError) {
+      console.warn(
+        "[WEBRTC] Error checking cleanup status from sessionStorage:",
+        storageError,
+      );
+    }
+
+    // Check if the transport is closed or closing
+    if (!state.recvTransport || state.recvTransport.closed) {
+      console.warn(
+        `[WEBRTC] Cannot set up consumer - receive transport is closed or null`,
+      );
+      return;
+    }
+
+    // Add timeout protection for consume operation
+    const consumePromise = state.recvTransport.consume({
       id: response.id,
       producerId,
       kind,
       rtpParameters: response.rtpParameters,
     });
+
+    // Create a timeout promise
+    const timeoutPromise = new Promise<any>((_, reject) => {
+      setTimeout(() => {
+        reject(
+          new Error(`Timeout consuming producer ${producerId} after 8000ms`),
+        );
+      }, 8000);
+    });
+
+    // Race the consume operation against the timeout
+    const consumer = await Promise.race([consumePromise, timeoutPromise]);
 
     console.log(`[WEBRTC] Created ${kind} consumer with ID: ${consumer.id}`);
 
@@ -264,6 +337,36 @@ export async function handleConsumerSetup(
       error,
     );
 
+    // Check if cleanup started during our operation
+    if (isCleanupInProgress()) {
+      console.warn(
+        `[WEBRTC] Cleanup started while consuming producer ${producerId}, this likely caused the error`,
+      );
+
+      // Dispatch an event to notify about the error
+      try {
+        window.dispatchEvent(
+          new CustomEvent("webrtc:consumerError", {
+            detail: {
+              producerId,
+              kind,
+              error: "Cleanup in progress during consume operation",
+              timestamp: new Date().toISOString(),
+              recovery: true,
+              duringCleanup: true,
+            },
+          }),
+        );
+      } catch (eventError) {
+        console.error(
+          "[WEBRTC] Error dispatching cleanup error event:",
+          eventError,
+        );
+      }
+
+      return;
+    }
+
     // Check if this is an AwaitQueueStoppedError
     if (
       error &&
@@ -273,6 +376,34 @@ export async function handleConsumerSetup(
       console.warn(
         `[WEBRTC] Caught AwaitQueueStoppedError while consuming producer ${producerId}, attempting recovery`,
       );
+
+      // Set a flag in sessionStorage to indicate we've encountered this error
+      try {
+        // Store error details for debugging
+        const queueErrors = JSON.parse(
+          sessionStorage.getItem("queueStoppedErrors") || "[]",
+        );
+        queueErrors.push({
+          timestamp: new Date().toISOString(),
+          producerId,
+          kind,
+          location: "handleConsumerSetup",
+          error: error.message || "AwaitQueueStoppedError",
+        });
+        // Keep only the last 5 errors
+        if (queueErrors.length > 5) {
+          queueErrors.shift();
+        }
+        sessionStorage.setItem(
+          "queueStoppedErrors",
+          JSON.stringify(queueErrors),
+        );
+      } catch (storageError) {
+        console.warn(
+          "[WEBRTC] Error storing queue error details:",
+          storageError,
+        );
+      }
 
       // Get current room ID and call ID from session storage
       const roomId = sessionStorage.getItem("callRoomId");
@@ -335,6 +466,46 @@ export async function handleConsumerSetup(
       return;
     }
 
-    throw error;
+    // Handle timeout errors
+    if (error.message && error.message.includes("Timeout consuming producer")) {
+      console.warn(`[WEBRTC] Timeout while consuming producer ${producerId}`);
+
+      // Dispatch timeout event
+      try {
+        window.dispatchEvent(
+          new CustomEvent("webrtc:consumerTimeout", {
+            detail: {
+              producerId,
+              kind,
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        );
+      } catch (eventError) {
+        console.error("[WEBRTC] Error dispatching timeout event:", eventError);
+      }
+
+      return;
+    }
+
+    // For any other errors, log and continue
+    try {
+      window.dispatchEvent(
+        new CustomEvent("webrtc:consumerError", {
+          detail: {
+            producerId,
+            kind,
+            error: error.message || "Unknown error",
+            timestamp: new Date().toISOString(),
+            recovery: true,
+          },
+        }),
+      );
+    } catch (eventError) {
+      console.error("[WEBRTC] Error dispatching error event:", eventError);
+    }
+
+    // Don't throw the error to allow the call to continue
+    return;
   }
 }

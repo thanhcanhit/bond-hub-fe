@@ -34,10 +34,32 @@ export default function FloatingIncomingCall({
 
   // Play call ringtone
   useEffect(() => {
-    const audio = playCallRingtone(0.7);
+    let audio: HTMLAudioElement | null = null;
+
+    const setupAudio = () => {
+      try {
+        audio = playCallRingtone(0.7);
+      } catch (error) {
+        console.error("[INCOMING_CALL] Error playing ringtone:", error);
+      }
+    };
+
+    // Set up audio with a small delay to ensure component is fully mounted
+    const timeoutId = setTimeout(() => {
+      setupAudio();
+    }, 100);
 
     return () => {
-      stopAudio(audio);
+      // Clear the timeout if component unmounts before timeout completes
+      clearTimeout(timeoutId);
+
+      if (audio) {
+        try {
+          stopAudio(audio);
+        } catch (error) {
+          console.error("[INCOMING_CALL] Error stopping audio:", error);
+        }
+      }
     };
   }, []);
 

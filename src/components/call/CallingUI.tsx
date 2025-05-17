@@ -37,29 +37,41 @@ export default function CallingUI({
     console.log("Starting call dial tone in CallingUI");
     let audio: HTMLAudioElement | null = null;
 
-    try {
-      audio = playCallDialTone(0.5);
+    const setupAudio = () => {
+      try {
+        audio = playCallDialTone(0.5);
 
-      // Add event listeners to debug audio issues
-      audio.addEventListener("play", () => {
-        console.log("Call dial tone started playing in CallingUI");
-      });
+        // Add event listeners to debug audio issues
+        if (audio) {
+          audio.addEventListener("play", () => {
+            console.log("Call dial tone started playing in CallingUI");
+          });
 
-      audio.addEventListener("error", (e) => {
-        console.error("Error playing call dial tone in CallingUI:", e);
-      });
+          audio.addEventListener("error", (e) => {
+            console.error("Error playing call dial tone in CallingUI:", e);
+          });
 
-      audio.addEventListener("pause", () => {
-        console.log("Call dial tone paused in CallingUI");
-      });
-    } catch (error) {
-      console.error(
-        "Exception when trying to play dial tone in CallingUI:",
-        error,
-      );
-    }
+          audio.addEventListener("pause", () => {
+            console.log("Call dial tone paused in CallingUI");
+          });
+        }
+      } catch (error) {
+        console.error(
+          "Exception when trying to play dial tone in CallingUI:",
+          error,
+        );
+      }
+    };
+
+    // Set up audio with a small delay to ensure component is fully mounted
+    const timeoutId = setTimeout(() => {
+      setupAudio();
+    }, 100);
 
     return () => {
+      // Clear the timeout if component unmounts before timeout completes
+      clearTimeout(timeoutId);
+
       console.log("Cleaning up call dial tone in CallingUI");
       if (audio) {
         try {

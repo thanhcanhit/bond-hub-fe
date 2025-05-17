@@ -10,7 +10,7 @@ let socket: Socket = io({
   reconnectionAttempts: 10,
   reconnectionDelay: 1000,
   timeout: 20000,
-  transports: ["websocket", "polling"], // Support both for better reliability
+  transports: ["websocket"], // Use only websocket to avoid polling issues
 });
 
 // Create a dedicated socket for call namespace
@@ -28,10 +28,26 @@ export const setupSocket = (token: string) => {
     return;
   }
 
-  // Disconnect existing socket if any
+  // If socket is already connected, just return it
   if (socket.connected) {
-    console.log("Disconnecting existing socket before creating a new one");
-    socket.disconnect();
+    console.log("Socket already connected, reusing existing socket");
+    return socket;
+  }
+
+  // If socket is connecting, wait for it
+  if (socket.connecting) {
+    console.log("Socket is in connecting state, waiting for connection");
+    return socket;
+  }
+
+  // Clean up socket if it exists but is not connected
+  if (!socket.connected) {
+    console.log("Cleaning up socket before reconnecting");
+    try {
+      socket.disconnect();
+    } catch (error) {
+      console.error("Error disconnecting socket:", error);
+    }
   }
 
   // Update socket options and connect
@@ -47,12 +63,16 @@ export const setupSocket = (token: string) => {
   socket.io.opts.reconnectionDelay = 1000;
   socket.io.opts.reconnectionDelayMax = 5000;
   socket.io.opts.timeout = 20000;
-  socket.io.opts.transports = ["websocket", "polling"]; // Support both for better reliability
+  socket.io.opts.transports = ["websocket"]; // Use only websocket to avoid polling issues
 
   console.log("Socket options configured, connecting...");
 
   // Connect the socket
-  socket.connect();
+  try {
+    socket.connect();
+  } catch (error) {
+    console.error("Error connecting socket:", error);
+  }
 
   // Add a timeout to check if connection was successful
   setTimeout(() => {
@@ -60,7 +80,21 @@ export const setupSocket = (token: string) => {
       console.warn(
         "⚠️ Socket failed to connect within timeout, attempting reconnect...",
       );
-      socket.connect();
+      // Disconnect first to ensure clean state
+      try {
+        socket.disconnect();
+      } catch (error) {
+        console.error("Error disconnecting socket:", error);
+      }
+      // Wait a bit before reconnecting
+      setTimeout(() => {
+        console.log("Attempting to reconnect socket...");
+        try {
+          socket.connect();
+        } catch (error) {
+          console.error("Error reconnecting socket:", error);
+        }
+      }, 1000);
     }
   }, 5000);
 
@@ -127,10 +161,28 @@ export const setupCallSocket = (token: string) => {
     return null;
   }
 
-  // Disconnect existing call socket if any
+  // If we already have a connected socket, just return it
   if (callSocket && callSocket.connected) {
-    console.log("Disconnecting existing call socket before creating a new one");
-    callSocket.disconnect();
+    console.log("Call socket already connected, reusing existing socket");
+    return callSocket;
+  }
+
+  // If we have a socket that's connecting, wait for it
+  if (callSocket && callSocket.connecting) {
+    console.log("Call socket is in connecting state, waiting for connection");
+    return callSocket;
+  }
+
+  // Clean up existing socket if it exists but is not connected
+  if (callSocket) {
+    console.log("Cleaning up existing call socket before creating a new one");
+    try {
+      callSocket.removeAllListeners();
+      callSocket.disconnect();
+    } catch (error) {
+      console.error("Error cleaning up existing call socket:", error);
+    }
+    callSocket = null;
   }
 
   // Get the socket URL
@@ -140,16 +192,21 @@ export const setupCallSocket = (token: string) => {
   console.log(`Setting up call socket at URL: ${callSocketUrl}`);
 
   // Create a new socket for the call namespace
-  callSocket = io(callSocketUrl, {
-    auth: { token },
-    reconnection: true,
-    reconnectionAttempts: 10,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-    timeout: 20000,
-    transports: ["websocket", "polling"],
-    forceNew: true, // Always create a new connection for the call namespace
-  });
+  try {
+    callSocket = io(callSocketUrl, {
+      auth: { token },
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+      transports: ["websocket"],
+      forceNew: true, // Always create a new connection for the call namespace
+    });
+  } catch (error) {
+    console.error("Error creating call socket:", error);
+    return null;
+  }
 
   // Set up event listeners for debugging
   callSocket.on("connect", () => {

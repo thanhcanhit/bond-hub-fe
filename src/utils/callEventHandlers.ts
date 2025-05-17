@@ -89,7 +89,10 @@ export function setupCallEventHandlers({
           console.log(
             "[CALL_EVENTS] Initializing WebRTC after CALL_ACCEPTED message",
           );
-          initWebRTC(true); // Force connect since we know the call has been accepted
+          initWebRTC(true) // Force connect since we know the call has been accepted
+            .catch((error) => {
+              console.error("[CALL_EVENTS] Error initializing WebRTC:", error);
+            });
         }, 300); // Reduced delay for faster connection
       }
     } else if (
@@ -114,7 +117,13 @@ export function setupCallEventHandlers({
             `[CALL_EVENTS] Initializing WebRTC after ${event.data.type} message`,
           );
           setTimeout(() => {
-            initWebRTC(true); // Force connect
+            initWebRTC(true) // Force connect
+              .catch((error) => {
+                console.error(
+                  `[CALL_EVENTS] Error initializing WebRTC after ${event.data.type} message:`,
+                  error,
+                );
+              });
           }, 300);
         }
       }
@@ -182,7 +191,13 @@ export function setupCallEventHandlers({
         console.log(
           "[CALL_EVENTS] Initializing WebRTC after call:accepted event",
         );
-        initWebRTC(true); // Force connect since we know the call has been accepted
+        initWebRTC(true) // Force connect since we know the call has been accepted
+          .catch((error) => {
+            console.error(
+              "[CALL_EVENTS] Error initializing WebRTC after call:accepted event:",
+              error,
+            );
+          });
       }, 300); // Reduced delay for faster connection
     }
   };
@@ -208,7 +223,13 @@ export function setupCallEventHandlers({
           "[CALL_EVENTS] Initializing WebRTC after room joined event",
         );
         setTimeout(() => {
-          initWebRTC(true); // Force connect since we know the room has been joined
+          initWebRTC(true) // Force connect since we know the room has been joined
+            .catch((error) => {
+              console.error(
+                "[CALL_EVENTS] Error initializing WebRTC after room joined event:",
+                error,
+              );
+            });
         }, 300); // Reduced delay for faster connection
       }
     }
@@ -264,7 +285,13 @@ export function setupCallEventHandlers({
           "[CALL_EVENTS] Initializing WebRTC after RTP capabilities received event",
         );
         setTimeout(() => {
-          initWebRTC(true); // Force connect since we know RTP capabilities have been received
+          initWebRTC(true) // Force connect since we know RTP capabilities have been received
+            .catch((error) => {
+              console.error(
+                "[CALL_EVENTS] Error initializing WebRTC after RTP capabilities received:",
+                error,
+              );
+            });
         }, 500);
       }
     }
@@ -301,7 +328,13 @@ export function setupCallEventHandlers({
           "[CALL_EVENTS] Initializing WebRTC after participant joined event",
         );
         setTimeout(() => {
-          initWebRTC(true); // Force connect since we know a participant has joined
+          initWebRTC(true) // Force connect since we know a participant has joined
+            .catch((error) => {
+              console.error(
+                "[CALL_EVENTS] Error initializing WebRTC after participant joined:",
+                error,
+              );
+            });
         }, 300); // Reduced delay for faster connection
       }
     }

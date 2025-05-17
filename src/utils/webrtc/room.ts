@@ -549,6 +549,27 @@ export async function joinRoomAttempt(roomId: string): Promise<void> {
           "[WEBRTC] Socket exists but not connected. Socket ID:",
           state.socket.id,
         );
+
+        // Try to connect the socket if it exists but is not connected
+        if (!state.socket.connected) {
+          console.log("[WEBRTC] Attempting to connect existing socket");
+          state.socket.connect();
+
+          // Wait a bit for the connection to establish
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+
+          // Check if connection was successful
+          if (state.socket.connected) {
+            console.log("[WEBRTC] Successfully connected existing socket");
+            // Continue with the existing socket
+            joinRoomWithSocket(state.socket, roomId, timeout, resolve, reject);
+            return;
+          } else {
+            console.log(
+              "[WEBRTC] Failed to connect existing socket, will try to create a new one",
+            );
+          }
+        }
       } else {
         console.log("[WEBRTC] Socket is null");
       }
@@ -719,12 +740,38 @@ export function joinRoomWithSocket(
     // Force reconnection
     socket.connect();
 
-    // Don't wait for reconnection, just report the error
-    console.error("[WEBRTC] Socket disconnected, cannot join room");
-    reject(
-      new Error("Socket disconnected, cannot join room. Please try again."),
-    );
+    // Wait for the socket to connect
+    console.log("[WEBRTC] Waiting for socket to connect...");
+    let connectionAttempts = 0;
+    const maxConnectionAttempts = 3;
+    const checkConnection = async () => {
+      if (socket.connected) {
+        console.log(
+          "[WEBRTC] Socket successfully connected, proceeding with room join",
+        );
+        // Continue with the room join
+        joinRoomWithSocket(socket, roomId, timeout, resolve, reject);
+        return;
+      }
 
+      connectionAttempts++;
+      if (connectionAttempts < maxConnectionAttempts) {
+        console.log(
+          `[WEBRTC] Socket still not connected, attempt ${connectionAttempts}/${maxConnectionAttempts}`,
+        );
+        setTimeout(checkConnection, 1000);
+      } else {
+        console.error(
+          "[WEBRTC] Socket failed to connect after multiple attempts",
+        );
+        reject(
+          new Error("Socket disconnected, cannot join room. Please try again."),
+        );
+      }
+    };
+
+    // Start checking for connection
+    setTimeout(checkConnection, 1000);
     return;
   }
 

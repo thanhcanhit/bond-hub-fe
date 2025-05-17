@@ -17,10 +17,10 @@ export default function IncomingCallPage({
 }: {
   params: { id: string };
 }) {
-  // Unwrap params using React.use() as recommended by Next.js
-  // @ts-ignore - Next.js params are a Promise in the latest version
+  // Unwrap params using React.use() to avoid the warning
+  // @ts-ignore - Ignore TypeScript error with use()
   const unwrappedParams = use(params);
-  // @ts-ignore - TypeScript doesn't recognize the unwrapped params type
+  // @ts-ignore - Ignore TypeScript error with unwrappedParams
   const callId = unwrappedParams.id;
 
   const searchParams = useSearchParams();
@@ -37,26 +37,38 @@ export default function IncomingCallPage({
     console.log("Starting call ringtone");
     let audio: HTMLAudioElement | null = null;
 
-    try {
-      audio = playCallRingtone(0.7);
+    const setupAudio = () => {
+      try {
+        audio = playCallRingtone(0.7);
 
-      // Add event listeners to debug audio issues
-      audio.addEventListener("play", () => {
-        console.log("Call ringtone started playing");
-      });
+        // Add event listeners to debug audio issues
+        if (audio) {
+          audio.addEventListener("play", () => {
+            console.log("Call ringtone started playing");
+          });
 
-      audio.addEventListener("error", (e) => {
-        console.error("Error playing call ringtone:", e);
-      });
+          audio.addEventListener("error", (e) => {
+            console.error("Error playing call ringtone:", e);
+          });
 
-      audio.addEventListener("pause", () => {
-        console.log("Call ringtone paused");
-      });
-    } catch (error) {
-      console.error("Exception when trying to play ringtone:", error);
-    }
+          audio.addEventListener("pause", () => {
+            console.log("Call ringtone paused");
+          });
+        }
+      } catch (error) {
+        console.error("Exception when trying to play ringtone:", error);
+      }
+    };
+
+    // Set up audio with a small delay to ensure component is fully mounted
+    const timeoutId = setTimeout(() => {
+      setupAudio();
+    }, 100);
 
     return () => {
+      // Clear the timeout if component unmounts before timeout completes
+      clearTimeout(timeoutId);
+
       console.log("Cleaning up call ringtone");
       if (audio) {
         try {
@@ -407,72 +419,16 @@ export default function IncomingCallPage({
 
         console.log("Request body:", requestBody);
 
-        // Try a different endpoint first - direct call acceptance
-        console.log("Trying direct call acceptance endpoint first");
-        let response = await fetch(`${apiUrl}/api/v1/calls/${callId}/accept`, {
+        // Use the standard join endpoint directly
+        console.log("Using standard join endpoint directly");
+        const response = await fetch(`${apiUrl}/api/v1/calls/join`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${accessToken}`,
           },
-          body: JSON.stringify({
-            userId: currentUserId,
-          }),
+          body: JSON.stringify(requestBody),
         });
-
-        // If that fails, try the room join endpoint
-        if (!response.ok) {
-          console.log(
-            `Direct accept endpoint failed with status ${response.status}, trying room join endpoint`,
-          );
-
-          // Try joining the room directly
-          if (roomId) {
-            console.log(`Trying to join room directly with roomId=${roomId}`);
-            response = await fetch(`${apiUrl}/api/v1/rooms/${roomId}/join`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({
-                userId: currentUserId,
-              }),
-            });
-
-            if (response.ok) {
-              console.log("Room join endpoint succeeded");
-            } else {
-              console.log(
-                `Room join endpoint failed with status ${response.status}, trying standard join endpoint`,
-              );
-
-              // Make the direct API call to the standard endpoint
-              response = await fetch(`${apiUrl}/api/v1/calls/join`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${accessToken}`,
-                },
-                body: JSON.stringify(requestBody),
-              });
-            }
-          } else {
-            console.log("No roomId available, trying standard join endpoint");
-
-            // Make the direct API call to the standard endpoint
-            response = await fetch(`${apiUrl}/api/v1/calls/join`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify(requestBody),
-            });
-          }
-        } else {
-          console.log("Direct accept endpoint succeeded");
-        }
 
         // Log the response status
         console.log(`API response status: ${response.status}`);

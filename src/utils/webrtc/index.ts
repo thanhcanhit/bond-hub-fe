@@ -279,55 +279,88 @@ export async function initializeWebRTC(
       try {
         // First check if we already have a socket from callSocket.ts
         try {
-          // Import the callSocket from lib/callSocket.ts
+          // Import the socket modules
           const callSocketModule = await import("@/lib/callSocket");
-          const socket = callSocketModule.getCallSocket();
+          const socketModule = await import("@/lib/socket");
+          const authStore = useAuthStore.getState();
+          const token = authStore.accessToken;
 
-          if (socket && socket.connected) {
-            console.log(
-              "[WEBRTC] Using existing connected socket from callSocket.ts",
+          if (!token) {
+            console.error(
+              "[WEBRTC] No token available for socket initialization",
             );
-            state.socket = socket;
+            throw new Error("No token available for socket initialization");
+          }
+
+          // First set up the main socket
+          console.log("[WEBRTC] Setting up main socket");
+          socketModule.setupSocket(token);
+
+          // Then check if we have an existing call socket
+          const existingSocket = callSocketModule.getCallSocket();
+
+          if (existingSocket && existingSocket.connected) {
+            console.log(
+              "[WEBRTC] Using existing connected socket from callSocket.ts with ID:",
+              existingSocket.id,
+            );
+            state.socket = existingSocket;
             return;
-          } else {
-            console.log(
-              "[WEBRTC] No connected socket found in callSocket.ts, will create a new one",
-            );
+          }
 
-            // Try to set up call socket if we have a token
-            const authStore = useAuthStore.getState();
-            if (authStore.accessToken) {
-              console.log(
-                "[WEBRTC] Initializing call socket using callSocket.ts",
-              );
-              const newSocket = callSocketModule.initCallSocket(
-                authStore.accessToken,
-              );
-              if (newSocket) {
+          // No connected socket, ensure a new one
+          console.log(
+            "[WEBRTC] No connected socket found, ensuring call socket",
+          );
+
+          // Ensure call socket is initialized and connected
+          const callSocket = await callSocketModule.ensureCallSocket(true);
+
+          if (callSocket) {
+            console.log("[WEBRTC] Successfully initialized call socket");
+            state.socket = callSocket;
+
+            // Wait for connection to establish if needed
+            if (!callSocket.connected) {
+              console.log("[WEBRTC] Waiting for call socket to connect...");
+
+              // Connect the socket if it's not already connecting
+              if (!callSocket.connecting) {
+                callSocket.connect();
+              }
+
+              // Wait for connection with timeout
+              const connectionTimeout = 5000;
+              const startTime = Date.now();
+
+              while (
+                !callSocket.connected &&
+                Date.now() - startTime < connectionTimeout
+              ) {
+                await new Promise((resolve) => setTimeout(resolve, 500));
                 console.log(
-                  "[WEBRTC] Successfully initialized call socket from callSocket.ts",
+                  "[WEBRTC] Still waiting for call socket connection...",
                 );
-                state.socket = newSocket;
-
-                // Wait a short time for connection to establish
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-
-                if (state.socket.connected) {
-                  console.log(
-                    "[WEBRTC] Call socket from callSocket.ts connected successfully",
-                  );
-                  return;
-                } else {
-                  console.log(
-                    "[WEBRTC] Call socket from callSocket.ts not connected yet, will try connectToSocket",
-                  );
-                }
               }
             }
+
+            if (callSocket.connected) {
+              console.log(
+                "[WEBRTC] Call socket connected successfully with ID:",
+                callSocket.id,
+              );
+              return;
+            } else {
+              console.warn(
+                "[WEBRTC] Call socket failed to connect within timeout, will try connectToSocket",
+              );
+            }
+          } else {
+            console.error("[WEBRTC] Failed to initialize call socket");
           }
         } catch (importError) {
           console.error(
-            "[WEBRTC] Error importing or using callSocket.ts:",
+            "[WEBRTC] Error with socket initialization:",
             importError,
           );
         }
