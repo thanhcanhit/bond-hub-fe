@@ -1,14 +1,9 @@
 import { Device } from "mediasoup-client";
 import { Socket } from "socket.io-client";
 import { useAuthStore } from "@/stores/authStore";
-import { state } from "./state";
-import { getCurrentRoomId, setCurrentRoomId } from "./state";
+import { state, setCurrentRoomId } from "./state";
 import { connectToSocket } from "./socket";
-import { createSendTransport, createRecvTransport } from "./transport";
-import { produce } from "./producer";
-import { cleanup } from "./cleanup";
 import { setupRoomConnection } from "./connection";
-import { consume } from "./consumer";
 
 /**
  * Join a WebRTC room
@@ -34,8 +29,7 @@ export async function joinRoom(roomId: string): Promise<void> {
         console.log(
           "[WEBRTC] Not attempting to reconnect because cleanup is in progress, but continuing anyway",
         );
-        // Continue anyway instead of rejecting
-        resolve();
+        // Continue anyway instead of throwing an error
         return;
       }
     } catch (storageError) {
@@ -74,7 +68,10 @@ export async function joinRoom(roomId: string): Promise<void> {
         // Verify socket connection after a short delay
         await new Promise((resolve) => setTimeout(resolve, 500));
 
-        if (!state.socket || !state.socket.connected) {
+        // Type assertion to help TypeScript understand the socket type
+        const socket = state.socket as Socket | null;
+
+        if (!socket || !socket.connected) {
           console.error(
             "[WEBRTC] Socket reconnection failed or socket disconnected immediately",
           );
@@ -86,8 +83,9 @@ export async function joinRoom(roomId: string): Promise<void> {
           await new Promise((resolve) => setTimeout(resolve, 1500));
           await connectToSocket();
 
-          // Final verification
-          if (!state.socket || !state.socket.connected) {
+          // Final verification with type assertion
+          const reconnectedSocket = state.socket as Socket | null;
+          if (!reconnectedSocket || !reconnectedSocket.connected) {
             console.warn(
               "[WEBRTC] Socket reconnection failed after multiple attempts, but continuing anyway",
             );
@@ -97,9 +95,10 @@ export async function joinRoom(roomId: string): Promise<void> {
 
         console.log(
           "[WEBRTC] Socket reconnected successfully with ID:",
-          state.socket.id,
+          (state.socket as Socket | null)?.id || "unknown",
         );
-      } catch (socketError) {
+      } catch (error) {
+        const socketError = error as Error;
         console.error("[WEBRTC] Failed to reconnect socket:", socketError);
 
         // Dispatch an event to notify UI about socket connection issues
@@ -145,7 +144,8 @@ export async function joinRoom(roomId: string): Promise<void> {
           await new Promise((resolve) => setTimeout(resolve, 1000));
           state.device = new Device();
           console.log("[WEBRTC] Device created successfully on second attempt");
-        } catch (retryError) {
+        } catch (error) {
+          const retryError = error as Error;
           console.error(
             "[WEBRTC] Failed to create device on retry:",
             retryError,
@@ -173,8 +173,11 @@ export async function joinRoom(roomId: string): Promise<void> {
 
     // Log successful initialization
     console.log("[WEBRTC] Socket and device initialized successfully");
-    console.log("[WEBRTC] Socket ID:", state.socket.id);
-    console.log("[WEBRTC] Device loaded:", state.device.loaded);
+    console.log(
+      "[WEBRTC] Socket ID:",
+      (state.socket as Socket | null)?.id || "unknown",
+    );
+    console.log("[WEBRTC] Device loaded:", state.device?.loaded || false);
   }
 
   // Store the current room ID for recovery purposes
@@ -451,7 +454,14 @@ export async function joinRoom(roomId: string): Promise<void> {
                       "@/actions/call.action"
                     );
 
-                    const result = await initiateCall(targetId, "AUDIO", token);
+                    // Add userId as the fourth parameter (current user ID)
+                    const userId = useAuthStore.getState().user?.id || "";
+                    const result = await initiateCall(
+                      targetId,
+                      "AUDIO",
+                      token,
+                      userId,
+                    );
 
                     if (result.success) {
                       console.log(
@@ -624,16 +634,11 @@ export async function joinRoomAttempt(roomId: string): Promise<void> {
           // Wait a bit for the connection to establish using setTimeout instead of await
           setTimeout(() => {
             // Check if connection was successful
-            if (state.socket.connected) {
+            const socket = state.socket as Socket | null;
+            if (socket && socket.connected) {
               console.log("[WEBRTC] Successfully connected existing socket");
               // Continue with the existing socket
-              joinRoomWithSocket(
-                state.socket,
-                roomId,
-                timeout,
-                resolve,
-                reject,
-              );
+              joinRoomWithSocket(socket, roomId, timeout, resolve, reject);
               return;
             } else {
               console.log(
@@ -919,33 +924,7 @@ export function joinRoomWithSocket(
     resolve();
   };
 
-  // Helper function for reconnected socket
-  function joinRoomWithReconnectedSocket(
-    reconnectedSocket: Socket,
-    roomId: string,
-    timeout: NodeJS.Timeout,
-    resolve: (value: void | PromiseLike<void>) => void,
-    reject: (reason?: any) => void,
-  ): void {
-    console.log(
-      `[WEBRTC] Joining room with reconnected socket ID ${reconnectedSocket.id}`,
-    );
-
-    // Set up the same event handlers
-    reconnectedSocket.once("disconnect", disconnectHandler);
-    reconnectedSocket.once("connect_error", connectErrorHandler);
-
-    // Emit the join room event
-    emitJoinRoom(
-      reconnectedSocket,
-      roomId,
-      timeout,
-      resolve,
-      reject,
-      disconnectHandler,
-      connectErrorHandler,
-    );
-  }
+  // Note: We've removed the unused joinRoomWithReconnectedSocket function
 
   // Add the connect_error listener
   socket.once("connect_error", connectErrorHandler);

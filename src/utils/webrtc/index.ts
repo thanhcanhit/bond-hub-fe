@@ -12,11 +12,6 @@ import {
 import { setupRemoteStreamListeners } from "./events";
 import { joinRoom } from "./room";
 import { cleanup } from "./cleanup";
-import { consume } from "./consumer";
-import { produce } from "./producer";
-
-// Keep track of initialization attempts to prevent infinite loops
-const initAttemptKeys = new Map<string, number>();
 
 /**
  * Initialize WebRTC connection
@@ -231,7 +226,8 @@ export async function initializeWebRTC(
         state.device = new Device();
         console.log("[WEBRTC] Device created successfully");
       }
-    } catch (error: any) {
+    } catch (err) {
+      const error = err as Error;
       console.error("[WEBRTC] Error creating Device:", error);
 
       // Handle "already loaded" error properly
@@ -250,7 +246,8 @@ export async function initializeWebRTC(
           console.log("[WEBRTC] Attempting to create device again after error");
           state.device = new Device();
           console.log("[WEBRTC] Device created successfully on second attempt");
-        } catch (retryError: any) {
+        } catch (err) {
+          const retryError = err as Error;
           console.error(
             "[WEBRTC] Failed to create device on retry:",
             retryError,
@@ -338,18 +335,18 @@ export async function initializeWebRTC(
             if (!callSocket.connected) {
               console.log("[WEBRTC] Waiting for call socket to connect...");
 
-              // Connect the socket if it's not already connecting
-              if (!callSocket.connecting) {
+              // Connect the socket if it's not already connected
+              if (!callSocket.connected) {
                 callSocket.connect();
               }
 
               // Set up a promise-based connection wait with extended timeout
               const waitForConnection = () => {
-                return new Promise<boolean>((resolve, reject) => {
-                  // Connect the socket explicitly if it's not connecting
-                  if (!callSocket.connecting && !callSocket.connected) {
+                return new Promise<boolean>((resolve) => {
+                  // Connect the socket explicitly if it's not connected
+                  if (!callSocket.connected) {
                     console.log(
-                      "[WEBRTC] Socket not connecting, calling connect() explicitly",
+                      "[WEBRTC] Socket not connected, calling connect() explicitly",
                     );
                     callSocket.connect();
                   }
@@ -507,12 +504,12 @@ export async function initializeWebRTC(
 
         console.log(
           "[WEBRTC] Socket object exists in state:",
-          state.socket.id || "(no ID yet)",
+          state.socket?.id || "(no ID yet)",
         );
 
         // The socket should be connected at this point because connectToSocket()
         // waits for the connection to be established before resolving
-        if (!state.socket.connected) {
+        if (state.socket && !state.socket.connected) {
           console.warn(
             "[WEBRTC] Socket exists but not connected after connectToSocket(), attempting to connect explicitly",
           );
@@ -524,7 +521,7 @@ export async function initializeWebRTC(
           await new Promise((resolve) => setTimeout(resolve, 2000));
 
           // Check again, but don't throw an error even if still not connected
-          if (!state.socket.connected) {
+          if (state.socket && !state.socket.connected) {
             console.warn(
               "[WEBRTC] Socket still not connected after explicit connect attempt, but continuing anyway",
             );
@@ -533,7 +530,7 @@ export async function initializeWebRTC(
         }
 
         console.log(
-          `[WEBRTC] Socket connected successfully with ID: ${state.socket.id}`,
+          `[WEBRTC] Socket connected successfully with ID: ${state.socket?.id || "unknown"}`,
         );
 
         // Add a short delay to ensure connection is stable
@@ -568,17 +565,19 @@ export async function initializeWebRTC(
 
         // Send a test message to verify the connection is working
         try {
-          console.log(
-            "[WEBRTC] Sending test message to verify socket connection",
-          );
-          state.socket.emit("ping", { timestamp: Date.now() });
+          if (state.socket) {
+            console.log(
+              "[WEBRTC] Sending test message to verify socket connection",
+            );
+            state.socket.emit("ping", { timestamp: Date.now() });
+          }
         } catch (pingError) {
           console.error("[WEBRTC] Error sending test message:", pingError);
           // Don't throw here, just log the error
         }
 
         // Verify socket has an ID
-        if (!state.socket.id) {
+        if (state.socket && !state.socket.id) {
           console.warn(
             "[WEBRTC] Socket has no ID after connection, but continuing anyway",
           );
@@ -622,15 +621,17 @@ export async function initializeWebRTC(
           }
         } else {
           console.log(
-            `[WEBRTC] Socket connection verified and stable with ID: ${state.socket.id}`,
+            `[WEBRTC] Socket connection verified and stable with ID: ${state.socket?.id || "unknown"}`,
           );
 
           // Store the socket ID in sessionStorage for debugging
           try {
-            sessionStorage.setItem("lastStableSocketId", state.socket.id);
-            console.log(
-              `[WEBRTC] Stored stable socket ID in sessionStorage: ${state.socket.id}`,
-            );
+            if (state.socket && state.socket.id) {
+              sessionStorage.setItem("lastStableSocketId", state.socket.id);
+              console.log(
+                `[WEBRTC] Stored stable socket ID in sessionStorage: ${state.socket.id}`,
+              );
+            }
           } catch (storageError) {
             console.warn(
               "[WEBRTC] Error storing socket ID in sessionStorage:",

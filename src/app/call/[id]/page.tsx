@@ -423,10 +423,13 @@ function CallPageContent({ userId }: { userId: string }) {
       console.log("[CALL_PAGE] Received call:error event:", data);
 
       // Show an error message to the user
-      toast.error(`Lỗi cuộc gọi: ${data.errorMessage}`, {
-        duration: 5000,
-        position: "top-center",
-      });
+      toast.error(
+        `Lỗi cuộc gọi: ${data.errorMessage || data.error || "Lỗi không xác định"}`,
+        {
+          duration: 5000,
+          position: "top-center",
+        },
+      );
 
       // Update call status to ended if this is a critical error
       if (
@@ -437,14 +440,53 @@ function CallPageContent({ userId }: { userId: string }) {
       }
     };
 
-    // Add the event listener
+    // Handle socket error events
+    const handleSocketError = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const data = customEvent.detail;
+
+      console.log("[CALL_PAGE] Received call:socket:error event:", data);
+
+      // Show a user-friendly error message
+      toast.error(
+        `Lỗi kết nối: ${data.error || "Không thể kết nối đến máy chủ cuộc gọi"}`,
+        {
+          duration: 5000,
+          position: "top-center",
+        },
+      );
+
+      // Store error information in sessionStorage for debugging
+      try {
+        sessionStorage.setItem(
+          "last_socket_error",
+          data.error || "Unknown error",
+        );
+        sessionStorage.setItem("last_socket_error_time", Date.now().toString());
+      } catch (storageError) {
+        console.warn(
+          "[CALL_PAGE] Error storing socket error in sessionStorage:",
+          storageError,
+        );
+      }
+    };
+
+    // Add the event listeners
     window.addEventListener("call:error", handleCallError as EventListener);
+    window.addEventListener(
+      "call:socket:error",
+      handleSocketError as EventListener,
+    );
 
     // Return cleanup function
     return () => {
       window.removeEventListener(
         "call:error",
         handleCallError as EventListener,
+      );
+      window.removeEventListener(
+        "call:socket:error",
+        handleSocketError as EventListener,
       );
     };
   }, []);
@@ -600,28 +642,95 @@ function CallPageContent({ userId }: { userId: string }) {
         const callSocketModule = await import("@/lib/callSocket");
         const { useAuthStore } = await import("@/stores/authStore");
 
+        // Get token with more detailed logging
         const token = useAuthStore.getState().accessToken;
         if (!token) {
-          console.warn(
-            "[CALL_PAGE] No token available for socket initialization",
-          );
-          return null;
+          const errorMsg =
+            "[CALL_PAGE] No token available for socket initialization";
+          console.error(errorMsg);
+          toast.error("Không thể kết nối: Bạn cần đăng nhập lại");
+          throw new Error(errorMsg);
         }
 
-        // Set up main socket first
-        console.log("[CALL_PAGE] Setting up main socket for call page");
-        socketModule.setupSocket(token);
+        console.log(
+          "[CALL_PAGE] Token retrieved successfully for socket initialization",
+        );
 
-        // Initialize call socket without retry logic
+        // Check if token is valid (not expired)
+        try {
+          // Simple check to see if token looks valid (contains periods for JWT format)
+          if (!token.includes(".")) {
+            console.warn("[CALL_PAGE] Token format appears invalid");
+          }
+
+          // Store token first chars for debugging
+          console.log(
+            `[CALL_PAGE] Token first chars: ${token.substring(0, 10)}...`,
+          );
+
+          // Store user ID for debugging
+          const userId = useAuthStore.getState().user?.id;
+          console.log(`[CALL_PAGE] Current user ID: ${userId || "unknown"}`);
+        } catch (tokenCheckError) {
+          console.warn("[CALL_PAGE] Error checking token:", tokenCheckError);
+        }
+
+        // Set up main socket first with better error handling
+        console.log("[CALL_PAGE] Setting up main socket for call page");
+        try {
+          socketModule.setupSocket(token);
+          console.log("[CALL_PAGE] Main socket setup completed");
+        } catch (mainSocketError) {
+          console.error(
+            "[CALL_PAGE] Error setting up main socket:",
+            mainSocketError,
+          );
+          // Continue anyway - the call socket is more important
+        }
+
+        // Initialize call socket with improved error handling
         console.log("[CALL_PAGE] Initializing call socket for call page");
         let callSocket: any = null;
 
         try {
           console.log("[CALL_PAGE] Call socket initialization attempt");
-          callSocket = await callSocketModule.ensureCallSocket(true);
+
+          // First try direct initialization which might be more reliable
+          console.log(
+            "[CALL_PAGE] Trying direct call socket initialization first",
+          );
+          callSocket = callSocketModule.initCallSocket(token, true);
+
+          if (!callSocket) {
+            console.log(
+              "[CALL_PAGE] Direct initialization returned null, trying ensureCallSocket",
+            );
+            callSocket = await callSocketModule.ensureCallSocket(true);
+          }
 
           if (callSocket) {
             console.log("[CALL_PAGE] Call socket initialized successfully");
+
+            // Check if socket is connected
+            if (!callSocket.connected) {
+              console.log(
+                "[CALL_PAGE] Socket created but not connected, attempting to connect",
+              );
+              callSocket.connect();
+
+              // Wait a moment for connection to establish
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+
+              if (callSocket.connected) {
+                console.log(
+                  "[CALL_PAGE] Socket connected successfully after explicit connect",
+                );
+              } else {
+                console.warn(
+                  "[CALL_PAGE] Socket still not connected after explicit connect attempt",
+                );
+              }
+            }
 
             // Store the socket ID in sessionStorage for debugging
             try {
@@ -629,6 +738,10 @@ function CallPageContent({ userId }: { userId: string }) {
                 sessionStorage.setItem("lastCallSocketId", callSocket.id);
                 console.log(
                   `[CALL_PAGE] Stored call socket ID in sessionStorage: ${callSocket.id}`,
+                );
+              } else {
+                console.warn(
+                  "[CALL_PAGE] Socket has no ID after initialization",
                 );
               }
             } catch (storageError) {
@@ -649,13 +762,37 @@ function CallPageContent({ userId }: { userId: string }) {
               );
             }
           } else {
-            console.warn("[CALL_PAGE] ensureCallSocket returned null");
+            const errorMsg = "[CALL_PAGE] ensureCallSocket returned null";
+            console.error(errorMsg);
+            throw new Error(errorMsg);
           }
         } catch (socketError) {
           console.error(
             "[CALL_PAGE] Error in call socket initialization:",
             socketError,
           );
+
+          // Try one more approach - use the socket module's setupCallSocket
+          try {
+            console.log(
+              "[CALL_PAGE] Attempting fallback socket initialization with socketModule.setupCallSocket",
+            );
+            callSocket = socketModule.setupCallSocket(token);
+
+            if (callSocket) {
+              console.log(
+                "[CALL_PAGE] Fallback socket initialization successful",
+              );
+            } else {
+              throw new Error("Fallback socket initialization failed");
+            }
+          } catch (fallbackError) {
+            console.error(
+              "[CALL_PAGE] Fallback socket initialization failed:",
+              fallbackError,
+            );
+            throw socketError; // Re-throw the original error
+          }
         }
 
         if (callSocket) {
@@ -668,8 +805,9 @@ function CallPageContent({ userId }: { userId: string }) {
             window.dispatchEvent(
               new CustomEvent("call:socket:ready", {
                 detail: {
-                  socketId: callSocket.id,
+                  socketId: callSocket.id || "unknown",
                   timestamp: new Date().toISOString(),
+                  connected: callSocket.connected,
                 },
               }),
             );
@@ -683,14 +821,41 @@ function CallPageContent({ userId }: { userId: string }) {
 
           return callSocket;
         } else {
-          console.error("[CALL_PAGE] Failed to initialize call socket");
-          return null;
+          const errorMsg =
+            "[CALL_PAGE] Failed to initialize call socket after all attempts";
+          console.error(errorMsg);
+          throw new Error(errorMsg);
         }
       } catch (error) {
-        console.error(
-          "[CALL_PAGE] Error initializing sockets for call page:",
-          error,
+        const errorMsg = `[CALL_PAGE] Failed to initialize call socket: ${error instanceof Error ? error.message : "Unknown error"}`;
+        console.error(errorMsg);
+
+        // Dispatch an error event that can be caught by other components
+        try {
+          window.dispatchEvent(
+            new CustomEvent("call:socket:error", {
+              detail: {
+                error: error instanceof Error ? error.message : "Unknown error",
+                timestamp: new Date().toISOString(),
+              },
+            }),
+          );
+        } catch (eventError) {
+          console.error(
+            "[CALL_PAGE] Error dispatching socket error event:",
+            eventError,
+          );
+        }
+
+        // Show a user-friendly error message
+        toast.error(
+          "Không thể kết nối đến máy chủ cuộc gọi. Vui lòng thử lại sau.",
+          {
+            duration: 5000,
+            position: "top-center",
+          },
         );
+
         return null;
       }
     };
