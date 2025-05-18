@@ -323,7 +323,7 @@ function CallPageContent({ userId }: { userId: string }) {
       }
 
       // Import socket modules
-      const { getCallSocket, ensureCallSocket, initCallSocket } = await import(
+      const { getCallSocket, ensureCallSocket } = await import(
         "@/lib/callSocket"
       );
       const { useAuthStore } = await import("@/stores/authStore");
@@ -353,98 +353,17 @@ function CallPageContent({ userId }: { userId: string }) {
         "[CALL_PAGE] Socket not connected, ensuring call socket is available",
       );
 
-      // Multi-stage socket initialization approach
-      // Stage 1: Try to ensure call socket with normal approach
+      // Simple socket initialization without multiple stages or reconnection attempts
       try {
-        console.log(
-          "[CALL_PAGE] Stage 1: Ensuring call socket with normal approach",
-        );
+        console.log("[CALL_PAGE] Initializing call socket");
         socket = await ensureCallSocket(true);
 
         if (socket && socket.connected) {
-          console.log(
-            "[CALL_PAGE] Successfully ensured call socket connection in Stage 1",
-          );
+          console.log("[CALL_PAGE] Successfully initialized call socket");
         } else {
           console.warn(
-            "[CALL_PAGE] Failed to ensure call socket in Stage 1, trying Stage 2",
+            "[CALL_PAGE] Failed to initialize call socket, proceeding anyway",
           );
-
-          // Stage 2: Try direct initialization
-          console.log(
-            "[CALL_PAGE] Stage 2: Trying direct socket initialization",
-          );
-          socket = initCallSocket(token, true);
-
-          if (socket) {
-            // Connect explicitly
-            socket.connect();
-
-            // Wait for connection with timeout
-            console.log("[CALL_PAGE] Waiting for direct socket to connect");
-            const connectionTimeout = 10000; // 10 seconds
-            const startTime = Date.now();
-
-            while (
-              !socket.connected &&
-              Date.now() - startTime < connectionTimeout
-            ) {
-              await new Promise((resolve) => setTimeout(resolve, 300));
-
-              // Log occasionally
-              if ((Date.now() - startTime) % 3000 < 300) {
-                console.log(
-                  "[CALL_PAGE] Still waiting for socket to connect...",
-                );
-              }
-            }
-
-            if (socket.connected) {
-              console.log(
-                "[CALL_PAGE] Successfully connected socket in Stage 2",
-              );
-            } else {
-              console.warn(
-                "[CALL_PAGE] Failed to connect socket in Stage 2, trying Stage 3",
-              );
-
-              // Stage 3: Last resort - create a simpler socket
-              console.log(
-                "[CALL_PAGE] Stage 3: Creating a simpler socket as last resort",
-              );
-              const { io } = await import("socket.io-client");
-              const socketUrl = `${process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"}/call`;
-
-              // Disconnect the previous socket if it exists
-              if (socket) {
-                socket.disconnect();
-              }
-
-              // Create a simpler socket
-              const lastResortSocket = io(socketUrl, {
-                auth: { token },
-                transports: ["websocket"],
-                forceNew: true,
-                reconnection: true,
-                timeout: 20000,
-              });
-
-              // Connect and wait
-              lastResortSocket.connect();
-              await new Promise((resolve) => setTimeout(resolve, 5000));
-
-              if (lastResortSocket.connected) {
-                console.log(
-                  "[CALL_PAGE] Successfully connected socket in Stage 3",
-                );
-                socket = lastResortSocket;
-              } else {
-                console.error(
-                  "[CALL_PAGE] All socket connection attempts failed",
-                );
-              }
-            }
-          }
         }
       } catch (socketError) {
         console.error(
@@ -616,69 +535,17 @@ function CallPageContent({ userId }: { userId: string }) {
       // Set up a new interval to check socket connection
       socketMonitorInterval = setInterval(async () => {
         try {
-          const { getCallSocket, ensureCallSocket } = await import(
-            "@/lib/callSocket"
-          );
+          const { getCallSocket } = await import("@/lib/callSocket");
           const socket = getCallSocket();
 
           // Only check if we're in a connected call
           if (callStatus === "connected") {
             if (!socket || !socket.connected) {
               console.warn(
-                "[CALL_PAGE] Socket disconnected during active call, attempting to reconnect",
+                "[CALL_PAGE] Socket disconnected during active call",
               );
 
-              // Check if we're in cleanup mode
-              const isCleaningUp =
-                sessionStorage.getItem("webrtc_cleaning_up") === "true";
-              if (isCleaningUp) {
-                console.log(
-                  "[CALL_PAGE] Not reconnecting socket because cleanup is in progress",
-                );
-                return;
-              }
-
-              // Get token for reconnection
-              const { useAuthStore } = await import("@/stores/authStore");
-              const token = useAuthStore.getState().accessToken;
-
-              if (token) {
-                console.log(
-                  "[CALL_PAGE] Attempting to reconnect socket during active call",
-                );
-                const newSocket = await ensureCallSocket(true);
-
-                if (newSocket && newSocket.connected) {
-                  console.log(
-                    "[CALL_PAGE] Successfully reconnected socket during active call",
-                  );
-
-                  // Dispatch an event to notify that the socket is ready
-                  try {
-                    window.dispatchEvent(
-                      new CustomEvent("call:socket:ready", {
-                        detail: {
-                          socketId: newSocket.id,
-                          timestamp: new Date().toISOString(),
-                          isReconnect: true,
-                        },
-                      }),
-                    );
-                    console.log(
-                      "[CALL_PAGE] Dispatched call:socket:ready event after reconnection",
-                    );
-                  } catch (eventError) {
-                    console.error(
-                      "[CALL_PAGE] Error dispatching socket ready event:",
-                      eventError,
-                    );
-                  }
-                } else {
-                  console.error(
-                    "[CALL_PAGE] Failed to reconnect socket during active call",
-                  );
-                }
-              }
+              // Just log the disconnection, don't try to reconnect
             } else {
               // Socket is connected, log this occasionally (every 5 checks)
               if (Math.random() < 0.2) {
@@ -745,80 +612,50 @@ function CallPageContent({ userId }: { userId: string }) {
         console.log("[CALL_PAGE] Setting up main socket for call page");
         socketModule.setupSocket(token);
 
-        // Then ensure call socket is initialized with retry logic
-        console.log("[CALL_PAGE] Ensuring call socket for call page");
+        // Initialize call socket without retry logic
+        console.log("[CALL_PAGE] Initializing call socket for call page");
         let callSocket: any = null;
-        let attempts = 0;
-        const maxAttempts = 3;
 
-        while (!callSocket && attempts < maxAttempts) {
-          attempts++;
-          try {
-            console.log(
-              `[CALL_PAGE] Call socket initialization attempt ${attempts}/${maxAttempts}`,
-            );
-            callSocket = await callSocketModule.ensureCallSocket(true);
+        try {
+          console.log("[CALL_PAGE] Call socket initialization attempt");
+          callSocket = await callSocketModule.ensureCallSocket(true);
 
-            if (callSocket) {
-              console.log("[CALL_PAGE] Call socket initialized successfully");
+          if (callSocket) {
+            console.log("[CALL_PAGE] Call socket initialized successfully");
 
-              // Store the socket ID in sessionStorage for debugging
-              try {
-                if (callSocket.id) {
-                  sessionStorage.setItem("lastCallSocketId", callSocket.id);
-                  console.log(
-                    `[CALL_PAGE] Stored call socket ID in sessionStorage: ${callSocket.id}`,
-                  );
-                }
-              } catch (storageError) {
-                console.warn(
-                  "[CALL_PAGE] Error storing socket ID in sessionStorage:",
-                  storageError,
-                );
-              }
-
-              // Wait a moment to ensure socket is stable
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-
-              // Verify socket is still connected
-              if (
-                callSocket &&
-                typeof callSocket.connected !== "undefined" &&
-                !callSocket.connected
-              ) {
-                console.warn(
-                  "[CALL_PAGE] Call socket disconnected immediately after initialization",
-                );
-                callSocket = null; // Reset to try again
-              } else {
+            // Store the socket ID in sessionStorage for debugging
+            try {
+              if (callSocket.id) {
+                sessionStorage.setItem("lastCallSocketId", callSocket.id);
                 console.log(
-                  "[CALL_PAGE] Call socket connection verified and stable",
+                  `[CALL_PAGE] Stored call socket ID in sessionStorage: ${callSocket.id}`,
                 );
-
-                // Emit a test event to verify the socket is working properly
-                try {
-                  callSocket.emit("ping", { timestamp: Date.now() });
-                  console.log("[CALL_PAGE] Test ping event sent successfully");
-                } catch (pingError) {
-                  console.error(
-                    "[CALL_PAGE] Error sending test ping event:",
-                    pingError,
-                  );
-                }
               }
-            } else {
-              console.warn("[CALL_PAGE] ensureCallSocket returned null");
-              // Wait before retry
-              await new Promise((resolve) => setTimeout(resolve, 1500));
+            } catch (storageError) {
+              console.warn(
+                "[CALL_PAGE] Error storing socket ID in sessionStorage:",
+                storageError,
+              );
             }
-          } catch (socketError) {
-            console.error(
-              `[CALL_PAGE] Error in call socket initialization attempt ${attempts}:`,
-              socketError,
-            );
-            // Wait before retry
-            await new Promise((resolve) => setTimeout(resolve, 1500));
+
+            // Emit a test event to verify the socket is working properly
+            try {
+              callSocket.emit("ping", { timestamp: Date.now() });
+              console.log("[CALL_PAGE] Test ping event sent successfully");
+            } catch (pingError) {
+              console.error(
+                "[CALL_PAGE] Error sending test ping event:",
+                pingError,
+              );
+            }
+          } else {
+            console.warn("[CALL_PAGE] ensureCallSocket returned null");
           }
+        } catch (socketError) {
+          console.error(
+            "[CALL_PAGE] Error in call socket initialization:",
+            socketError,
+          );
         }
 
         if (callSocket) {
@@ -846,9 +683,7 @@ function CallPageContent({ userId }: { userId: string }) {
 
           return callSocket;
         } else {
-          console.error(
-            "[CALL_PAGE] Failed to initialize call socket after multiple attempts",
-          );
+          console.error("[CALL_PAGE] Failed to initialize call socket");
           return null;
         }
       } catch (error) {

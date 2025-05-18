@@ -103,19 +103,9 @@ export function CallSocketProvider({ children }: CallSocketProviderProps) {
       });
     }
 
-    // Set up a periodic check to ensure sockets are connected
-    const checkInterval = setInterval(() => {
-      // Ensure main socket is connected
-      setupSocket(accessToken);
-
-      // Ensure call socket is connected
-      setupCallSocket(accessToken);
-    }, 30000); // Check every 30 seconds
-
     // Cleanup on unmount
     return () => {
       console.log("[CallSocketProvider] Cleaning up socket connection");
-      clearInterval(checkInterval);
       if (socket) {
         socket.off("connect");
         socket.off("disconnect");

@@ -6,9 +6,7 @@ import io from "socket.io-client";
 let socket: Socket = io({
   autoConnect: false, // Don't connect automatically
   forceNew: true, // Force a new connection
-  reconnection: true,
-  reconnectionAttempts: 10,
-  reconnectionDelay: 1000,
+  reconnection: false, // Disable automatic reconnection
   timeout: 20000,
   transports: ["websocket"], // Use only websocket to avoid polling issues
 });
@@ -58,10 +56,7 @@ export const setupSocket = (token: string) => {
   console.log(`Setting socket URL to: ${socketUrl}`);
   socket.io.uri = socketUrl;
 
-  socket.io.opts.reconnection = true;
-  socket.io.opts.reconnectionAttempts = 10;
-  socket.io.opts.reconnectionDelay = 1000;
-  socket.io.opts.reconnectionDelayMax = 5000;
+  socket.io.opts.reconnection = false; // Disable automatic reconnection
   socket.io.opts.timeout = 20000;
   socket.io.opts.transports = ["websocket"]; // Use only websocket to avoid polling issues
 
@@ -74,27 +69,10 @@ export const setupSocket = (token: string) => {
     console.error("Error connecting socket:", error);
   }
 
-  // Add a timeout to check if connection was successful
+  // Log connection status after a timeout
   setTimeout(() => {
     if (!socket.connected) {
-      console.warn(
-        "⚠️ Socket failed to connect within timeout, attempting reconnect...",
-      );
-      // Disconnect first to ensure clean state
-      try {
-        socket.disconnect();
-      } catch (error) {
-        console.error("Error disconnecting socket:", error);
-      }
-      // Wait a bit before reconnecting
-      setTimeout(() => {
-        console.log("Attempting to reconnect socket...");
-        try {
-          socket.connect();
-        } catch (error) {
-          console.error("Error reconnecting socket:", error);
-        }
-      }, 1000);
+      console.warn("⚠️ Socket failed to connect within timeout");
     }
   }, 5000);
 
@@ -195,10 +173,7 @@ export const setupCallSocket = (token: string) => {
   try {
     callSocket = io(callSocketUrl, {
       auth: { token },
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnection: false, // Disable automatic reconnection
       timeout: 20000,
       transports: ["websocket"],
       forceNew: true, // Always create a new connection for the call namespace

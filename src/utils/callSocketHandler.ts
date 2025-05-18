@@ -118,48 +118,10 @@ export function initCallSocketHandlers() {
     console.warn(
       "Neither main socket nor call socket is connected when initializing call handlers",
     );
-    console.log("Will attempt to reconnect in 2 seconds...");
 
-    // Try to reconnect after a short delay, but only once to prevent infinite loops
-    // Use a more reliable approach with a flag to prevent multiple reconnection attempts
-    if (!(window as any).__socketReconnectAttempted) {
-      (window as any).__socketReconnectAttempted = true;
-
-      setTimeout(() => {
-        const token = useAuthStore.getState().accessToken;
-        if (token) {
-          console.log("Attempting to reconnect sockets...");
-          setupSocket(token);
-          setupCallSocket(token);
-
-          // Register handlers again after reconnection attempt
-          setTimeout(() => {
-            const mainReconnected = socket.connected;
-            const callReconnected = callSocket && callSocket.connected;
-
-            if (mainReconnected || callReconnected) {
-              console.log(
-                "At least one socket reconnected, registering handlers again",
-              );
-              registerSocketEventHandlers();
-            } else {
-              console.warn(
-                "Could not reconnect sockets after retry, will try again on next user action",
-              );
-            }
-
-            // Reset the flag after a longer delay to allow future reconnection attempts
-            setTimeout(() => {
-              (window as any).__socketReconnectAttempted = false;
-            }, 10000); // Wait 10 seconds before allowing another reconnection attempt
-          }, 1000);
-        }
-      }, 2000);
-    } else {
-      console.log(
-        "Reconnection already attempted recently, skipping to prevent loops",
-      );
-    }
+    // Just log the issue, don't try to reconnect
+    console.log("Proceeding with handler registration anyway");
+    registerSocketEventHandlers();
   } else {
     if (mainSocketConnected) {
       console.log("Main socket is connected with ID:", socket.id);
@@ -510,41 +472,10 @@ export function ensureCallSocketHandlersRegistered() {
   const mainSocketConnected = socket.connected;
   const callSocketConnected = callSocket && callSocket.connected;
 
-  if (!mainSocketConnected || !callSocketConnected) {
-    console.log(
-      "At least one socket not connected, setting up sockets with token",
-    );
+  // Register handlers regardless of socket connection status
+  console.log("Registering socket event handlers");
+  registerSocketEventHandlers();
 
-    // Set up both sockets
-    if (!mainSocketConnected) {
-      setupSocket(accessToken);
-    }
-
-    if (!callSocketConnected) {
-      setupCallSocket(accessToken);
-    }
-
-    // Wait a bit for the connections to establish
-    setTimeout(() => {
-      const mainReconnected = socket.connected;
-      const callReconnected = callSocket && callSocket.connected;
-
-      if (mainReconnected || callReconnected) {
-        console.log("At least one socket connected, registering handlers");
-        registerSocketEventHandlers();
-      } else {
-        console.warn("Sockets still not connected after setup attempt");
-      }
-
-      // Reset the flag
-      (window as any).__ensureHandlersInProgress = false;
-    }, 1000);
-  } else {
-    // Both sockets are already connected, just register handlers
-    console.log("Both sockets already connected, registering handlers");
-    registerSocketEventHandlers();
-
-    // Reset the flag
-    (window as any).__ensureHandlersInProgress = false;
-  }
+  // Reset the flag
+  (window as any).__ensureHandlersInProgress = false;
 }
