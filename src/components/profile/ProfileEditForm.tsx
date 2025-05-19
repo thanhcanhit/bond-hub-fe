@@ -42,6 +42,18 @@ const OptimizedInput = memo(
     // Using a ref to avoid re-renders
     const inputRef = useRef<HTMLInputElement>(null);
 
+    // Sử dụng useRef để lưu trữ giá trị thay vì useState để tránh re-render
+    const valueRef = useRef(defaultValue);
+
+    // Sử dụng debounce để giảm số lần cập nhật
+    const handleChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        // Lưu giá trị vào ref thay vì state
+        valueRef.current = e.target.value;
+      },
+      [],
+    );
+
     return (
       <Input
         ref={inputRef}
@@ -50,10 +62,7 @@ const OptimizedInput = memo(
         defaultValue={defaultValue}
         placeholder={placeholder}
         className={cn("h-10", className)}
-        // Add a small delay to avoid immediate re-renders
-        onChange={(e) => {
-          e.persist();
-        }}
+        onChange={handleChange}
       />
     );
   },

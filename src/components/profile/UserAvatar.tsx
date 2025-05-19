@@ -1,7 +1,7 @@
 import { User } from "@/types/base";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { cn } from "@/lib/utils";
-import { HTMLProps, useMemo } from "react";
+import { HTMLProps, useEffect, useState } from "react";
 import { getUserInitials } from "@/utils/userUtils";
 
 export default function UserAvatar({
@@ -11,15 +11,30 @@ export default function UserAvatar({
   user: User;
   className?: HTMLProps<HTMLElement>["className"];
 }) {
-  // Add cache-busting timestamp to ensure the latest image is always shown
-  const profileImageSrc = useMemo(() => {
+  // Sử dụng state thay vì useMemo để đảm bảo component re-render khi URL thay đổi
+  const [profileImageSrc, setProfileImageSrc] = useState<string | null>(null);
+  // Thêm state để theo dõi khi nào cần cập nhật URL
+  const [imageVersion, setImageVersion] = useState<number>(0);
+
+  // Cập nhật URL khi user hoặc imageVersion thay đổi
+  useEffect(() => {
     if (
       !user?.userInfo?.profilePictureUrl ||
       user.userInfo.profilePictureUrl === ""
-    )
-      return null;
-    return `${user.userInfo.profilePictureUrl}?t=${new Date().getTime()}`;
-  }, [user?.userInfo?.profilePictureUrl]);
+    ) {
+      setProfileImageSrc(null);
+      return;
+    }
+
+    // Tạo URL mới với timestamp để tránh cache
+    const newSrc = `${user.userInfo.profilePictureUrl}?t=${new Date().getTime()}-v${imageVersion}`;
+    setProfileImageSrc(newSrc);
+  }, [user?.userInfo?.profilePictureUrl, imageVersion]);
+
+  // Cập nhật imageVersion mỗi khi component mount để đảm bảo luôn tải hình ảnh mới nhất
+  useEffect(() => {
+    setImageVersion((prev) => prev + 1);
+  }, []);
 
   return (
     <Avatar
@@ -31,6 +46,10 @@ export default function UserAvatar({
       <AvatarImage
         className="object-cover"
         src={profileImageSrc || undefined}
+        onError={() => {
+          // Nếu hình ảnh không tải được, thử lại với version mới
+          setImageVersion((prev) => prev + 1);
+        }}
       />
       <AvatarFallback className="text-gray">
         {getUserInitials(user)}

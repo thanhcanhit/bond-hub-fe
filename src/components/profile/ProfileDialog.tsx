@@ -359,6 +359,21 @@ export default function ProfileDialog({
     }
   };
 
+  // State để theo dõi khi nào cần cập nhật UI
+  const [profileUpdateTrigger, setProfileUpdateTrigger] = useState<number>(0);
+
+  // Cập nhật UI khi profileUpdateTrigger thay đổi
+  useEffect(() => {
+    if (profileUpdateTrigger > 0) {
+      // Cập nhật lại thông tin người dùng từ store
+      const updatedUser = useAuthStore.getState().user;
+      if (updatedUser && isOwnProfile) {
+        // Force re-render component với dữ liệu mới nhất
+        console.log("Cập nhật UI sau khi thay đổi ảnh đại diện");
+      }
+    }
+  }, [profileUpdateTrigger, isOwnProfile]);
+
   const handleProfilePictureUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
@@ -373,8 +388,23 @@ export default function ProfileDialog({
       const result = await updateProfilePicture(file);
       if (result.success && result.url) {
         toast.success(result.message || "Cập nhật ảnh đại diện thành công");
-        // Store đã được cập nhật trong hàm updateProfilePicture
-        // và UserAvatar component sẽ tự động cập nhật UI khi currentUser thay đổi
+
+        // Kích hoạt cập nhật UI
+        setProfileUpdateTrigger((prev) => prev + 1);
+
+        // Đảm bảo rằng store đã được cập nhật
+        const currentUser = useAuthStore.getState().user;
+        if (currentUser && currentUser.userInfo) {
+          // Cập nhật lại store với URL mới và timestamp mới
+          const updatedUser = {
+            ...currentUser,
+            userInfo: {
+              ...currentUser.userInfo,
+              profilePictureUrl: `${result.url}?t=${new Date().getTime()}`,
+            },
+          };
+          useAuthStore.getState().updateUser(updatedUser);
+        }
       } else {
         toast.error(result.error || "Cập nhật ảnh đại diện thất bại");
       }
@@ -385,6 +415,22 @@ export default function ProfileDialog({
       setIsUploading(false);
     }
   };
+
+  // Thêm state để kích hoạt cập nhật UI sau khi cập nhật thông tin cơ bản
+  const [basicInfoUpdateTrigger, setBasicInfoUpdateTrigger] =
+    useState<number>(0);
+
+  // Cập nhật UI khi basicInfoUpdateTrigger thay đổi
+  useEffect(() => {
+    if (basicInfoUpdateTrigger > 0) {
+      // Cập nhật lại thông tin người dùng từ store
+      const updatedUser = useAuthStore.getState().user;
+      if (updatedUser && isOwnProfile) {
+        // Force re-render component với dữ liệu mới nhất
+        console.log("Cập nhật UI sau khi thay đổi thông tin cơ bản");
+      }
+    }
+  }, [basicInfoUpdateTrigger, isOwnProfile]);
 
   const handleSubmit = useCallback(async (data: ProfileFormValues) => {
     // Create date from day, month, year
@@ -402,8 +448,25 @@ export default function ProfileDialog({
       toast.success("Thông tin cá nhân đã được cập nhật thành công");
       setIsEditing(false);
 
-      // Không cần đóng và mở lại dialog vì dữ liệu đã được cập nhật trong store
-      // và component sẽ tự động render lại với dữ liệu mới
+      // Kích hoạt cập nhật UI
+      setBasicInfoUpdateTrigger((prev) => prev + 1);
+
+      // Đảm bảo rằng store đã được cập nhật
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser && currentUser.userInfo) {
+        // Cập nhật lại store với thông tin mới nhất
+        const updatedUser = {
+          ...currentUser,
+          userInfo: {
+            ...currentUser.userInfo,
+            fullName: data.fullName || currentUser.userInfo.fullName,
+            gender: (data.gender as any) || currentUser.userInfo.gender,
+            dateOfBirth: dateOfBirth || currentUser.userInfo.dateOfBirth,
+            bio: data.bio || currentUser.userInfo.bio,
+          },
+        };
+        useAuthStore.getState().updateUser(updatedUser);
+      }
     } else {
       toast.error(result.error || "Cập nhật thông tin cá nhân thất bại");
     }
@@ -612,7 +675,7 @@ export default function ProfileDialog({
                     </Button>
                   ) : relationship === "FRIEND" ? (
                     <div className="flex gap-6 w-full p-2 pb-4">
-                      {user && <CallButton user={user} />}
+                      {user && <CallButton target={user} targetType="USER" />}
                       <Button
                         onClick={async () => {
                           if (user?.id) {

@@ -86,7 +86,12 @@ export async function getUserDataById(id: string, token?: string) {
     console.error(`[USER_ACTION] Get user by ID failed for ID ${id}:`, error);
 
     // Check if this is a timeout or abort error
-    if (error.name === "AbortError" || error.name === "TimeoutError") {
+    if (
+      error &&
+      typeof error === "object" &&
+      "name" in error &&
+      (error.name === "AbortError" || error.name === "TimeoutError")
+    ) {
       console.warn(`[USER_ACTION] Request timed out for user ID: ${id}`);
 
       // Try to get from cache even if expired as fallback
@@ -334,57 +339,62 @@ export async function updateProfilePicture(file: File) {
 
     const { message, url } = response.data;
 
-    // Lấy dữ liệu user mới nhất từ database
+    // Thêm timestamp vào URL để tránh cache
+    const urlWithTimestamp = `${url}?t=${new Date().getTime()}`;
+
+    // Lấy dữ liệu user hiện tại từ store
     const currentUser = useAuthStore.getState().user;
     if (currentUser && currentUser.id) {
-      try {
-        // Gọi API lấy dữ liệu user mới nhất
-        const userResponse = await getUserDataById(currentUser.id);
+      // Cập nhật ngay lập tức trong store với URL mới có timestamp
+      if (currentUser.userInfo) {
+        const updatedUser = {
+          ...currentUser,
+          userInfo: {
+            ...currentUser.userInfo,
+            profilePictureUrl: urlWithTimestamp,
+          },
+        };
 
-        if (userResponse.success && userResponse.user) {
-          // Cập nhật toàn bộ dữ liệu user trong store
-          useAuthStore.getState().updateUser(userResponse.user);
-          console.log(
-            "User data updated from database after profile picture change",
-          );
-        } else {
-          // Nếu không lấy được dữ liệu mới, chỉ cập nhật URL ảnh
-          if (currentUser.userInfo) {
-            const updatedUser = {
-              ...currentUser,
-              userInfo: {
-                ...currentUser.userInfo,
-                profilePictureUrl: url,
-              },
-            };
-            useAuthStore.getState().updateUser(updatedUser);
+        // Cập nhật store
+        useAuthStore.getState().updateUser(updatedUser);
 
-            // Update cache
-            cacheUserData(currentUser.id, updatedUser);
+        // Cập nhật cache
+        cacheUserData(currentUser.id, updatedUser);
 
-            console.log("Only profile picture URL updated in store");
-          }
-        }
-      } catch (fetchError) {
-        console.error("Error fetching updated user data:", fetchError);
-        // Nếu có lỗi khi lấy dữ liệu mới, chỉ cập nhật URL ảnh
-        if (currentUser.userInfo) {
-          const updatedUser = {
-            ...currentUser,
-            userInfo: {
-              ...currentUser.userInfo,
-              profilePictureUrl: url,
-            },
-          };
-          useAuthStore.getState().updateUser(updatedUser);
-
-          // Update cache
-          cacheUserData(currentUser.id, updatedUser);
-        }
+        console.log(
+          "Profile picture immediately updated in store with timestamp",
+        );
       }
+
+      // Sau đó, thử lấy dữ liệu đầy đủ từ server (không chờ đợi)
+      getUserDataById(currentUser.id)
+        .then((userResponse) => {
+          if (userResponse.success && userResponse.user) {
+            // Đảm bảo URL hình ảnh mới có timestamp
+            const serverUser = userResponse.user;
+            if (serverUser.userInfo && serverUser.userInfo.profilePictureUrl) {
+              serverUser.userInfo.profilePictureUrl = `${serverUser.userInfo.profilePictureUrl}?t=${new Date().getTime()}`;
+            }
+
+            // Cập nhật store với dữ liệu đầy đủ từ server
+            useAuthStore.getState().updateUser(serverUser);
+
+            // Cập nhật cache
+            cacheUserData(currentUser.id, serverUser);
+
+            console.log(
+              "User data updated from database after profile picture change",
+            );
+          }
+        })
+        .catch((fetchError) => {
+          console.error("Error fetching updated user data:", fetchError);
+          // Không cần làm gì vì đã cập nhật store trước đó
+        });
     }
 
-    return { success: true, message, url };
+    // Trả về URL có timestamp để client có thể sử dụng ngay
+    return { success: true, message, url: urlWithTimestamp };
   } catch (error) {
     console.error("Update profile picture failed:", error);
     return {
@@ -418,57 +428,60 @@ export async function updateCoverImage(file: File) {
 
     const { message, url } = response.data;
 
-    // Lấy dữ liệu user mới nhất từ database
+    // Thêm timestamp vào URL để tránh cache
+    const urlWithTimestamp = `${url}?t=${new Date().getTime()}`;
+
+    // Lấy dữ liệu user hiện tại từ store
     const currentUser = useAuthStore.getState().user;
     if (currentUser && currentUser.id) {
-      try {
-        // Gọi API lấy dữ liệu user mới nhất
-        const userResponse = await getUserDataById(currentUser.id);
+      // Cập nhật ngay lập tức trong store với URL mới có timestamp
+      if (currentUser.userInfo) {
+        const updatedUser = {
+          ...currentUser,
+          userInfo: {
+            ...currentUser.userInfo,
+            coverImgUrl: urlWithTimestamp,
+          },
+        };
 
-        if (userResponse.success && userResponse.user) {
-          // Cập nhật toàn bộ dữ liệu user trong store
-          useAuthStore.getState().updateUser(userResponse.user);
-          console.log(
-            "User data updated from database after cover image change",
-          );
-        } else {
-          // Nếu không lấy được dữ liệu mới, chỉ cập nhật URL ảnh bìa
-          if (currentUser.userInfo) {
-            const updatedUser = {
-              ...currentUser,
-              userInfo: {
-                ...currentUser.userInfo,
-                coverImgUrl: url,
-              },
-            };
-            useAuthStore.getState().updateUser(updatedUser);
+        // Cập nhật store
+        useAuthStore.getState().updateUser(updatedUser);
 
-            // Update cache
-            cacheUserData(currentUser.id, updatedUser);
+        // Cập nhật cache
+        cacheUserData(currentUser.id, updatedUser);
 
-            console.log("Only cover image URL updated in store");
-          }
-        }
-      } catch (fetchError) {
-        console.error("Error fetching updated user data:", fetchError);
-        // Nếu có lỗi khi lấy dữ liệu mới, chỉ cập nhật URL ảnh bìa
-        if (currentUser.userInfo) {
-          const updatedUser = {
-            ...currentUser,
-            userInfo: {
-              ...currentUser.userInfo,
-              coverImgUrl: url,
-            },
-          };
-          useAuthStore.getState().updateUser(updatedUser);
-
-          // Update cache
-          cacheUserData(currentUser.id, updatedUser);
-        }
+        console.log("Cover image immediately updated in store with timestamp");
       }
+
+      // Sau đó, thử lấy dữ liệu đầy đủ từ server (không chờ đợi)
+      getUserDataById(currentUser.id)
+        .then((userResponse) => {
+          if (userResponse.success && userResponse.user) {
+            // Đảm bảo URL hình ảnh mới có timestamp
+            const serverUser = userResponse.user;
+            if (serverUser.userInfo && serverUser.userInfo.coverImgUrl) {
+              serverUser.userInfo.coverImgUrl = `${serverUser.userInfo.coverImgUrl}?t=${new Date().getTime()}`;
+            }
+
+            // Cập nhật store với dữ liệu đầy đủ từ server
+            useAuthStore.getState().updateUser(serverUser);
+
+            // Cập nhật cache
+            cacheUserData(currentUser.id, serverUser);
+
+            console.log(
+              "User data updated from database after cover image change",
+            );
+          }
+        })
+        .catch((fetchError) => {
+          console.error("Error fetching updated user data:", fetchError);
+          // Không cần làm gì vì đã cập nhật store trước đó
+        });
     }
 
-    return { success: true, message, url };
+    // Trả về URL có timestamp để client có thể sử dụng ngay
+    return { success: true, message, url: urlWithTimestamp };
   } catch (error) {
     console.error("Update cover image failed:", error);
     return {
@@ -492,81 +505,84 @@ export async function updateUserBasicInfo(userData: {
       throw new Error("User not authenticated");
     }
 
+    // Cập nhật ngay lập tức trong store trước khi gọi API
+    // Điều này giúp UI cập nhật ngay lập tức
+    if (currentUser.userInfo) {
+      // Xử lý gender để đảm bảo đúng kiểu Gender
+      let updatedGender = currentUser.userInfo.gender;
+      if (userData.gender) {
+        // Chuyển đổi string thành Gender enum
+        if (
+          userData.gender === "MALE" ||
+          userData.gender === "FEMALE" ||
+          userData.gender === "OTHER"
+        ) {
+          updatedGender = userData.gender as any; // Ép kiểu an toàn vì đã kiểm tra giá trị
+        }
+      }
+
+      const immediateUpdatedUserInfo = {
+        ...currentUser.userInfo,
+        fullName: userData.fullName || currentUser.userInfo.fullName,
+        gender: updatedGender,
+        dateOfBirth: userData.dateOfBirth || currentUser.userInfo.dateOfBirth,
+        bio: userData.bio || currentUser.userInfo.bio,
+      };
+
+      const immediateUserToUpdate = {
+        ...currentUser,
+        userInfo: immediateUpdatedUserInfo,
+      };
+
+      // Cập nhật store ngay lập tức
+      useAuthStore.getState().updateUser(immediateUserToUpdate);
+
+      // Cập nhật cache
+      cacheUserData(currentUser.id, immediateUserToUpdate as User);
+
+      console.log("Basic info immediately updated in store");
+    }
+
+    // Gọi API để cập nhật thông tin trên server
     const response = await axiosInstance.put(
       `/auth/update-basic-info`,
       userData,
     );
     const updatedUser = response.data;
 
-    // Lấy dữ liệu user mới nhất từ database
-    try {
-      // Gọi API lấy dữ liệu user mới nhất
-      const userResponse = await getUserDataById(currentUser.id);
+    // Sau khi API thành công, lấy dữ liệu mới từ server (không chờ đợi)
+    // Sử dụng Promise để không chặn luồng chính
+    getUserDataById(currentUser.id)
+      .then((userResponse) => {
+        if (userResponse.success && userResponse.user) {
+          // Cập nhật toàn bộ dữ liệu user trong store
+          useAuthStore.getState().updateUser(userResponse.user);
 
-      if (userResponse.success && userResponse.user) {
-        // Cập nhật toàn bộ dữ liệu user trong store
-        useAuthStore.getState().updateUser(userResponse.user);
-        console.log("User data updated from database after basic info change");
-      } else {
-        // Nếu không lấy được dữ liệu mới, cập nhật dựa trên dữ liệu hiện tại
-        if (currentUser.userInfo) {
-          const updatedUserInfo = {
-            ...currentUser.userInfo,
-            fullName: userData.fullName || currentUser.userInfo.fullName,
-            gender: userData.gender || currentUser.userInfo.gender,
-            dateOfBirth:
-              userData.dateOfBirth || currentUser.userInfo.dateOfBirth,
-            bio: userData.bio || currentUser.userInfo.bio,
-          };
+          // Cập nhật cache
+          cacheUserData(currentUser.id, userResponse.user);
 
-          const userToUpdate = {
-            ...updatedUser,
-            userInfo: updatedUserInfo,
-          };
-
-          useAuthStore.getState().updateUser(userToUpdate);
-
-          // Update cache
-          cacheUserData(currentUser.id, userToUpdate);
-
-          console.log("Basic info updated in store using local data");
-        } else {
-          useAuthStore.getState().updateUser(updatedUser);
-
-          // Update cache
-          cacheUserData(currentUser.id, updatedUser);
+          console.log(
+            "User data updated from database after basic info change",
+          );
         }
-      }
-    } catch (fetchError) {
-      console.error("Error fetching updated user data:", fetchError);
-      // Nếu có lỗi khi lấy dữ liệu mới, cập nhật dựa trên dữ liệu hiện tại
-      if (currentUser.userInfo) {
-        const updatedUserInfo = {
-          ...currentUser.userInfo,
-          fullName: userData.fullName || currentUser.userInfo.fullName,
-          gender: userData.gender || currentUser.userInfo.gender,
-          dateOfBirth: userData.dateOfBirth || currentUser.userInfo.dateOfBirth,
-          bio: userData.bio || currentUser.userInfo.bio,
-        };
+      })
+      .catch((fetchError) => {
+        console.error("Error fetching updated user data:", fetchError);
+        // Không cần làm gì vì đã cập nhật store trước đó
+      });
 
-        const userToUpdate = {
-          ...updatedUser,
-          userInfo: updatedUserInfo,
-        };
-
-        useAuthStore.getState().updateUser(userToUpdate);
-
-        // Update cache
-        cacheUserData(currentUser.id, userToUpdate);
-      } else {
-        useAuthStore.getState().updateUser(updatedUser);
-
-        // Update cache
-        cacheUserData(currentUser.id, updatedUser);
-      }
-    }
-
-    return { success: true, user: updatedUser };
+    // Trả về kết quả thành công ngay lập tức
+    return {
+      success: true,
+      user: updatedUser,
+      // Thêm thông tin đã cập nhật để UI có thể sử dụng ngay
+      updatedInfo: {
+        fullName: userData.fullName,
+        gender: userData.gender,
+        dateOfBirth: userData.dateOfBirth,
+        bio: userData.bio,
+      },
+    };
   } catch (error) {
     console.error("Update user basic info failed:", error);
     return {
