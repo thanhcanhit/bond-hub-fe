@@ -45,15 +45,25 @@ export default function ForgotPasswordFlow({
         setResetId(result.resetId);
         setStep(ForgotPasswordStep.ENTER_OTP);
         toast.success(
-          `OTP sent to your ${identifier.includes("@") ? "email" : "phone number"}`,
+          `OTP đã được gửi đến ${identifier.includes("@") ? "email" : "số điện thoại"} của bạn`,
         );
       } else {
-        toast.error(result.error || "Failed to send OTP");
+        // Xử lý các loại lỗi khác nhau
+        if (result.error && result.error.includes("400")) {
+          toast.error("Vui lòng kiểm tra lại email/số điện thoại của bạn");
+        } else if (result.error && result.error.includes("404")) {
+          toast.error("Email/số điện thoại chưa được đăng ký trong hệ thống");
+        } else {
+          toast.error(
+            result.error || "Vui lòng kiểm tra lại email/số điện thoại của bạn",
+          );
+        }
       }
     } catch (error) {
       console.log(error);
 
-      toast.error("An error occurred while sending OTP");
+      // Hiển thị thông báo lỗi thân thiện thay vì lỗi kỹ thuật
+      toast.error("Vui lòng kiểm tra lại email/số điện thoại của bạn");
     } finally {
       setIsLoading(false);
     }
@@ -68,13 +78,21 @@ export default function ForgotPasswordFlow({
 
       if (result.success) {
         setStep(ForgotPasswordStep.ENTER_NEW_PASSWORD);
-        toast.success("OTP verified successfully");
+        toast.success("OTP xác nhận thành công");
       } else {
-        toast.error(result.error || "Invalid OTP");
+        // Xử lý các loại lỗi khác nhau
+        if (result.error && result.error.includes("400")) {
+          toast.error("Mã OTP không hợp lệ");
+        } else if (result.error && result.error.includes("expired")) {
+          toast.error("Mã OTP đã hết hạn");
+        } else {
+          toast.error(result.error || "Mã OTP không hợp lệ");
+        }
       }
     } catch (error) {
-      toast.error("An error occurred while verifying OTP");
       console.log(error);
+      // Hiển thị thông báo lỗi thân thiện
+      toast.error("Mã OTP không hợp lệ");
     } finally {
       setIsLoading(false);
     }
@@ -85,12 +103,12 @@ export default function ForgotPasswordFlow({
 
     // Validate passwords
     if (newPassword !== confirmPassword) {
-      toast.error("Passwords do not match");
+      toast.error("Mật khẩu không khớp");
       return;
     }
 
     if (newPassword.length < 8) {
-      toast.error("Password must be at least 8 characters long");
+      toast.error("Mật khẩu phải có ít nhất 8 ký tự");
       return;
     }
 
@@ -101,14 +119,22 @@ export default function ForgotPasswordFlow({
 
       if (result.success) {
         setStep(ForgotPasswordStep.COMPLETE);
-        toast.success("Password reset successfully");
+        toast.success("Đặt lại mật khẩu thành công");
       } else {
-        toast.error(result.error || "Failed to reset password");
+        // Xử lý các loại lỗi khác nhau
+        if (result.error && result.error.includes("400")) {
+          toast.error("Không thể đặt lại mật khẩu. Vui lòng thử lại sau");
+        } else if (result.error && result.error.includes("expired")) {
+          toast.error("Phiên đặt lại mật khẩu đã hết hạn");
+        } else {
+          toast.error(result.error || "Không thể đặt lại mật khẩu");
+        }
       }
     } catch (error) {
       console.log(error);
 
-      toast.error("An error occurred while resetting password");
+      // Hiển thị thông báo lỗi thân thiện
+      toast.error("Không thể đặt lại mật khẩu. Vui lòng thử lại sau");
     } finally {
       setIsLoading(false);
     }
@@ -120,20 +146,24 @@ export default function ForgotPasswordFlow({
         return (
           <form onSubmit={handleSendOtp} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="identifier">Email or Phone Number</Label>
+              <Label htmlFor="identifier">Email hoặc Số điện thoại</Label>
               <Input
                 id="identifier"
                 type="text"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="Enter your email or phone number"
+                placeholder="Nhập email hoặc số điện thoại của bạn"
                 className="focus:outline-none focus:ring-0 focus-visible:ring-0"
                 required
               />
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Sending OTP..." : "Send OTP"}
+            <Button
+              type="submit"
+              className="w-full bg-[#80c7f9] hover:bg-[#0068ff] text-white"
+              disabled={isLoading}
+            >
+              {isLoading ? "Đang gửi OTP..." : "Gửi OTP"}
             </Button>
           </form>
         );
@@ -142,13 +172,13 @@ export default function ForgotPasswordFlow({
         return (
           <form onSubmit={handleVerifyOtp} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="otp">Enter OTP</Label>
+              <Label htmlFor="otp">Nhập mã OTP</Label>
               <Input
                 id="otp"
                 type="text"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
-                placeholder="Enter the OTP sent to your email or phone number"
+                placeholder="Nhập mã OTP đã gửi đến email hoặc số điện thoại của bạn"
                 className="focus:outline-none focus:ring-0 focus-visible:ring-0"
                 required
               />
@@ -162,10 +192,14 @@ export default function ForgotPasswordFlow({
                 disabled={isLoading}
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
+                Quay lại
               </Button>
-              <Button type="submit" className="flex-1" disabled={isLoading}>
-                {isLoading ? "Verifying..." : "Verify OTP"}
+              <Button
+                type="submit"
+                className="flex-1 bg-[#80c7f9] hover:bg-[#0068ff] text-white"
+                disabled={isLoading}
+              >
+                {isLoading ? "Đang xác nhận..." : "Xác nhận OTP"}
               </Button>
             </div>
           </form>
@@ -175,7 +209,7 @@ export default function ForgotPasswordFlow({
         return (
           <form onSubmit={handleResetPassword} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="newPassword">New Password</Label>
+              <Label htmlFor="newPassword">Mật khẩu mới</Label>
               <div className="relative">
                 <Input
                   id="newPassword"
@@ -196,7 +230,7 @@ export default function ForgotPasswordFlow({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm New Password</Label>
+              <Label htmlFor="confirmPassword">Xác nhận mật khẩu mới</Label>
               <div className="relative">
                 <Input
                   id="confirmPassword"
@@ -228,10 +262,14 @@ export default function ForgotPasswordFlow({
                 disabled={isLoading}
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
+                Quay lại
               </Button>
-              <Button type="submit" className="flex-1" disabled={isLoading}>
-                {isLoading ? "Resetting Password..." : "Reset Password"}
+              <Button
+                type="submit"
+                className="flex-1 bg-[#80c7f9] hover:bg-[#0068ff] text-white"
+                disabled={isLoading}
+              >
+                {isLoading ? "Đang đặt lại mật khẩu..." : "Đặt lại mật khẩu"}
               </Button>
             </div>
           </form>
@@ -258,16 +296,20 @@ export default function ForgotPasswordFlow({
                 </svg>
               </div>
               <h3 className="mt-4 text-lg font-medium">
-                Password Reset Complete
+                Đặt lại mật khẩu thành công
               </h3>
               <p className="mt-2 text-sm text-gray-500">
-                Your password has been reset successfully. You can now log in
-                with your new password.
+                Mật khẩu của bạn đã được đặt lại thành công. Bây giờ bạn có thể
+                đăng nhập với mật khẩu mới.
               </p>
             </div>
 
-            <Button type="button" className="w-full" onClick={onComplete}>
-              Back to Login
+            <Button
+              type="button"
+              className="w-full bg-[#80c7f9] hover:bg-[#0068ff] text-white"
+              onClick={onComplete}
+            >
+              Quay lại đăng nhập
             </Button>
           </div>
         );
@@ -276,7 +318,7 @@ export default function ForgotPasswordFlow({
 
   return (
     <div className="w-full max-w-md mx-auto">
-      <div className="text-center mb-6">
+      {/* <div className="text-center mb-6">
         <h2 className="text-2xl font-bold">Reset Password</h2>
         {step !== ForgotPasswordStep.COMPLETE && (
           <p className="text-sm text-gray-500 mt-1">
@@ -288,7 +330,7 @@ export default function ForgotPasswordFlow({
               "Create a new password for your account"}
           </p>
         )}
-      </div>
+      </div> */}
 
       {renderStepContent()}
     </div>
