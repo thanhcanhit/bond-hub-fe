@@ -1,4 +1,4 @@
-import { memo, useRef, useCallback } from "react";
+import { memo, useRef, useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,6 +75,35 @@ const ProfileEditForm = memo(
     // Use refs for form elements
     const formRef = useRef<HTMLFormElement>(null);
 
+    // State để lưu trữ giá trị ngày tháng năm hiện tại
+    const [dateValues, setDateValues] = useState({
+      day: initialValues.day,
+      month: initialValues.month,
+      year: initialValues.year,
+    });
+
+    // Cập nhật state khi initialValues thay đổi
+    useEffect(() => {
+      setDateValues({
+        day: initialValues.day,
+        month: initialValues.month,
+        year: initialValues.year,
+      });
+    }, [initialValues.day, initialValues.month, initialValues.year]);
+
+    // Các hàm xử lý sự kiện thay đổi ngày tháng năm
+    const handleDayChange = useCallback((value: string) => {
+      setDateValues((prev) => ({ ...prev, day: value }));
+    }, []);
+
+    const handleMonthChange = useCallback((value: string) => {
+      setDateValues((prev) => ({ ...prev, month: value }));
+    }, []);
+
+    const handleYearChange = useCallback((value: string) => {
+      setDateValues((prev) => ({ ...prev, year: value }));
+    }, []);
+
     // Handle form submission using form data API
     const handleSubmit = useCallback(
       (e: React.FormEvent) => {
@@ -87,14 +116,14 @@ const ProfileEditForm = memo(
           fullName: (formData.get("fullName") as string) || "",
           bio: (formData.get("bio") as string) || "",
           gender: (formData.get("gender") as string) || "MALE",
-          day: (formData.get("day") as string) || "",
-          month: (formData.get("month") as string) || "",
-          year: (formData.get("year") as string) || "",
+          day: dateValues.day,
+          month: dateValues.month,
+          year: dateValues.year,
         };
 
         onSubmit(values);
       },
-      [onSubmit],
+      [onSubmit, dateValues],
     );
 
     return (
@@ -140,40 +169,15 @@ const ProfileEditForm = memo(
 
           <div className="space-y-2">
             <Label>Ngày sinh</Label>
-            <div className="flex items-center gap-2 border border-input rounded-md px-3">
-              <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+            <div className="flex items-center gap-2 border border-input rounded-md px-3 py-1">
+              <CalendarIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
               <DateOfBirthPicker
-                day={initialValues.day}
-                month={initialValues.month}
-                year={initialValues.year}
-                onDayChange={(value) => {
-                  if (formRef.current) {
-                    const dayInput =
-                      formRef.current.querySelector('input[name="day"]');
-                    if (dayInput) {
-                      (dayInput as HTMLInputElement).value = value;
-                    }
-                  }
-                }}
-                onMonthChange={(value) => {
-                  if (formRef.current) {
-                    const monthInput = formRef.current.querySelector(
-                      'input[name="month"]',
-                    );
-                    if (monthInput) {
-                      (monthInput as HTMLInputElement).value = value;
-                    }
-                  }
-                }}
-                onYearChange={(value) => {
-                  if (formRef.current) {
-                    const yearInput =
-                      formRef.current.querySelector('input[name="year"]');
-                    if (yearInput) {
-                      (yearInput as HTMLInputElement).value = value;
-                    }
-                  }
-                }}
+                day={dateValues.day}
+                month={dateValues.month}
+                year={dateValues.year}
+                onDayChange={handleDayChange}
+                onMonthChange={handleMonthChange}
+                onYearChange={handleYearChange}
                 className="border-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0"
               />
             </div>
