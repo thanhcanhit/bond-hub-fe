@@ -1,4 +1,5 @@
 "use server";
+import axios from "axios";
 import axiosInstance, {
   createAxiosInstance,
   refreshTokenAxios,
@@ -294,9 +295,40 @@ export async function changePassword(
     };
   } catch (error) {
     console.error("Change password failed:", error);
+
+    // Xử lý lỗi từ API
+    if (axios.isAxiosError(error) && error.response) {
+      console.error("Error response:", {
+        status: error.response.status,
+        data: error.response.data,
+      });
+
+      // Kiểm tra lỗi mật khẩu cũ không đúng
+      if (error.response.status === 400 || error.response.status === 401) {
+        if (error.response.data?.message) {
+          // Nếu server trả về thông báo lỗi cụ thể
+          return {
+            success: false,
+            error: error.response.data.message,
+          };
+        }
+
+        // Nếu không có thông báo cụ thể, kiểm tra nếu là lỗi mật khẩu cũ không đúng
+        if (error.response.data?.error === "INVALID_CURRENT_PASSWORD") {
+          return {
+            success: false,
+            error: "Mật khẩu hiện tại không đúng",
+          };
+        }
+      }
+    }
+
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error:
+        error instanceof Error
+          ? error.message
+          : "Đã xảy ra lỗi khi đổi mật khẩu",
     };
   }
 }

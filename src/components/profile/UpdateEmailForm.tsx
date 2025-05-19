@@ -8,6 +8,7 @@ import {
 } from "@/actions/user-update.action";
 import { toast } from "sonner";
 import { isEmail } from "@/utils/helpers";
+import { refreshUserData } from "@/hooks/useUserDataSync";
 
 enum UpdateEmailStep {
   ENTER_EMAIL,
@@ -83,6 +84,10 @@ export default function UpdateEmailForm({
       if (result.success) {
         setStep(UpdateEmailStep.COMPLETE);
         toast.success(result.message);
+
+        // Làm mới dữ liệu người dùng từ server để đảm bảo UI hiển thị email mới
+        await refreshUserData();
+        console.log("Đã làm mới dữ liệu người dùng sau khi cập nhật email");
 
         // Sau 1.5 giây, gọi callback nếu có
         if (onSuccess) {

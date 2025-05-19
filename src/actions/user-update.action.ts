@@ -77,7 +77,17 @@ export async function verifyUpdateEmailOtp(updateId: string, otp: string) {
     // After successful verification, update the user in the store
     const currentUser = useAuthStore.getState().user;
     if (currentUser && response.data.user) {
-      useAuthStore.getState().updateUser(response.data.user);
+      // Đảm bảo cập nhật đầy đủ thông tin người dùng, bao gồm email
+      const updatedUser = {
+        ...currentUser,
+        ...response.data.user,
+        email: response.data.user.email || currentUser.email,
+      };
+      console.log("Cập nhật thông tin người dùng sau khi xác minh email:", {
+        oldEmail: currentUser.email,
+        newEmail: response.data.user.email || "không có trong response",
+      });
+      useAuthStore.getState().updateUser(updatedUser);
     }
 
     return {
@@ -170,7 +180,20 @@ export async function verifyUpdatePhoneOtp(updateId: string, otp: string) {
     // After successful verification, update the user in the store
     const currentUser = useAuthStore.getState().user;
     if (currentUser && response.data.user) {
-      useAuthStore.getState().updateUser(response.data.user);
+      // Đảm bảo cập nhật đầy đủ thông tin người dùng, bao gồm số điện thoại
+      const updatedUser = {
+        ...currentUser,
+        ...response.data.user,
+        phoneNumber: response.data.user.phoneNumber || currentUser.phoneNumber,
+      };
+      console.log(
+        "Cập nhật thông tin người dùng sau khi xác minh số điện thoại:",
+        {
+          oldPhone: currentUser.phoneNumber,
+          newPhone: response.data.user.phoneNumber || "không có trong response",
+        },
+      );
+      useAuthStore.getState().updateUser(updatedUser);
     }
 
     return {

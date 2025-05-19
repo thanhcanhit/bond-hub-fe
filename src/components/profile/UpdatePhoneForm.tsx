@@ -8,6 +8,7 @@ import {
 } from "@/actions/user-update.action";
 import { toast } from "sonner";
 import { isPhoneNumber } from "@/utils/helpers";
+import { refreshUserData } from "@/hooks/useUserDataSync";
 
 enum UpdatePhoneStep {
   ENTER_PHONE,
@@ -83,6 +84,12 @@ export default function UpdatePhoneForm({
       if (result.success) {
         setStep(UpdatePhoneStep.COMPLETE);
         toast.success(result.message);
+
+        // Làm mới dữ liệu người dùng từ server để đảm bảo UI hiển thị số điện thoại mới
+        await refreshUserData();
+        console.log(
+          "Đã làm mới dữ liệu người dùng sau khi cập nhật số điện thoại",
+        );
 
         // Sau 1.5 giây, gọi callback nếu có
         if (onSuccess) {
