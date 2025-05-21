@@ -711,31 +711,6 @@ export default function ProfileDialog({
                       >
                         Đã gửi lời mời kết bạn
                       </Button>
-                      <Button
-                        onClick={async () => {
-                          if (user?.id) {
-                            // Close the dialog
-                            onOpenChange(false);
-
-                            // Show toast message
-                            toast.success(
-                              `Đang mở cuộc trò chuyện với ${user.userInfo?.fullName || "người dùng"}`,
-                            );
-
-                            // Open the chat with this user
-                            await openChat(user.id, "USER");
-
-                            // Navigate to chat page if not already there
-                            router.push("/dashboard/chat");
-
-                            // Call the onChat callback if provided
-                            if (onChat) onChat();
-                          }
-                        }}
-                        className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 h-8 !border-none !rounded-none"
-                      >
-                        Nhắn tin
-                      </Button>
                     </div>
                   ) : relationship === "PENDING_RECEIVED" ? (
                     <div className="flex gap-6 w-full p-2 pb-4">
@@ -763,31 +738,6 @@ export default function ProfileDialog({
                           {isRejectingRequest ? "Đang từ chối..." : "Từ chối"}
                         </Button>
                       </div>
-                      <Button
-                        onClick={async () => {
-                          if (user?.id) {
-                            // Close the dialog
-                            onOpenChange(false);
-
-                            // Show toast message
-                            toast.success(
-                              `Đang mở cuộc trò chuyện với ${user.userInfo?.fullName || "người dùng"}`,
-                            );
-
-                            // Open the chat with this user
-                            await openChat(user.id, "USER");
-
-                            // Navigate to chat page if not already there
-                            router.push("/dashboard/chat");
-
-                            // Call the onChat callback if provided
-                            if (onChat) onChat();
-                          }
-                        }}
-                        className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 h-8 !border-none !rounded-none"
-                      >
-                        Nhắn tin
-                      </Button>
                     </div>
                   ) : showFriendRequestForm ? (
                     <div className="w-full space-y-4">
@@ -843,31 +793,6 @@ export default function ProfileDialog({
                       >
                         <UserPlus className="mr-2 h-4 w-4" />
                         Kết bạn
-                      </Button>
-                      <Button
-                        onClick={async () => {
-                          if (user?.id) {
-                            // Close the dialog
-                            onOpenChange(false);
-
-                            // Show toast message
-                            toast.success(
-                              `Đang mở cuộc trò chuyện với ${user.userInfo?.fullName || "người dùng"}`,
-                            );
-
-                            // Open the chat with this user
-                            await openChat(user.id, "USER");
-
-                            // Navigate to chat page if not already there
-                            router.push("/dashboard/chat");
-
-                            // Call the onChat callback if provided
-                            if (onChat) onChat();
-                          }
-                        }}
-                        className="flex-1 bg-[#dbebff] text-[#094bad] font-semibold hover:bg-[#9FC5EA] py-2 px-4 h-8 !border-none !rounded-none"
-                      >
-                        Nhắn tin
                       </Button>
                     </div>
                   )}
