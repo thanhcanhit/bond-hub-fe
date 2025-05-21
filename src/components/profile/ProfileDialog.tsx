@@ -675,7 +675,13 @@ export default function ProfileDialog({
                     </Button>
                   ) : relationship === "FRIEND" ? (
                     <div className="flex gap-6 w-full p-2 pb-4">
-                      {user && <CallButton target={user} targetType="USER" />}
+                      {user && (
+                        <CallButton
+                          target={user}
+                          targetType="USER"
+                          showVideoCall={false}
+                        />
+                      )}
                       <Button
                         onClick={async () => {
                           if (user?.id) {

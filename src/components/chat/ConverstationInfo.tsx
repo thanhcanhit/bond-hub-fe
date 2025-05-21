@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { User, UserInfo, Media, GroupRole } from "@/types/base";
@@ -18,7 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import MediaGalleryView from "./MediaGalleryView";
-import { ScrollArea } from "@/components/ui/scroll-area";
+// Removed ScrollArea import to fix infinite update loop
 import ProfileDialog from "@/components/profile/ProfileDialog";
 import CreateGroupDialog from "@/components/group/CreateGroupDialog";
 import {
@@ -75,63 +75,49 @@ export default function ContactInfo({
   >("media");
   const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
 
+  // Sử dụng ref để lưu trữ ID liên hệ trước đó - phải đặt ở ngoài useEffect
+  const prevContactIdRef = useRef<string | null>(null);
+
   // Reset media gallery, viewer, and create group dialog when contact changes
+  // Tối ưu hóa để tránh vòng lặp vô hạn
   useEffect(() => {
     if (!contact?.id) return;
 
-    // Thêm throttle để tránh xử lý quá thường xuyên
-    if (!window._lastContactInfoResetTime) {
-      window._lastContactInfoResetTime = {};
-    }
-
-    const contactId = contact.id;
-    const now = Date.now();
-    const lastResetTime = window._lastContactInfoResetTime[contactId] || 0;
-    const timeSinceLastReset = now - lastResetTime;
-
-    // Nếu đã xử lý trong vòng 1 giây, bỏ qua
-    if (timeSinceLastReset < 1000) {
+    // Chỉ reset khi ID liên hệ thay đổi
+    if (prevContactIdRef.current !== contact.id) {
       console.log(
-        `[ContactInfo] Skipping reset, last reset was ${timeSinceLastReset}ms ago`,
+        `[ContactInfo] Contact changed from ${prevContactIdRef.current} to ${contact.id}, resetting state`,
       );
-      return;
+
+      // Cập nhật ID liên hệ hiện tại
+      prevContactIdRef.current = contact.id;
+
+      // Reset các state
+      setShowMediaGallery(false);
+      setShowMediaViewer(false);
+      setShowCreateGroupDialog(false);
     }
-
-    // Cập nhật thời gian xử lý cuối cùng
-    window._lastContactInfoResetTime[contactId] = now;
-
-    setShowMediaGallery(false);
-    setShowMediaViewer(false);
-    setShowCreateGroupDialog(false);
   }, [contact?.id]);
 
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
 
-  // Lấy media từ tin nhắn
+  // Lấy media từ tin nhắn - tối ưu hóa để tránh vòng lặp vô hạn
   useEffect(() => {
-    if (contact?.id) {
-      // Thêm throttle để tránh xử lý quá thường xuyên
-      if (!window._lastContactInfoUpdateTime) {
-        window._lastContactInfoUpdateTime = {};
-      }
+    if (!contact?.id) return;
 
-      const contactId = contact.id;
-      const now = Date.now();
-      const lastUpdateTime = window._lastContactInfoUpdateTime[contactId] || 0;
-      const timeSinceLastUpdate = now - lastUpdateTime;
+    // Lưu ID liên hệ hiện tại vào biến local
+    const currentContactId = contact.id;
 
-      // Nếu đã xử lý trong vòng 2 giây, bỏ qua
-      if (timeSinceLastUpdate < 2000) {
-        console.log(
-          `[ContactInfo] Skipping media extraction, last update was ${timeSinceLastUpdate}ms ago`,
-        );
-        return;
-      }
+    // Tạo một ID duy nhất cho lần chạy này của useEffect
+    const effectId = Math.random().toString(36).substring(2, 9);
 
-      // Cập nhật thời gian xử lý cuối cùng
-      window._lastContactInfoUpdateTime[contactId] = now;
+    console.log(
+      `[ContactInfo:${effectId}] Starting media extraction for contact ${currentContactId}`,
+    );
 
+    // Sử dụng setTimeout để tránh nhiều lần render liên tiếp
+    const timeoutId = setTimeout(() => {
       setIsLoadingMedia(true);
 
       // Lọc media từ tin nhắn hiện có
@@ -230,8 +216,16 @@ export default function ContactInfo({
       };
 
       extractMediaFromMessages();
-    }
-  }, [contact?.id, messages]);
+    }, 100); // Thêm độ trễ nhỏ để tránh nhiều lần render liên tiếp
+
+    // Cleanup function để tránh memory leak và cập nhật state sau khi component unmount
+    return () => {
+      clearTimeout(timeoutId);
+      console.log(
+        `[ContactInfo:${effectId}] Cleanup for contact ${currentContactId}`,
+      );
+    };
+  }, [contact?.id]); // Loại bỏ messages từ dependencies để tránh vòng lặp vô hạn
 
   if (!contact) {
     return null;
@@ -265,7 +259,7 @@ export default function ContactInfo({
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto">
         <div className="space-y-2 bg-[#ebecf0]">
           {/* Thông tin người dùng */}
           <div className="flex flex-col items-center text-center bg-white p-2">
@@ -555,7 +549,7 @@ export default function ContactInfo({
             </Button>
           </div>
         </div>
-      </ScrollArea>
+      </div>
 
       {showProfileDialog && contact && (
         <ProfileDialog

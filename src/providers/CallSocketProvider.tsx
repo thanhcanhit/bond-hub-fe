@@ -43,6 +43,8 @@ export function CallSocketProvider({ children }: CallSocketProviderProps) {
   const { isAuthenticated, accessToken, currentUser } = useAuthStore();
 
   useEffect(() => {
+    // Chức năng gọi điện đã bị vô hiệu hóa tạm thời
+    /*
     if (!isAuthenticated || !accessToken || !currentUser) {
       return;
     }
@@ -112,12 +114,19 @@ export function CallSocketProvider({ children }: CallSocketProviderProps) {
         socket.off("connect_error");
       }
     };
+    */
+
+    // Không khởi tạo socket call vì chức năng đã bị vô hiệu hóa tạm thời
+    console.log(
+      "[CallSocketProvider] Call functionality is temporarily disabled",
+    );
   }, [isAuthenticated, accessToken, currentUser]);
 
   return (
     <CallSocketContext.Provider value={{ callSocket, isConnected }}>
       {children}
-      {isAuthenticated && <CallManager />}
+      {/* Chức năng gọi điện đã bị vô hiệu hóa tạm thời */}
+      {/* {isAuthenticated && <CallManager />} */}
     </CallSocketContext.Provider>
   );
 }
