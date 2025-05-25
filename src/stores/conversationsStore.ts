@@ -1456,9 +1456,12 @@ export const useConversationsStore = create<ConversationsState>()(
           // Update last message for user conversation
           get().updateLastMessage(conversation.contact.id, message);
 
-          // Increment unread count if needed
+          // Increment unread count if needed and message doesn't exist
           if (incrementUnreadCount && message.senderId !== currentUser.id) {
-            get().incrementUnread(conversation.contact.id);
+            const messageExists = conversation.lastMessage?.id === message.id;
+            if (!messageExists) {
+              get().incrementUnread(conversation.contact.id);
+            }
           }
 
           // Mark as read if needed
@@ -1466,6 +1469,9 @@ export const useConversationsStore = create<ConversationsState>()(
             get().markAsRead(conversation.contact.id);
           }
         } else if (conversation.type === "GROUP" && conversation.group) {
+          // Check if message already exists
+          const messageExists = conversation.lastMessage?.id === message.id;
+
           // Update group conversation
           const updates: Partial<Conversation> = {
             lastMessage: message,
@@ -1475,7 +1481,11 @@ export const useConversationsStore = create<ConversationsState>()(
             updates.lastActivity = new Date(message.createdAt);
           }
 
-          if (incrementUnreadCount && message.senderId !== currentUser.id) {
+          if (
+            incrementUnreadCount &&
+            message.senderId !== currentUser.id &&
+            !messageExists
+          ) {
             updates.unreadCount = (conversation.unreadCount || 0) + 1;
           }
 

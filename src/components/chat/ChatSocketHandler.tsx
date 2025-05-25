@@ -246,30 +246,27 @@ export default function ChatSocketHandler() {
       const conversationsStore = useConversationsStore.getState();
       const chatStore = useChatStore.getState();
 
-      // QUAN TRỌNG: Kiểm tra xem tin nhắn có phải là tin nhắn vừa gửi từ người dùng hiện tại không
-      if (message.senderId === currentUser?.id) {
-        // Kiểm tra xem tin nhắn đã có trong danh sách tin nhắn chưa (kiểm tra ID chính xác)
-        const exactMessageExists = messages.some(
-          (msg) => msg.id === message.id,
+      // Check if message already exists in current chat
+      const messageExists = messages.some((msg) => msg.id === message.id);
+      if (messageExists) {
+        console.log(
+          `[ChatSocketHandler] Message ${message.id} already exists in chat, skipping`,
         );
+        return;
+      }
 
-        if (exactMessageExists) {
-          console.log(
-            `[ChatSocketHandler] Message with ID ${message.id} already exists in chat, skipping socket event`,
-          );
-          return;
-        }
-
-        // Kiểm tra xem có tin nhắn tạm thời (temp message) có nội dung giống nhau không
+      // Check if this is a message from current user
+      if (message.senderId === currentUser?.id) {
+        // Check for temporary messages with similar content
         const tempMessages = messages.filter(
           (msg) =>
-            msg.id.startsWith("temp-") && // Chỉ kiểm tra tin nhắn tạm thời
+            msg.id.startsWith("temp-") &&
             msg.senderId === message.senderId &&
             msg.content.text === message.content.text &&
             Math.abs(
               new Date(msg.createdAt).getTime() -
                 new Date(message.createdAt).getTime(),
-            ) < 10000, // 10 giây
+            ) < 10000,
         );
 
         if (tempMessages.length > 0) {
@@ -277,168 +274,67 @@ export default function ChatSocketHandler() {
             `[ChatSocketHandler] Found ${tempMessages.length} similar temporary messages, replacing with real message`,
           );
 
-          // Đây là trường hợp tin nhắn thật từ server trả về cho tin nhắn tạm thời
-          // Thay thế tin nhắn tạm thời đầu tiên tìm thấy bằng tin nhắn thật
+          // Replace first temporary message with real message
           chatStore.updateMessage(tempMessages[0].id, message, {
-            notifyConversationStore: true, // Đồng bộ với conversationsStore
-            updateCache: true, // Cập nhật cache
+            notifyConversationStore: true,
+            updateCache: true,
           });
 
-          // Xóa các tin nhắn tạm thời khác (nếu có)
+          // Remove other temporary messages if any
           if (tempMessages.length > 1) {
             for (let i = 1; i < tempMessages.length; i++) {
               chatStore.removeMessage(tempMessages[i].id, {
-                notifyConversationStore: false, // Không cần đồng bộ với conversationsStore vì đã được xử lý ở trên
+                notifyConversationStore: false,
               });
             }
           }
-
           return;
-        }
-
-        // Ghi log cho tin nhắn mới từ người dùng hiện tại
-        console.log(
-          `[ChatSocketHandler] Checking for similar messages from current user`,
-        );
-
-        // Kiểm tra xem tin nhắn đã có trong danh sách tin nhắn chưa (kiểm tra nội dung)
-        const similarMessageExists = messages.some(
-          (msg) =>
-            !msg.id.startsWith("temp-") && // Không phải tin nhắn tạm thời
-            msg.senderId === message.senderId &&
-            msg.content.text === message.content.text &&
-            Math.abs(
-              new Date(msg.createdAt).getTime() -
-                new Date(message.createdAt).getTime(),
-            ) < 5000, // 5 giây
-        );
-
-        if (similarMessageExists) {
-          console.log(
-            `[ChatSocketHandler] Similar message from current user already exists, skipping`,
-          );
-          return;
-        }
-
-        console.log(
-          `[ChatSocketHandler] This appears to be a new message from current user: ${message.id}`,
-        );
-      }
-
-      // Phát âm thanh thông báo và tăng số lượng tin nhắn chưa đọc nếu tin nhắn đến từ người khác
-      if (message.senderId !== currentUser?.id) {
-        // Kiểm tra xem tin nhắn có phải là tin nhắn mới không
-        const messageExists = messages.some((msg) => msg.id === message.id);
-        if (!messageExists) {
-          console.log(
-            `[ChatSocketHandler] Playing notification sound for new message from ${message.senderId}`,
-          );
-          playNotificationSound();
-
-          // Tăng số lượng tin nhắn chưa đọc toàn cục
-          incrementGlobalUnread();
-          console.log(`[ChatSocketHandler] Incrementing global unread count`);
         }
       }
 
-      // Kiểm tra xem tin nhắn có thuộc cuộc trò chuyện đang mở không
-      // Đồng thời kiểm tra loại tin nhắn để đảm bảo tin nhắn nhóm chỉ hiển thị trong nhóm và tin nhắn trực tiếp chỉ hiển thị trong cuộc trò chuyện trực tiếp
+      // Check if message belongs to current chat
       let isFromCurrentChat = false;
-
-      // Kiểm tra chi tiết dựa trên loại tin nhắn
       if (message.messageType === MessageType.GROUP || message.groupId) {
-        // Đây là tin nhắn nhóm
         isFromCurrentChat = Boolean(
           currentChatType === "GROUP" &&
             selectedGroup &&
             message.groupId === selectedGroup.id,
         );
-        console.log(
-          `[ChatSocketHandler] Group message check: message.groupId=${message.groupId}, selectedGroup.id=${selectedGroup?.id}, isFromCurrentChat=${isFromCurrentChat}`,
-        );
       } else {
-        // Đây là tin nhắn trực tiếp
         isFromCurrentChat = Boolean(
           currentChatType === "USER" &&
             selectedContact &&
             (message.senderId === selectedContact.id ||
               message.receiverId === selectedContact.id),
         );
-        console.log(
-          `[ChatSocketHandler] Direct message check: message.senderId=${message.senderId}, message.receiverId=${message.receiverId}, selectedContact.id=${selectedContact?.id}, isFromCurrentChat=${isFromCurrentChat}`,
-        );
       }
 
-      // Thông tin người gửi đã được cập nhật trong ensureMessageHasUserInfo
+      // Play notification sound and increment unread count for messages from others
+      if (message.senderId !== currentUser?.id && !isFromCurrentChat) {
+        playNotificationSound();
+        incrementGlobalUnread();
+      }
 
-      // Nếu tin nhắn thuộc cuộc trò chuyện đang mở, thêm vào danh sách tin nhắn
+      // Add message to current chat if applicable
       if (isFromCurrentChat) {
-        // Kiểm tra xem tin nhắn đã tồn tại trong danh sách chưa
-        const messageExists = messages.some((msg) => msg.id === message.id);
-        if (!messageExists) {
-          console.log(
-            `[ChatSocketHandler] Adding message to current chat: ${message.id} (groupId: ${message.groupId || "none"})`,
-          );
+        chatStore.processNewMessage(message, {
+          notifyConversationStore: false,
+          updateCache: true,
+          skipDuplicateCheck: true,
+        });
 
-          // Kiểm tra lại một lần nữa để đảm bảo tin nhắn được thêm vào đúng cuộc trò chuyện
-          const currentState = useChatStore.getState();
-          const stillValid =
-            message.messageType === MessageType.GROUP || message.groupId
-              ? // Tin nhắn nhóm
-                currentState.currentChatType === "GROUP" &&
-                currentState.selectedGroup?.id === message.groupId
-              : // Tin nhắn trực tiếp
-                currentState.currentChatType === "USER" &&
-                currentState.selectedContact?.id &&
-                (message.senderId === currentState.selectedContact.id ||
-                  message.receiverId === currentState.selectedContact.id);
-
-          if (!stillValid) {
-            console.log(
-              `[ChatSocketHandler] Conversation changed since message was received, skipping`,
-            );
-            return;
-          }
-
-          // Sử dụng hàm processNewMessage để xử lý tin nhắn mới
-          chatStore.processNewMessage(message, {
-            // Không cần đồng bộ với conversationsStore vì sẽ được xử lý riêng
-            notifyConversationStore: false,
-            // Cập nhật cache
-            updateCache: true,
-            // Bỏ qua kiểm tra trùng lặp vì đã kiểm tra ở trên
-            skipDuplicateCheck: true,
-          });
-
-          // Đánh dấu đã đọc nếu tin nhắn từ người khác
-          if (message.senderId !== currentUser?.id) {
-            chatStore.markMessageAsReadById(message.id);
-            // Đặt lại số lượng tin nhắn chưa đọc toàn cục khi đọc tin nhắn
-            resetUnread();
-          }
+        // Mark as read if from others
+        if (message.senderId !== currentUser?.id) {
+          chatStore.markMessageAsReadById(message.id);
+          resetUnread();
         }
-      } else {
-        console.log(
-          `[ChatSocketHandler] Message ${message.id} is not for current chat (groupId: ${message.groupId || "none"})`,
-        );
       }
 
-      // Xử lý tin nhắn trong conversationsStore
-      const shouldMarkAsRead = Boolean(
-        currentUser && isFromCurrentChat && message.senderId !== currentUser.id,
-      );
-      const shouldIncrementUnread = Boolean(
-        message.senderId !== currentUser?.id && !isFromCurrentChat,
-      );
-
-      // Thông tin người gửi đã được cập nhật trong ensureMessageHasUserInfo
-
+      // Process message in conversations store
       conversationsStore.processNewMessage(message, {
-        // Tăng số lượng tin nhắn chưa đọc nếu tin nhắn từ người khác và không phải cuộc trò chuyện đang mở
-        incrementUnreadCount: shouldIncrementUnread,
-        // Đánh dấu đã đọc nếu tin nhắn thuộc cuộc trò chuyện đang mở
-        markAsRead: shouldMarkAsRead,
-        // Luôn cập nhật lastActivity
+        incrementUnreadCount:
+          message.senderId !== currentUser?.id && !isFromCurrentChat,
+        markAsRead: isFromCurrentChat && message.senderId !== currentUser?.id,
         updateLastActivity: true,
       });
     },
