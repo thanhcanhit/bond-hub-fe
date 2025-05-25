@@ -709,31 +709,18 @@ export default function GroupSocketHandler() {
       }
     };
 
-    // Register event handlers - both our custom events and backend events
-    groupSocket.socket?.on("addedToGroup", handleAddedToGroup);
-    groupSocket.socket?.on("removedFromGroup", handleRemovedFromGroup);
-    groupSocket.socket?.on("groupCreated", handleGroupCreated);
-    groupSocket.socket?.on("groupUpdated", handleGroupUpdated);
+    // Register event handlers - focus on backend events only
+    // Backend events for group management
     groupSocket.socket?.on("memberAdded", handleMemberAdded);
     groupSocket.socket?.on("memberRemoved", handleMemberRemoved);
-    groupSocket.socket?.on("memberRoleUpdated", handleMemberRoleUpdated);
-    groupSocket.socket?.on("groupDeleted", handleGroupDeleted);
-
-    // Backend event names
-    groupSocket.socket?.on("groupDissolved", handleGroupDissolved);
     groupSocket.socket?.on("roleChanged", handleRoleChanged);
+    groupSocket.socket?.on("groupUpdated", handleGroupUpdated);
     groupSocket.socket?.on("avatarUpdated", handleAvatarUpdated);
+    groupSocket.socket?.on("groupDissolved", handleGroupDissolved);
 
-    // New events for group list and conversation list updates
-    groupSocket.socket?.on("updateGroupList", handleUpdateGroupList);
-    groupSocket.socket?.on(
-      "updateConversationList",
-      handleUpdateConversationList,
-    );
-    groupSocket.socket?.on(
-      "forceUpdateConversations",
-      handleForceUpdateConversations,
-    );
+    // Keep some essential frontend events for compatibility
+    groupSocket.socket?.on("addedToGroup", handleAddedToGroup);
+    groupSocket.socket?.on("removedFromGroup", handleRemovedFromGroup);
 
     // Mark event listeners as set up
     eventListenersSetupRef.current = true;
@@ -746,30 +733,14 @@ export default function GroupSocketHandler() {
         );
 
         // Remove event listeners
-        groupSocket.socket?.off("addedToGroup", handleAddedToGroup);
-        groupSocket.socket?.off("removedFromGroup", handleRemovedFromGroup);
-        groupSocket.socket?.off("groupCreated", handleGroupCreated);
-        groupSocket.socket?.off("groupUpdated", handleGroupUpdated);
         groupSocket.socket?.off("memberAdded", handleMemberAdded);
         groupSocket.socket?.off("memberRemoved", handleMemberRemoved);
-        groupSocket.socket?.off("memberRoleUpdated", handleMemberRoleUpdated);
-        groupSocket.socket?.off("groupDeleted", handleGroupDeleted);
-
-        // Backend event names
-        groupSocket.socket?.off("groupDissolved", handleGroupDissolved);
         groupSocket.socket?.off("roleChanged", handleRoleChanged);
+        groupSocket.socket?.off("groupUpdated", handleGroupUpdated);
         groupSocket.socket?.off("avatarUpdated", handleAvatarUpdated);
-
-        // New events for group list and conversation list updates
-        groupSocket.socket?.off("updateGroupList", handleUpdateGroupList);
-        groupSocket.socket?.off(
-          "updateConversationList",
-          handleUpdateConversationList,
-        );
-        groupSocket.socket?.off(
-          "forceUpdateConversations",
-          handleForceUpdateConversations,
-        );
+        groupSocket.socket?.off("groupDissolved", handleGroupDissolved);
+        groupSocket.socket?.off("addedToGroup", handleAddedToGroup);
+        groupSocket.socket?.off("removedFromGroup", handleRemovedFromGroup);
 
         // Reset ref
         eventListenersSetupRef.current = false;

@@ -10,6 +10,7 @@ import SearchHeader from "../SearchHeader";
 import { Media } from "@/types/base";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useEffect } from "react";
 // Toast removed - handled at UI level only
 
 interface ContactListProps {
@@ -95,6 +96,20 @@ export default function ContactList({
         });
     }
   };
+
+  // Setup global trigger function for socket events
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.triggerConversationsReload = refreshConversations;
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (typeof window !== "undefined") {
+        window.triggerConversationsReload = undefined;
+      }
+    };
+  }, [currentUser?.id]);
 
   // Get filtered conversations based on search query
   const filteredConversations = getFilteredConversations();
@@ -250,17 +265,15 @@ export default function ContactList({
                                 const lastMessage = conversation.lastMessage!;
                                 const senderName =
                                   lastMessage.sender?.userInfo?.fullName ||
-                                  // Try to find sender in group members
+                                  // Try to find sender in group members (API format)
                                   conversation.group?.memberUsers?.find(
                                     (m) => m.id === lastMessage.senderId,
                                   )?.fullName ||
+                                  // Try to find sender in group members (store format)
                                   conversation.group?.members?.find(
                                     (m) => m.userId === lastMessage.senderId,
                                   )?.user?.userInfo?.fullName ||
-                                  // Use getUserDisplayName as fallback
-                                  (lastMessage.sender
-                                    ? getUserDisplayName(lastMessage.sender)
-                                    : `Người dùng ${lastMessage.senderId?.slice(-4) || ""}`);
+                                  "Người dùng";
                                 return senderName + ": ";
                               })()
                             : conversation.lastMessage.senderId ===

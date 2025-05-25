@@ -114,82 +114,20 @@ export default function CreateGroupDialog({
         setAvatarFile(null);
         setAvatarPreview(null);
 
-        // Làm mới danh sách cuộc trò chuyện từ server
+        // Backend sẽ tự động gửi socket events cho tất cả thành viên
+        // Chỉ cần reload conversations để cập nhật UI
         if (currentUser?.id) {
-          // Log thông tin nhóm đã tạo
           console.log("Group created successfully:", {
             id: result.group.id,
             name: result.group.name,
             type: "GROUP",
           });
 
-          // Explicitly join the group socket room with multiple attempts
-          try {
-            // Use window.groupSocket directly instead of trying to use the hook
-            if (typeof window !== "undefined" && window.groupSocket) {
-              // Create a function to join the group room that we can call multiple times
-              const joinGroupRoom = () => {
-                // Check again if socket is available (it might have disconnected)
-                if (!window.groupSocket) {
-                  console.log(
-                    `[CreateGroupDialog] window.groupSocket no longer available, skipping join attempt`,
-                  );
-                  return;
-                }
-
-                console.log(
-                  `[CreateGroupDialog] Joining group room via window.groupSocket: ${result.group.id}`,
-                );
-
-                // Regular join group event
-                window.groupSocket?.emit("joinGroup", {
-                  userId: currentUser.id,
-                  groupId: result.group.id,
-                });
-
-                // Direct join request to ensure server processes it
-                window.groupSocket?.emit("directJoinGroup", {
-                  userId: currentUser.id,
-                  groupId: result.group.id,
-                  isCreator: true,
-                });
-
-                // Also emit a confirmation event
-                window.groupSocket?.emit("confirmJoinedGroup", {
-                  groupId: result.group.id,
-                  userId: currentUser.id,
-                  timestamp: new Date(),
-                });
-
-                console.log(
-                  `[CreateGroupDialog] Join group requests sent for group: ${result.group.id}`,
-                );
-              };
-
-              // Join immediately
-              joinGroupRoom();
-
-              // And retry after short delays to ensure it works
-              setTimeout(joinGroupRoom, 500);
-              setTimeout(joinGroupRoom, 1500);
-              setTimeout(joinGroupRoom, 3000);
-            } else {
-              console.log(
-                `[CreateGroupDialog] window.groupSocket not available, cannot join group room directly`,
-              );
-            }
-          } catch (error) {
-            console.error(
-              "[CreateGroupDialog] Error joining group room:",
-              error,
-            );
-          }
-
-          // Đợi 1 giây để đảm bảo socket events được xử lý trước
+          // Reload conversations sau khi tạo nhóm thành công
           setTimeout(() => {
             const conversationsStore = useConversationsStore.getState();
             conversationsStore.loadConversations(currentUser.id);
-          }, 1000);
+          }, 500);
         }
       } else {
         toast.error(result.error || "Không thể tạo nhóm");

@@ -89,6 +89,20 @@ export default function ChatArea({
       `[ChatArea] Messages updated for ${currentChatType}: ${conversationId}, count: ${messages.length}`,
     );
 
+    // Log the last few messages for debugging
+    if (messages.length > 0) {
+      const lastMessages = messages.slice(-3).map((msg) => ({
+        id: msg.id,
+        content: msg.content?.text || "No text content",
+        senderId: msg.senderId,
+        messageType: msg.messageType,
+        groupId: msg.groupId,
+        receiverId: msg.receiverId,
+        createdAt: msg.createdAt,
+      }));
+      console.log(`[ChatArea] Last messages:`, lastMessages);
+    }
+
     // Only scroll to bottom when a new message is added, not when reactions change
     const shouldScrollToBottom = () => {
       // If message count changed, it's a new message
