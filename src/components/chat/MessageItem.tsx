@@ -331,6 +331,18 @@ function SummaryDialog({
 // Define minimum character requirements
 const MIN_SUMMARIZE_LENGTH = 50;
 
+// Helper function to get message content text
+const getMessageText = (message: Message | ExtendedMessage): string => {
+  if (!message.content) return "";
+  return message.content.text || "";
+};
+
+// Helper function to get message content media
+const getMessageMedia = (message: Message | ExtendedMessage): Media[] => {
+  if (!message.content) return [];
+  return message.content.media || [];
+};
+
 export default function MessageItem({
   message,
   isCurrentUser,
@@ -648,6 +660,9 @@ export default function MessageItem({
     }
   };
 
+  const messageText = getMessageText(message);
+  const messageMedia = getMessageMedia(message);
+
   if (isDeletedForSelf) {
     return null;
   }
@@ -663,7 +678,7 @@ export default function MessageItem({
       <SummaryDialog
         isOpen={summaryDialogOpen}
         onClose={() => setSummaryDialogOpen(false)}
-        originalText={message.content.text || ""}
+        originalText={messageText}
         summary={summaryText}
         isLoading={isSummarizing}
       />
@@ -864,7 +879,7 @@ export default function MessageItem({
           )}
 
           {/* Tin nhắn văn bản */}
-          {(message.recalled || message.content.text) && (
+          {(message.recalled || messageText) && (
             <div
               className={`rounded-2xl px-3 py-2 break-words w-fit overflow-hidden ${
                 isCurrentUser
@@ -874,10 +889,10 @@ export default function MessageItem({
                   : message.recalled
                     ? "bg-gray-100 text-gray-500 italic"
                     : "bg-gray-200 text-gray-800"
-              } ${!message.recalled ? "cursor-pFointer hover:opacity-90" : ""} ${
-                message.content.media?.length ||
-                message.content.image ||
-                message.content.video
+              } ${!message.recalled ? "cursor-pointer hover:opacity-90" : ""} ${
+                messageMedia.length ||
+                message.content?.image ||
+                message.content?.video
                   ? "mb-2"
                   : ""
               }`}
@@ -897,17 +912,11 @@ export default function MessageItem({
                     </div>
                   )}
                   {highlight
-                    ? renderHighlightedText(
-                        message.content.text || "",
-                        highlight || "",
-                      )
-                    : message.content.text?.split("\n").map((line, index) => (
+                    ? renderHighlightedText(messageText, highlight || "")
+                    : messageText.split("\n").map((line, index) => (
                         <span key={index}>
                           {line.includes("\t") ? processTabsInText(line) : line}
-                          {index <
-                            message.content.text!.split("\n").length - 1 && (
-                            <br />
-                          )}
+                          {index < messageText.split("\n").length - 1 && <br />}
                         </span>
                       ))}
                 </div>

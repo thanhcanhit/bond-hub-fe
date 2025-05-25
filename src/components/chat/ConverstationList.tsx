@@ -133,7 +133,7 @@ export default function ContactList({
             <p className="text-gray-500">Đang tải danh sách người dùng...</p>
           </div>
         ) : filteredConversations.length > 0 ? (
-          filteredConversations.map((conversation) => {
+          filteredConversations.map((conversation, index) => {
             // Determine if this is a user or group conversation
             const isGroupConversation = conversation.type === "GROUP";
             const isSelected = isGroupConversation
@@ -142,13 +142,14 @@ export default function ContactList({
               : selectedContact?.id === conversation.contact.id &&
                 currentChatType === "USER";
 
+            // Generate a unique key that includes both the ID and index
+            const uniqueKey = isGroupConversation
+              ? `group-${conversation.group?.id}-${index}`
+              : `user-${conversation.contact.id}-${index}`;
+
             return (
               <div
-                key={
-                  isGroupConversation
-                    ? `group-${conversation.group?.id}`
-                    : `user-${conversation.contact.id}`
-                }
+                key={uniqueKey}
                 className={`flex items-center gap-3 p-3 hover:bg-gray-100 cursor-pointer ${
                   isSelected ? "bg-blue-50" : ""
                 }`}
@@ -253,8 +254,8 @@ export default function ContactList({
                                 currentUser?.id
                               ? "Bạn: "
                               : "") +
-                          (conversation.lastMessage.content.text ||
-                            (conversation.lastMessage.content.media?.length
+                          (conversation.lastMessage.content?.text ||
+                            (conversation.lastMessage.content?.media?.length
                               ? formatLastMessageMedia(
                                   conversation.lastMessage.content.media,
                                 )
