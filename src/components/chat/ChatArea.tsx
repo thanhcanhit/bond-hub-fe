@@ -589,6 +589,12 @@ export default function ChatArea({
     let currentGroup: Message[] = [];
 
     messages.forEach((message) => {
+      // Skip messages without createdAt
+      if (!message.createdAt) {
+        console.warn("Message without createdAt:", message);
+        return;
+      }
+
       // Use our utility function to format the date
       const messageDate = formatMessageDate(message.createdAt);
 

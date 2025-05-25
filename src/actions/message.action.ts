@@ -2,6 +2,12 @@ import axiosInstance from "@/lib/axios";
 import { Message, ReactionType } from "@/types/base";
 import { AxiosError } from "axios";
 
+interface ApiResponse {
+  success: boolean;
+  data?: any;
+  error?: string;
+}
+
 /**
  * Gửi tin nhắn văn bản đến người dùng
  * @param receiverId ID của người nhận tin nhắn
@@ -634,6 +640,33 @@ export async function searchMessagesGlobal(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Đánh dấu tất cả tin nhắn đã đọc cho một cuộc hội thoại
+ * @param type Loại cuộc hội thoại ('USER' hoặc 'GROUP')
+ * @param targetId ID của người dùng hoặc nhóm
+ * @returns Kết quả của việc đánh dấu đã đọc
+ */
+export async function markAllMessagesAsRead(
+  type: "USER" | "GROUP",
+  targetId: string,
+): Promise<ApiResponse> {
+  try {
+    const response = await axiosInstance.post(
+      `/messages/read-all/${type}/${targetId}`,
+    );
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (error) {
+    console.error("Error marking all messages as read:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error occurred",
     };
   }
 }

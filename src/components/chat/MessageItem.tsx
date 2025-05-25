@@ -447,42 +447,6 @@ export default function MessageItem({
     // Removed chatStore from dependencies to prevent infinite loops
   ]);
 
-  // Đánh dấu tin nhắn đã đọc khi hiển thị (nếu chưa đọc và không phải tin nhắn của người dùng hiện tại)
-  useEffect(() => {
-    // Only run this effect when the message ID changes or when the component first mounts
-    // Don't include isRead in dependencies to prevent infinite loops
-    if (!isCurrentUser && isSent && message.id && currentUserId) {
-      // Check if message is already read by current user
-      const isAlreadyRead =
-        Array.isArray(message.readBy) && message.readBy.includes(currentUserId);
-
-      if (!isAlreadyRead && !markAsReadAttemptedRef.current.has(message.id)) {
-        markAsReadAttemptedRef.current.add(message.id);
-        chatStoreRef.current.markMessageAsReadById(message.id);
-      }
-    }
-  }, [isCurrentUser, isSent, message.id, currentUserId]); // Removed isRead from dependencies
-
-  // Separate effect to clean up the ref when message becomes read
-  useEffect(() => {
-    if (
-      isRead &&
-      message.id &&
-      markAsReadAttemptedRef.current.has(message.id)
-    ) {
-      markAsReadAttemptedRef.current.delete(message.id);
-    }
-  }, [isRead, message.id]);
-
-  // Cleanup effect to remove message ID from ref when component unmounts
-  useEffect(() => {
-    return () => {
-      if (message.id && markAsReadAttemptedRef.current.has(message.id)) {
-        markAsReadAttemptedRef.current.delete(message.id);
-      }
-    };
-  }, [message.id]);
-
   // Get current user's reaction
   const getUserReaction = () => {
     return message.reactions?.find((r) => r.userId === currentUser?.id);
