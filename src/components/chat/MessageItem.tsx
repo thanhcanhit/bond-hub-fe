@@ -440,13 +440,6 @@ export default function MessageItem({
     // Removed chatStore from dependencies to prevent infinite loops
   ]);
 
-  // Đánh dấu tin nhắn đã đọc khi hiển thị (nếu chưa đọc và không phải tin nhắn của người dùng hiện tại)
-  useEffect(() => {
-    if (!isCurrentUser && !isRead && isSent && message.id && currentUserId) {
-      chatStoreRef.current.markMessageAsReadById(message.id);
-    }
-  }, [isCurrentUser, isRead, isSent, message.id, currentUserId]);
-
   // Get current user's reaction
   const getUserReaction = () => {
     return message.reactions?.find((r) => r.userId === currentUser?.id);

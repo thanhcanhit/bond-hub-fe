@@ -11,6 +11,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { getUserDataById } from "@/actions/user.action";
+import { markAllMessagesAsRead } from "@/actions/message.action";
 
 export default function ChatPage() {
   const [isTabContentVisible, setIsTabContentVisible] = useState(true);
@@ -128,6 +129,7 @@ export default function ChatPage() {
     const chatStore = useChatStore.getState();
     const conversationsStore = useConversationsStore.getState();
 
+    // Mark messages as read when selecting a conversation
     if (type === "USER") {
       // Clear any selected group when selecting a contact
       setSelectedGroup(null);
@@ -147,6 +149,19 @@ export default function ChatPage() {
       if (existingConversation) {
         // Use the contact from the conversations store immediately
         setSelectedContact(existingConversation.contact);
+
+        // Mark all messages as read
+        const result = await markAllMessagesAsRead("USER", id);
+        if (result.success) {
+          console.log(
+            `[ChatPage] Successfully marked all messages as read for user ${id}`,
+          );
+        } else {
+          console.error(
+            `[ChatPage] Failed to mark messages as read:`,
+            result.error,
+          );
+        }
 
         // Check if we have cached messages before forcing a reload
         const cacheKey = `USER_${id}`;
@@ -191,6 +206,19 @@ export default function ChatPage() {
               setSelectedContact(user as User & { userInfo: UserInfo });
               chatStore.setShouldFetchMessages(true);
               chatStore.reloadConversationMessages(id, "USER");
+
+              // Mark all messages as read
+              const markReadResult = await markAllMessagesAsRead("USER", id);
+              if (markReadResult.success) {
+                console.log(
+                  `[ChatPage] Successfully marked all messages as read for user ${id}`,
+                );
+              } else {
+                console.error(
+                  `[ChatPage] Failed to mark messages as read:`,
+                  markReadResult.error,
+                );
+              }
             }
           }
         } catch (error) {
@@ -198,7 +226,7 @@ export default function ChatPage() {
           setSelectedContact(null);
         }
       }
-    } else if (type === "GROUP") {
+    } else {
       // Handle group conversation
       try {
         console.log(`[ChatPage] Opening group chat with ID: ${id}`);
@@ -228,6 +256,19 @@ export default function ChatPage() {
 
         // Proceed with opening the chat
         const success = await chatStore.openChat(id, "GROUP");
+
+        // Mark all messages as read
+        const result = await markAllMessagesAsRead("GROUP", id);
+        if (result.success) {
+          console.log(
+            `[ChatPage] Successfully marked all messages as read for group ${id}`,
+          );
+        } else {
+          console.error(
+            `[ChatPage] Failed to mark messages as read:`,
+            result.error,
+          );
+        }
 
         // Only reload if the initial load failed or if there are no messages
         if (!success) {
