@@ -10,7 +10,7 @@ import SearchHeader from "../SearchHeader";
 import { Media } from "@/types/base";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+// Toast removed - handled at UI level only
 
 interface ContactListProps {
   onSelectContact: (contactId: string | null) => void;
@@ -85,14 +85,13 @@ export default function ContactList({
   // Function to refresh conversations
   const refreshConversations = () => {
     if (currentUser?.id) {
-      toast.info("Đang làm mới danh sách cuộc trò chuyện...");
       loadConversations(currentUser.id)
         .then(() => {
-          toast.success("Đã làm mới danh sách cuộc trò chuyện");
+          // Success - no toast in store/action level
         })
         .catch((error) => {
           console.error("Failed to refresh conversations:", error);
-          toast.error("Không thể làm mới danh sách cuộc trò chuyện");
+          // Error - no toast in store/action level
         });
     }
   };
