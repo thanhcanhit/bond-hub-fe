@@ -2,6 +2,12 @@ import axiosInstance from "@/lib/axios";
 import { Message, ReactionType } from "@/types/base";
 import { AxiosError } from "axios";
 
+interface ApiResponse {
+  success: boolean;
+  data?: any;
+  error?: string;
+}
+
 /**
  * Gửi tin nhắn văn bản đến người dùng
  * @param receiverId ID của người nhận tin nhắn
@@ -203,11 +209,10 @@ export async function searchMessages(
  */
 export async function markMessageAsRead(messageId: string) {
   try {
-    const response = await axiosInstance.patch(`/messages/read/${messageId}`);
+    const response = await axiosInstance.post(`/messages/read/${messageId}`);
     const message = response.data as Message;
     return { success: true, message };
   } catch (error) {
-    console.error("Mark message as read failed:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -222,11 +227,10 @@ export async function markMessageAsRead(messageId: string) {
  */
 export async function markMessageAsUnread(messageId: string) {
   try {
-    const response = await axiosInstance.patch(`/messages/unread/${messageId}`);
+    const response = await axiosInstance.post(`/messages/unread/${messageId}`);
     const message = response.data as Message;
     return { success: true, message };
   } catch (error) {
-    console.error("Mark message as unread failed:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -408,11 +412,17 @@ export async function sendGroupTextMessage(
     return { success: true, message };
   } catch (error: unknown) {
     const axiosError = error as AxiosError;
-    console.error("Send group text message failed:", {
-      error: axiosError.message,
-      status: axiosError.response?.status,
-      data: axiosError.response?.data,
-    });
+    const errorDetails = {
+      groupId: groupId,
+      text: text?.substring(0, 100) + (text?.length > 100 ? "..." : ""), // Truncate long text for logging
+      repliedTo: repliedTo,
+      error: axiosError.message || "Unknown error",
+      status: axiosError.response?.status || "No status",
+      data: axiosError.response?.data || "No response data",
+      url: axiosError.config?.url || "No URL",
+    };
+
+    console.error("Send group text message failed:", errorDetails);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -457,8 +467,20 @@ export async function sendGroupMediaMessage(
 
     const message = response.data as Message;
     return { success: true, message };
-  } catch (error) {
-    console.error("Send group media message failed:", error);
+  } catch (error: unknown) {
+    const axiosError = error as AxiosError;
+    const errorDetails = {
+      groupId: groupId,
+      text: text?.substring(0, 100) + (text?.length > 100 ? "..." : ""), // Truncate long text for logging
+      repliedTo: repliedTo,
+      filesCount: files?.length || 0,
+      error: axiosError.message || "Unknown error",
+      status: axiosError.response?.status || "No status",
+      data: axiosError.response?.data || "No response data",
+      url: axiosError.config?.url || "No URL",
+    };
+
+    console.error("Send group media message failed:", errorDetails);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -479,8 +501,18 @@ export async function getGroupMessages(groupId: string, page: number = 1) {
     });
     const messages = response.data as Message[];
     return { success: true, messages };
-  } catch (error) {
-    console.error("Get group messages failed:", error);
+  } catch (error: unknown) {
+    const axiosError = error as AxiosError;
+    const errorDetails = {
+      groupId: groupId,
+      page: page,
+      error: axiosError.message || "Unknown error",
+      status: axiosError.response?.status || "No status",
+      data: axiosError.response?.data || "No response data",
+      url: axiosError.config?.url || "No URL",
+    };
+
+    console.error("Get group messages failed:", errorDetails);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -608,6 +640,33 @@ export async function searchMessagesGlobal(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Đánh dấu tất cả tin nhắn đã đọc cho một cuộc hội thoại
+ * @param type Loại cuộc hội thoại ('USER' hoặc 'GROUP')
+ * @param targetId ID của người dùng hoặc nhóm
+ * @returns Kết quả của việc đánh dấu đã đọc
+ */
+export async function markAllMessagesAsRead(
+  type: "USER" | "GROUP",
+  targetId: string,
+): Promise<ApiResponse> {
+  try {
+    const response = await axiosInstance.post(
+      `/messages/read-all/${type}/${targetId}`,
+    );
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (error) {
+    console.error("Error marking all messages as read:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error occurred",
     };
   }
 }

@@ -5,7 +5,6 @@ import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { useGroupSocket } from "@/hooks/useGroupSocket";
-import { toast } from "sonner";
 import { GroupRole } from "@/types/base";
 
 // Define types for socket events
@@ -146,9 +145,13 @@ export default function GroupSocketHandler() {
               group: {
                 ...conversation.group,
                 ...groupData,
-                lastUpdated: new Date(), // Thêm timestamp để theo dõi thời gian cập nhật
               },
             });
+
+            // Force update to ensure UI reflects changes immediately
+            setTimeout(() => {
+              useConversationsStore.getState().forceUpdate();
+            }, 100);
             return;
           }
         }
@@ -158,8 +161,8 @@ export default function GroupSocketHandler() {
         const lastCallTime = window._lastGroupApiCallTime?.[groupId] || 0;
         const timeSinceLastCall = now - lastCallTime;
 
-        // Nếu đã gọi API trong vòng 5 giây, bỏ qua
-        if (timeSinceLastCall < 5000) {
+        // Nếu đã gọi API trong vòng 10 giây, bỏ qua để giảm lag
+        if (timeSinceLastCall < 10000) {
           console.log(
             `[GroupSocketHandler] Skipping API call for ${groupId}, last call was ${timeSinceLastCall}ms ago`,
           );
@@ -183,13 +186,15 @@ export default function GroupSocketHandler() {
           );
 
           if (conversation) {
-            // Thêm timestamp để theo dõi thời gian cập nhật
-            result.group.lastUpdated = new Date();
-
             // Update the conversation with the latest group data
             updateConversation(groupId, {
               group: result.group,
             });
+
+            // Force update to ensure UI reflects changes immediately
+            setTimeout(() => {
+              useConversationsStore.getState().forceUpdate();
+            }, 100);
           }
         }
       } catch (error) {
@@ -226,10 +231,7 @@ export default function GroupSocketHandler() {
         // Refresh the selected group data
         refreshSelectedGroup();
 
-        // Show toast notification
-        if (data.updatedBy !== currentUser?.id) {
-          toast.info("Thông tin nhóm đã được cập nhật");
-        }
+        // Group updated - no toast in socket handler
       } else {
         // Find the group in conversations
         const groupConversation = conversations.find(
@@ -252,21 +254,19 @@ export default function GroupSocketHandler() {
         // Refresh the selected group data
         refreshSelectedGroup();
 
-        // Show toast notification if the current user didn't add the member
-        if (data.addedById !== currentUser?.id) {
-          toast.info("Thành viên mới đã được thêm vào nhóm");
-        }
-      } else {
-        // Find the group in conversations
-        const groupConversation = conversations.find(
-          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
-        );
+        // Member added - no toast in socket handler
+      }
 
-        if (groupConversation) {
-          // Refresh this group's data in the conversations store
-          // Sử dụng dữ liệu từ socket nếu có
-          updateConversationWithLatestGroupData(data.groupId, data);
-        }
+      // Always update conversations store for both selected and non-selected groups
+      // This ensures GroupChatHeader and other components get updated
+      const groupConversation = conversations.find(
+        (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+      );
+
+      if (groupConversation) {
+        // Refresh this group's data in the conversations store
+        // Sử dụng dữ liệu từ socket nếu có
+        updateConversationWithLatestGroupData(data.groupId, data);
       }
     };
 
@@ -276,13 +276,20 @@ export default function GroupSocketHandler() {
       // Check if the current user was removed from the group
       if (data.userId === currentUser?.id) {
         console.log("[GroupSocketHandler] Current user was removed from group");
-        toast.info(`Bạn đã bị xóa khỏi nhóm ${data.groupId}`);
+
+        // Member removed - no toast in socket handler
+
         useChatStore.getState().setSelectedGroup(null);
         useChatStore.getState().clearChatCache("GROUP", data.groupId);
         useConversationsStore.getState().removeConversation(data.groupId);
       } else {
-        // Refresh the group data in the conversations store
-        // Sử dụng dữ liệu từ socket nếu có
+        // For other members being removed, update both selected group and conversations
+        if (selectedGroup && selectedGroup.id === data.groupId) {
+          // Refresh the selected group data
+          refreshSelectedGroup();
+        }
+
+        // Always update conversations store to ensure GroupChatHeader gets updated
         updateConversationWithLatestGroupData(data.groupId, data);
       }
     };
@@ -298,21 +305,7 @@ export default function GroupSocketHandler() {
         // Refresh the selected group data
         refreshSelectedGroup();
 
-        // Show toast notification for role changes
-        if (data.userId === currentUser?.id) {
-          // Current user's role was changed
-          const roleText =
-            data.newRole === GroupRole.LEADER
-              ? "trưởng nhóm"
-              : data.newRole === GroupRole.CO_LEADER
-                ? "phó nhóm"
-                : "thành viên";
-
-          toast.info(`Vai trò của bạn đã được thay đổi thành ${roleText}`);
-        } else if (data.updatedById !== currentUser?.id) {
-          // Someone else's role was changed by someone else
-          toast.info("Vai trò thành viên trong nhóm đã được thay đổi");
-        }
+        // Role changed - no toast in socket handler
       } else {
         // Find the group in conversations
         const groupConversation = conversations.find(
@@ -364,21 +357,7 @@ export default function GroupSocketHandler() {
         // Refresh the selected group data
         refreshSelectedGroup();
 
-        // Show toast notification for role changes
-        if (data.userId === currentUser?.id) {
-          // Current user's role was changed
-          const roleText =
-            data.newRole === GroupRole.LEADER
-              ? "trưởng nhóm"
-              : data.newRole === GroupRole.CO_LEADER
-                ? "phó nhóm"
-                : "thành viên";
-
-          toast.info(`Vai trò của bạn đã được thay đổi thành ${roleText}`);
-        } else if (data.updatedById !== currentUser?.id) {
-          // Someone else's role was changed by someone else
-          toast.info("Vai trò thành viên trong nhóm đã được thay đổi");
-        }
+        // Role changed - no toast in socket handler
       } else {
         // Find the group in conversations
         const groupConversation = conversations.find(
@@ -397,10 +376,7 @@ export default function GroupSocketHandler() {
 
       // Check if this is the currently selected group
       if (selectedGroup && selectedGroup.id === data.groupId) {
-        // Show toast notification
-        if (data.updatedBy !== currentUser?.id) {
-          toast.info("Avatar nhóm đã được cập nhật");
-        }
+        // Avatar updated - no toast in socket handler
 
         // Nếu có avatarUrl, cập nhật trực tiếp để tránh phải tải lại
         if (data.avatarUrl && selectedGroup) {
@@ -408,7 +384,6 @@ export default function GroupSocketHandler() {
           useChatStore.getState().setSelectedGroup({
             ...selectedGroup,
             avatarUrl: data.avatarUrl,
-            lastUpdated: new Date(), // Thêm timestamp để theo dõi thời gian cập nhật
           });
 
           // Cập nhật cache
@@ -420,9 +395,13 @@ export default function GroupSocketHandler() {
             chatStore.groupCache[data.groupId] = {
               ...cachedData,
               group: {
-                ...cachedData.group,
+                id: cachedData.group.id,
+                name: cachedData.group.name,
+                creatorId: cachedData.group.creatorId,
                 avatarUrl: data.avatarUrl,
-                lastUpdated: new Date(),
+                createdAt: cachedData.group.createdAt,
+                members: cachedData.group.members,
+                messages: cachedData.group.messages,
               },
               lastFetched: new Date(),
             };
@@ -437,13 +416,16 @@ export default function GroupSocketHandler() {
           (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
         );
 
-        if (groupConversation && data.avatarUrl) {
+        if (groupConversation?.group && data.avatarUrl) {
           // Cập nhật trực tiếp avatarUrl vào conversation
           updateConversation(data.groupId, {
             group: {
-              ...groupConversation.group,
+              id: groupConversation.group.id,
+              name: groupConversation.group.name,
               avatarUrl: data.avatarUrl,
-              lastUpdated: new Date(),
+              createdAt: groupConversation.group.createdAt,
+              memberIds: groupConversation.group.memberIds,
+              memberUsers: groupConversation.group.memberUsers,
             },
           });
         } else if (groupConversation) {
@@ -488,18 +470,7 @@ export default function GroupSocketHandler() {
         (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
       );
 
-      // Get group name from event or from local data
-      const groupName =
-        data.groupName || groupConversation?.group?.name || "chat";
-
-      // Show appropriate notification based on whether user was kicked or left voluntarily
-      if (data.kicked) {
-        toast.info(`Bạn đã bị xóa khỏi nhóm ${groupName}`);
-      } else if (data.left) {
-        toast.info(`Bạn đã rời khỏi nhóm ${groupName}`);
-      } else {
-        toast.info(`Bạn đã không còn trong nhóm ${groupName}`);
-      }
+      // Removed from group - no toast in socket handler
 
       // If this is the currently selected group, navigate away
       if (selectedGroup && selectedGroup.id === data.groupId) {
@@ -597,10 +568,7 @@ export default function GroupSocketHandler() {
           return;
         }
 
-        const groupName = groupConversation?.group?.name || "chat";
-
-        // Show notification
-        toast.info(`Bạn đã bị xóa khỏi nhóm ${groupName}`);
+        // Removed from group - no toast in socket handler
 
         // If this is the currently selected group, navigate away
         if (selectedGroup && selectedGroup.id === data.groupId) {
@@ -627,10 +595,7 @@ export default function GroupSocketHandler() {
           return;
         }
 
-        const groupName = groupConversation?.group?.name || "chat";
-
-        // Show notification
-        toast.info(`Nhóm ${groupName} đã bị giải tán`);
+        // Group dissolved - no toast in socket handler
 
         // If this is the currently selected group, navigate away
         if (selectedGroup && selectedGroup.id === data.groupId) {
@@ -671,10 +636,7 @@ export default function GroupSocketHandler() {
           return;
         }
 
-        const groupName = groupConversation?.group?.name || "chat";
-
-        // Show notification
-        toast.info(`Nhóm ${groupName} đã bị giải tán`);
+        // Group dissolved - no toast in socket handler
 
         // If this is the currently selected group, navigate away
         if (selectedGroup && selectedGroup.id === data.groupId) {

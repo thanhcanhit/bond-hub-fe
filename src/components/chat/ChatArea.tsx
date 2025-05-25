@@ -145,14 +145,13 @@ export default function ChatArea({
 
     // Update the previous messages reference - use a shallow copy to avoid excessive memory usage
     prevMessagesRef.current = messages.slice();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     messages,
-    selectedContact,
-    selectedGroup,
+    selectedContact?.id,
+    selectedGroup?.id,
     currentChatType,
-    updateLastMessage,
-    messagesEndRef,
-    scrollToBottom,
+    // Remove updateLastMessage, messagesEndRef, scrollToBottom from dependencies as they are stable
   ]);
 
   // Effect for scrolling when messages change
@@ -204,14 +203,13 @@ export default function ChatArea({
       hasScrolledForConversationRef.current = true;
       lastMessageCountRef.current = messages.length;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selectedContact?.id,
     selectedGroup?.id,
     currentChatType,
     messages.length,
-    scrollToBottom,
-    selectedContact,
-    selectedGroup,
+    // Remove scrollToBottom, selectedContact, selectedGroup from dependencies as they are stable or redundant
   ]);
 
   // Handle scroll event to load older messages
@@ -288,13 +286,14 @@ export default function ChatArea({
     return () => {
       chatContainer.removeEventListener("scroll", handleScroll);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isLoadingOlder,
     hasMoreMessages,
-    loadOlderMessages,
-    selectedContact,
-    selectedGroup,
+    selectedContact?.id,
+    selectedGroup?.id,
     currentChatType,
+    // Remove loadOlderMessages, selectedContact, selectedGroup from dependencies as they are stable or redundant
   ]);
 
   // Fetch complete user data when viewing a conversation
@@ -384,12 +383,12 @@ export default function ChatArea({
       // No need to fetch user data for group members - we already have this information
       // in the group object from the conversations store
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selectedContact?.id,
     selectedGroup?.id,
     currentChatType,
-    resetUnread,
-    conversations,
+    // Remove resetUnread and conversations from dependencies as they are stable or cause infinite loops
   ]);
 
   // Track typing status from conversationsStore
@@ -548,14 +547,13 @@ export default function ChatArea({
       // Reset current conversation ID
       typingConversationIdRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selectedContact?.id,
     selectedGroup?.id,
     currentChatType,
-    conversations,
-    updateTypingStatus,
-    selectedContact,
-    selectedGroup,
+    // Remove conversations, updateTypingStatus, selectedContact, selectedGroup from dependencies
+    // as they cause infinite loops or are redundant
   ]);
 
   const handleReply = (message: Message) => {
@@ -591,6 +589,12 @@ export default function ChatArea({
     let currentGroup: Message[] = [];
 
     messages.forEach((message) => {
+      // Skip messages without createdAt
+      if (!message.createdAt) {
+        console.warn("Message without createdAt:", message);
+        return;
+      }
+
       // Use our utility function to format the date
       const messageDate = formatMessageDate(message.createdAt);
 

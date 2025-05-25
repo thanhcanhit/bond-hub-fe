@@ -28,6 +28,7 @@ import {
   Link as LinkIcon,
   Pencil,
   RefreshCw,
+  QrCode,
 } from "lucide-react";
 import GroupDialog from "../group/GroupDialog";
 import MediaGalleryView from "./MediaGalleryView";
@@ -74,6 +75,7 @@ import {
   getGroupById,
 } from "@/actions/group.action";
 import AddMemberDialog from "../group/AddMemberDialog";
+import GroupQRCodeDialog from "../GroupQRCodeDialog";
 
 interface GroupInfoProps {
   group: Group | null;
@@ -192,6 +194,7 @@ export default function GroupInfo({
   const [activeGalleryTab, setActiveGalleryTab] = useState<
     "media" | "files" | "links"
   >("media");
+  const [showGroupQRDialog, setShowGroupQRDialog] = useState(false);
 
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
@@ -295,7 +298,13 @@ export default function GroupInfo({
 
           // Cập nhật conversations store để đảm bảo UI được cập nhật đồng bộ
           useConversationsStore.getState().updateConversation(groupId, {
-            group: result.group,
+            group: {
+              id: result.group.id,
+              name: result.group.name,
+              avatarUrl: result.group.avatarUrl,
+              createdAt: result.group.createdAt,
+              memberUsers: result.group.memberUsers,
+            },
           });
 
           // Nếu số lượng thành viên thay đổi, hiển thị thông báo
@@ -379,10 +388,14 @@ export default function GroupInfo({
         // Cập nhật conversations store để đảm bảo UI được cập nhật đồng bộ
         if (groupId && updatedSelectedGroup) {
           useConversationsStore.getState().updateConversation(groupId, {
-            group: updatedSelectedGroup,
+            group: {
+              id: updatedSelectedGroup.id,
+              name: updatedSelectedGroup.name,
+              avatarUrl: updatedSelectedGroup.avatarUrl,
+              createdAt: updatedSelectedGroup.createdAt,
+              memberUsers: updatedSelectedGroup.memberUsers,
+            },
           });
-
-          // No need to force update conversations here
         }
 
         toast.success("Làm mới dữ liệu nhóm thành công");
@@ -834,102 +847,149 @@ export default function GroupInfo({
 
       // Lọc media từ tin nhắn hiện có
       const extractMediaFromMessages = () => {
-        const imageAndVideoFiles: (Media & {
-          createdAt: Date;
-          sender?: unknown;
-          senderId?: string;
-        })[] = [];
-        const documentFiles: (Media & {
-          createdAt: Date;
-          sender?: unknown;
-          senderId?: string;
-        })[] = [];
-        const extractedLinks: {
-          url: string;
-          title: string;
-          timestamp: Date;
-        }[] = [];
+        try {
+          const imageAndVideoFiles: (Media & {
+            createdAt: Date;
+            sender?: unknown;
+            senderId?: string;
+          })[] = [];
+          const documentFiles: (Media & {
+            createdAt: Date;
+            sender?: unknown;
+            senderId?: string;
+          })[] = [];
+          const extractedLinks: {
+            url: string;
+            title: string;
+            timestamp: Date;
+          }[] = [];
 
-        messages.forEach((message) => {
-          // Bỏ qua các tin nhắn đã thu hồi
-          if (message.recalled) return;
+          if (!Array.isArray(messages)) {
+            console.warn("[GroupInfo] Messages is not an array:", messages);
+            return;
+          }
 
-          // Xử lý media
-          if (message.content.media && message.content.media.length > 0) {
-            message.content.media.forEach((media) => {
-              if (!media.metadata || !media.metadata.extension) return;
-              const extension = media.metadata.extension.toLowerCase();
-              if (
-                [
-                  "jpg",
-                  "jpeg",
-                  "png",
-                  "gif",
-                  "webp",
-                  "mp4",
-                  "webm",
-                  "mov",
-                ].includes(extension)
-              ) {
-                imageAndVideoFiles.push({
-                  ...media,
-                  createdAt: new Date(message.createdAt),
-                  sender: message.sender,
-                  senderId: message.senderId,
-                });
-              } else {
-                documentFiles.push({
-                  ...media,
-                  createdAt: new Date(message.createdAt),
-                  sender: message.sender,
-                  senderId: message.senderId,
+          messages.forEach((message) => {
+            try {
+              // Skip invalid messages
+              if (!message || typeof message !== "object") {
+                console.warn("[GroupInfo] Invalid message object:", message);
+                return;
+              }
+
+              // Skip recalled messages
+              if (message.recalled) return;
+
+              // Skip messages without content
+              if (!message.content) {
+                console.warn("[GroupInfo] Message without content:", message);
+                return;
+              }
+
+              // Process media
+              const media = message.content.media;
+              if (Array.isArray(media) && media.length > 0) {
+                media.forEach((mediaItem) => {
+                  if (!mediaItem?.metadata?.extension) {
+                    console.warn(
+                      "[GroupInfo] Media item missing metadata or extension:",
+                      mediaItem,
+                    );
+                    return;
+                  }
+
+                  const extension = mediaItem.metadata.extension.toLowerCase();
+                  const mediaWithDate = {
+                    ...mediaItem,
+                    createdAt: new Date(message.createdAt || Date.now()),
+                    sender: message.sender,
+                    senderId: message.senderId,
+                  };
+
+                  if (
+                    [
+                      "jpg",
+                      "jpeg",
+                      "png",
+                      "gif",
+                      "webp",
+                      "mp4",
+                      "webm",
+                      "mov",
+                    ].includes(extension)
+                  ) {
+                    imageAndVideoFiles.push(mediaWithDate);
+                  } else {
+                    documentFiles.push(mediaWithDate);
+                  }
                 });
               }
-            });
-          }
 
-          // Xử lý links trong text
-          if (message.content.text) {
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
-            const matches = message.content.text.match(urlRegex);
-            if (matches) {
-              matches.forEach((url) => {
-                // Get domain for display
-                const domain = url.replace(/^https?:\/\//, "").split("/")[0];
-
-                // Use the utility function to get a better title
-                const title = getLinkTitle(domain, url);
-
-                extractedLinks.push({
-                  url,
-                  title,
-                  timestamp: new Date(message.createdAt),
-                });
-              });
+              // Process links in text
+              const text = message.content.text;
+              if (typeof text === "string" && text.length > 0) {
+                const urlRegex = /(https?:\/\/[^\s]+)/g;
+                const matches = text.match(urlRegex);
+                if (matches) {
+                  matches.forEach((url) => {
+                    try {
+                      // Get domain for display
+                      const domain = url
+                        .replace(/^https?:\/\//, "")
+                        .split("/")[0];
+                      // Use the utility function to get a better title
+                      const title = getLinkTitle(domain, url);
+                      extractedLinks.push({
+                        url,
+                        title,
+                        timestamp: new Date(message.createdAt || Date.now()),
+                      });
+                    } catch (error) {
+                      console.warn(
+                        "[GroupInfo] Error processing URL:",
+                        url,
+                        error,
+                      );
+                    }
+                  });
+                }
+              }
+            } catch (error) {
+              console.warn(
+                "[GroupInfo] Error processing message:",
+                message,
+                error,
+              );
             }
-          }
-        });
+          });
 
-        // Sắp xếp media từ mới đến cũ
-        imageAndVideoFiles.sort(
-          (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-        );
-        documentFiles.sort(
-          (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-        );
-        extractedLinks.sort(
-          (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
-        );
+          // Sort media from newest to oldest
+          imageAndVideoFiles.sort(
+            (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+          );
+          documentFiles.sort(
+            (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+          );
+          extractedLinks.sort(
+            (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+          );
 
-        setMediaFiles(imageAndVideoFiles.slice(0, 20)); // Giới hạn 20 file
-        setDocuments(documentFiles.slice(0, 10)); // Giới hạn 10 file
-        setLinks(extractedLinks.slice(0, 10)); // Giới hạn 10 link
-        setIsLoadingMedia(false);
+          setMediaFiles(imageAndVideoFiles.slice(0, 20)); // Limit to 20 files
+          setDocuments(documentFiles.slice(0, 10)); // Limit to 10 files
+          setLinks(extractedLinks.slice(0, 10)); // Limit to 10 links
+        } catch (error) {
+          console.error(
+            "[GroupInfo] Error in extractMediaFromMessages:",
+            error,
+          );
+        } finally {
+          setIsLoadingMedia(false);
+        }
       };
 
       extractMediaFromMessages();
     }
-  }, [group?.id, messages]); // Removed forceUpdate from dependencies
+  }, [group?.id, messages]);
 
   // Kiểm tra nếu không có dữ liệu nhóm
   useEffect(() => {
@@ -1605,6 +1665,25 @@ export default function GroupInfo({
             </CollapsibleContent>
           </Collapsible>
 
+          {/* Mã QR */}
+          <Collapsible defaultOpen className="overflow-hidden bg-white">
+            <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50">
+              <div className="flex items-center">
+                <span className="font-semibold">Mã QR</span>
+              </div>
+              <ChevronDown className="h-5 w-5 text-gray-500" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div
+                className="p-3 flex items-center hover:bg-gray-50 cursor-pointer"
+                onClick={() => setShowGroupQRDialog(true)}
+              >
+                <QrCode className="h-5 w-5 mr-2 text-gray-500" />
+                <span className="text-sm">Mã QR nhóm</span>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
           {/* Ảnh/Video */}
           <Collapsible defaultOpen className="overflow-hidden bg-white">
             <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50">
@@ -2086,6 +2165,16 @@ export default function GroupInfo({
               window.location.reload();
             }, 500);
           }}
+        />
+      )}
+
+      {/* Group QR Code Dialog */}
+      {group && (
+        <GroupQRCodeDialog
+          isOpen={showGroupQRDialog}
+          onClose={() => setShowGroupQRDialog(false)}
+          groupId={group.id}
+          groupName={group.name}
         />
       )}
 

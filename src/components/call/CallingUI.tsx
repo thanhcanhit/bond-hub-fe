@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Phone, PhoneOff, Loader2 } from "lucide-react";
+import { PhoneOff, Loader2 } from "lucide-react";
 import { getUserInitials } from "@/utils/userUtils";
 import { User, Group } from "@/types/base";
 import { fetchUserById } from "@/actions/user";

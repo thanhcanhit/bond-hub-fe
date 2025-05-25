@@ -130,9 +130,9 @@ export const useGroupSocket = () => {
         }
       };
 
-      // Retry after short delays
-      setTimeout(retryJoin, 1000);
-      setTimeout(retryJoin, 3000);
+      // Retry after short delays - reduced frequency to avoid spam
+      setTimeout(retryJoin, 2000);
+      setTimeout(retryJoin, 5000);
     },
     [currentUser?.id],
   );
@@ -1112,13 +1112,13 @@ export const useGroupSocket = () => {
           // Chỉ cập nhật UI và nhóm được chọn mà không tải lại danh sách cuộc trò chuyện
           console.log("[useGroupSocket] Updating UI after reconnect");
 
-          // Cập nhật UI
+          // Cập nhật UI - reduced frequency
           throttledForceUpdate();
 
           // Cập nhật nhóm được chọn nếu có
           refreshSelectedGroup();
         }
-      }, 1000);
+      }, 2000); // Increased delay to reduce server load
     });
 
     return () => {

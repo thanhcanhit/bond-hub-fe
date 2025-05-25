@@ -3,7 +3,7 @@ import { Socket } from "socket.io-client";
 import io from "socket.io-client";
 
 // Create a socket instance that will be initialized later
-let socket: Socket = io({
+const socket: Socket = io({
   autoConnect: false, // Don't connect automatically
   forceNew: true, // Force a new connection
   reconnection: false, // Disable automatic reconnection
@@ -32,12 +32,6 @@ export const setupSocket = (token: string) => {
     return socket;
   }
 
-  // If socket is connecting, wait for it
-  if (socket.connecting) {
-    console.log("Socket is in connecting state, waiting for connection");
-    return socket;
-  }
-
   // Clean up socket if it exists but is not connected
   if (!socket.connected) {
     console.log("Cleaning up socket before reconnecting");
@@ -54,11 +48,18 @@ export const setupSocket = (token: string) => {
   const socketUrl =
     process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000";
   console.log(`Setting socket URL to: ${socketUrl}`);
-  socket.io.uri = socketUrl;
 
-  socket.io.opts.reconnection = false; // Disable automatic reconnection
-  socket.io.opts.timeout = 20000;
-  socket.io.opts.transports = ["websocket"]; // Use only websocket to avoid polling issues
+  // Create a new socket with updated options
+  const newSocket = io(socketUrl, {
+    auth: { token },
+    reconnection: false,
+    timeout: 20000,
+    transports: ["websocket"],
+    forceNew: true,
+  });
+
+  // Replace the old socket with the new one
+  Object.assign(socket, newSocket);
 
   console.log("Socket options configured, connecting...");
 
@@ -142,12 +143,6 @@ export const setupCallSocket = (token: string) => {
   // If we already have a connected socket, just return it
   if (callSocket && callSocket.connected) {
     console.log("Call socket already connected, reusing existing socket");
-    return callSocket;
-  }
-
-  // If we have a socket that's connecting, wait for it
-  if (callSocket && callSocket.connecting) {
-    console.log("Call socket is in connecting state, waiting for connection");
     return callSocket;
   }
 

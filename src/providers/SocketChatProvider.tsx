@@ -67,15 +67,15 @@ export function SocketChatProvider({ children }: SocketProviderProps) {
     const socket = io(socketUrl, {
       auth: {
         userId: currentUser.id,
-        token: accessToken, // Thêm token vào auth để server có thể xác thực
+        token: accessToken,
       },
       reconnection: true,
-      reconnectionAttempts: 10, // Tăng số lần thử kết nối lại
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000, // Tăng timeout
-      transports: ["websocket", "polling"], // Hỗ trợ cả polling để tăng độ tin cậy
-      forceNew: true, // Đảm bảo tạo kết nối mới
+      reconnectionAttempts: 5, // Giảm số lần thử kết nối lại để tránh spam
+      reconnectionDelay: 2000, // Tăng delay giữa các lần thử
+      reconnectionDelayMax: 10000, // Tăng max delay
+      timeout: 15000, // Giảm timeout xuống để phát hiện lỗi sớm hơn
+      transports: ["websocket"], // Chỉ dùng websocket để tối ưu hiệu suất
+      forceNew: true,
     });
 
     // Lưu socket vào state
@@ -98,17 +98,10 @@ export function SocketChatProvider({ children }: SocketProviderProps) {
       const heartbeatInterval = setInterval(() => {
         if (socket.connected) {
           socket.emit("heartbeat");
-          console.log("[SocketProvider] Heartbeat sent");
         } else {
           clearInterval(heartbeatInterval);
         }
-      }, 30000); // 30 giây
-
-      // Debug: Theo dõi tất cả các event
-      // Sử dụng onAny thay vì onevent vì onevent là private
-      socket.onAny((event, ...args) => {
-        console.log(`[SocketProvider] Event received: ${event}`, args);
-      });
+      }, 30000);
 
       // Cleanup interval khi component unmount
       return () => {
@@ -130,18 +123,10 @@ export function SocketChatProvider({ children }: SocketProviderProps) {
           "[SocketProvider] Server disconnected us, attempting to reconnect manually...",
         );
         setTimeout(() => {
-          socket.connect();
-        }, 1000);
-      } else if (reason === "transport close" || reason === "ping timeout") {
-        // Vấn đề mạng, socket.io sẽ tự động kết nối lại
-        console.log(
-          "[SocketProvider] Network issue, socket.io will automatically try to reconnect",
-        );
-      } else if (reason === "transport error") {
-        // Lỗi giao thức, thử chuyển sang polling nếu đang dùng websocket
-        console.log(
-          "[SocketProvider] Transport error, will try to reconnect with polling if needed",
-        );
+          if (socket && !socket.connected) {
+            socket.connect();
+          }
+        }, 2000);
       }
     });
 
@@ -159,23 +144,17 @@ export function SocketChatProvider({ children }: SocketProviderProps) {
           "[SocketProvider] Authentication error, will try to refresh token",
         );
 
-        // Thử refresh token sau 1 giây
+        // Thử refresh token sau 2 giây
         setTimeout(async () => {
           try {
-            // Thử refresh token
             const { refreshToken } = await import("@/actions/auth.action");
             const result = await refreshToken();
 
-            if (result.success) {
+            if (result.success && socket && !socket.connected) {
               console.log(
                 "[SocketProvider] Token refreshed successfully, reconnecting...",
               );
-              // Socket sẽ tự động kết nối lại với token mới
-            } else {
-              console.error(
-                "[SocketProvider] Failed to refresh token:",
-                result.error,
-              );
+              socket.connect();
             }
           } catch (refreshError) {
             console.error(
@@ -183,7 +162,7 @@ export function SocketChatProvider({ children }: SocketProviderProps) {
               refreshError,
             );
           }
-        }, 1000);
+        }, 2000);
       }
     });
 
@@ -192,13 +171,13 @@ export function SocketChatProvider({ children }: SocketProviderProps) {
       console.log("[SocketProvider] Cleaning up socket connection");
 
       try {
-        // Xóa tất cả các event listener trước khi disconnect
-        if (socket && socket.connected) {
+        if (socket) {
           socket.removeAllListeners();
-          socket.disconnect();
+          if (socket.connected) {
+            socket.disconnect();
+          }
         }
 
-        // Xóa tham chiếu socket khỏi window object
         if (typeof window !== "undefined") {
           window.messageSocket = null;
         }

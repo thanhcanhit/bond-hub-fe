@@ -2,9 +2,7 @@ import { Toaster } from "sonner";
 import "./globals.css";
 import AuthProvider from "@/providers/AuthProvider";
 import { SocketChatProvider } from "@/providers/SocketChatProvider";
-import { CallSocketProvider } from "@/providers/CallSocketProvider";
 import DocumentTitle from "@/components/common/DocumentTitle";
-import CallRedirectHandler from "@/components/call/CallRedirectHandler";
 import { Inter } from "next/font/google"; // Import Inter font
 
 const inter = Inter({
@@ -34,10 +32,7 @@ export default function RootLayout({
         <Toaster position="top-center" richColors />
         <AuthProvider>
           <SocketChatProvider>
-            <CallSocketProvider>
-              <CallRedirectHandler />
-              <main className="min-h-screen">{children}</main>
-            </CallSocketProvider>
+            <main className="min-h-screen">{children}</main>
           </SocketChatProvider>
         </AuthProvider>
       </body>

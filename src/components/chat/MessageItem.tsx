@@ -209,12 +209,14 @@ interface ExtendedMessage extends Message {
 function getSenderName(
   message: Message | ExtendedMessage,
   userInfo?: UserInfo,
+  userInfoFromConversations?: UserInfo | null,
 ): string {
   // Log the available information for debugging
   if (process.env.NODE_ENV !== "production") {
     console.log(
       `[MessageItem] Getting sender name for message ${message.id}:`,
       {
+        conversationsStoreFullName: userInfoFromConversations?.fullName,
         senderUserInfoFullName: message.sender?.userInfo?.fullName,
         propsUserInfoFullName: userInfo?.fullName,
         extendedMessageSenderName: (message as ExtendedMessage).senderName,
@@ -223,12 +225,22 @@ function getSenderName(
     );
   }
 
-  return (
+  // Try to get the best available name with priority order
+  const senderName =
+    userInfoFromConversations?.fullName ||
     message.sender?.userInfo?.fullName ||
     userInfo?.fullName ||
     (message as ExtendedMessage).senderName ||
-    "Thành viên nhóm"
-  );
+    (message.senderId
+      ? `Người dùng ${message.senderId.slice(-4)}`
+      : "Thành viên nhóm");
+
+  // Don't show "Unknown" - use a more user-friendly fallback
+  return senderName === "Unknown"
+    ? message.senderId
+      ? `Người dùng ${message.senderId.slice(-4)}`
+      : "Thành viên nhóm"
+    : senderName;
 }
 
 interface MessageItemProps {
@@ -277,6 +289,12 @@ function SummaryDialog({
             </div>
           ) : (
             <>
+              <div className="bg-blue-50 p-3 rounded-md text-sm border border-blue-100">
+                <h4 className="font-medium text-blue-700 mb-1">
+                  Nội dung tóm tắt:
+                </h4>
+                <p className="text-blue-600 whitespace-pre-wrap">{summary}</p>
+              </div>
               <div className="bg-gray-100 p-3 rounded-md text-sm">
                 <h4 className="font-medium text-gray-700 mb-1">
                   Nội dung gốc:
@@ -284,12 +302,6 @@ function SummaryDialog({
                 <p className="text-gray-600 whitespace-pre-wrap">
                   {originalText}
                 </p>
-              </div>
-              <div className="bg-blue-50 p-3 rounded-md text-sm border border-blue-100">
-                <h4 className="font-medium text-blue-700 mb-1">
-                  Nội dung tóm tắt:
-                </h4>
-                <p className="text-blue-600 whitespace-pre-wrap">{summary}</p>
               </div>
             </>
           )}
@@ -319,6 +331,18 @@ function SummaryDialog({
 // Define minimum character requirements
 const MIN_SUMMARIZE_LENGTH = 50;
 
+// Helper function to get message content text
+const getMessageText = (message: Message | ExtendedMessage): string => {
+  if (!message.content) return "";
+  return message.content.text || "";
+};
+
+// Helper function to get message content media
+const getMessageMedia = (message: Message | ExtendedMessage): Media[] => {
+  if (!message.content) return [];
+  return message.content.media || [];
+};
+
 export default function MessageItem({
   message,
   isCurrentUser,
@@ -343,6 +367,21 @@ export default function MessageItem({
   const currentUser = useAuthStore((state) => state.user);
   // Get chat store for message operations
   const chatStore = useChatStore();
+
+  // Get user info from conversations store
+  const conversationsStore = useConversationsStore();
+  const userInfoFromConversations = message.senderId
+    ? conversationsStore.getUserInfoFromConversations(message.senderId)
+    : null;
+
+  // Store chatStore in a ref to prevent re-renders
+  const chatStoreRef = useRef(chatStore);
+  useEffect(() => {
+    chatStoreRef.current = chatStore;
+  }, [chatStore]);
+
+  // Ref to track if we've already attempted to mark this message as read
+  const markAsReadAttemptedRef = useRef(new Set<string>());
 
   // Biến để tái sử dụng về sau
   const currentUserId = currentUser?.id || "";
@@ -394,55 +433,39 @@ export default function MessageItem({
       // Use setTimeout to break potential update cycles
       setTimeout(() => {
         try {
+          // Get fresh references to avoid stale closures
+          const currentChatStore = useChatStore.getState();
+          const conversationsStore = useConversationsStore.getState();
+
           // Trigger a refresh of the selected group to get updated member information
           if (
-            chatStore.refreshSelectedGroup &&
-            chatStore.selectedGroup?.id === message.groupId
+            currentChatStore.refreshSelectedGroup &&
+            currentChatStore.selectedGroup?.id === message.groupId
           ) {
             console.log(
               `[MessageItem] Refreshing group data for ${message.groupId}`,
             );
-            chatStore.refreshSelectedGroup();
+            currentChatStore.refreshSelectedGroup();
           } else {
             // If not the selected group, force an update of the conversations list
             console.log(
               `[MessageItem] Forcing update of conversations to get group ${message.groupId}`,
             );
-            const conversationsStore = useConversationsStore.getState();
             conversationsStore.forceUpdate();
           }
         } catch (error) {
           console.error(`[MessageItem] Error refreshing group data:`, error);
         }
-      }, 500);
+      }, 1000); // Increased delay to prevent rapid updates
     }
   }, [
     isGroup,
     isCurrentUser,
     message.senderId,
-    message.sender?.userInfo,
+    message.sender?.userInfo?.fullName, // More specific dependency
     message.id,
     message.groupId,
-    chatStore,
-  ]);
-
-  // Đánh dấu tin nhắn đã đọc khi hiển thị (nếu chưa đọc và không phải tin nhắn của người dùng hiện tại)
-  useEffect(() => {
-    if (!isCurrentUser && !isRead && isSent && message.id && currentUserId) {
-      // Chỉ đánh dấu đã đọc nếu tin nhắn không phải của người dùng hiện tại và chưa được đọc
-      // Kiểm tra lại một lần nữa để tránh trường hợp đã được đánh dấu đọc nhiều lần
-      if (!message.readBy.includes(currentUserId)) {
-        chatStore.markMessageAsReadById(message.id);
-      }
-    }
-  }, [
-    isCurrentUser,
-    isRead,
-    isSent,
-    message.id,
-    chatStore,
-    currentUserId,
-    message.readBy,
+    // Removed chatStore from dependencies to prevent infinite loops
   ]);
 
   // Get current user's reaction
@@ -460,7 +483,7 @@ export default function MessageItem({
     try {
       await chatStore.deleteMessageById(message.id);
     } catch (error) {
-      console.error("Error deleting message:", error);
+      // Silent error handling
     }
   };
 
@@ -470,20 +493,17 @@ export default function MessageItem({
         await chatStore.markMessageAsUnreadById(message.id);
       }
     } catch (error) {
-      console.error("Error marking message as unread:", error);
+      // Silent error handling
     }
   };
 
   const handleRecallMessage = async () => {
     try {
-      console.log(`[MessageItem] Attempting to recall message: ${message.id}`);
       await chatStore.recallMessageById(message.id);
-      console.log(`[MessageItem] Message recalled successfully`);
-
       // Force a re-render
       setIsHovered(false);
     } catch (error) {
-      console.error("[MessageItem] Error recalling message:", error);
+      // Silent error handling
     }
   };
 
@@ -503,7 +523,7 @@ export default function MessageItem({
     try {
       await chatStore.addReactionToMessageById(message.id, reactionType);
     } catch (error) {
-      console.error("Error reacting to message:", error);
+      // Silent error handling
     }
   };
 
@@ -511,7 +531,7 @@ export default function MessageItem({
     try {
       await chatStore.removeReactionFromMessageById(message.id);
     } catch (error) {
-      console.error("Error removing reaction:", error);
+      // Silent error handling
     }
   };
 
@@ -640,6 +660,9 @@ export default function MessageItem({
     }
   };
 
+  const messageText = getMessageText(message);
+  const messageMedia = getMessageMedia(message);
+
   if (isDeletedForSelf) {
     return null;
   }
@@ -655,7 +678,7 @@ export default function MessageItem({
       <SummaryDialog
         isOpen={summaryDialogOpen}
         onClose={() => setSummaryDialogOpen(false)}
-        originalText={message.content.text || ""}
+        originalText={messageText}
         summary={summaryText}
         isLoading={isSummarizing}
       />
@@ -669,9 +692,11 @@ export default function MessageItem({
               <AvatarImage
                 className="select-none relative object-cover"
                 src={
-                  // Ưu tiên thông tin từ sender trong message
+                  // Ưu tiên thông tin từ conversations store
+                  userInfoFromConversations?.profilePictureUrl ||
+                  // Sau đó đến thông tin từ sender trong message
                   message.sender?.userInfo?.profilePictureUrl ||
-                  // Sau đó đến userInfo được truyền vào từ props
+                  // Cuối cùng đến userInfo được truyền vào từ props
                   userInfo?.profilePictureUrl ||
                   undefined
                 }
@@ -679,9 +704,11 @@ export default function MessageItem({
               <AvatarFallback>
                 {getUserInitials({
                   userInfo:
-                    // Ưu tiên thông tin từ sender trong message
+                    // Ưu tiên thông tin từ conversations store
+                    userInfoFromConversations ||
+                    // Sau đó đến thông tin từ sender trong message
                     message.sender?.userInfo ||
-                    // Sau đó đến userInfo được truyền vào từ props
+                    // Cuối cùng đến userInfo được truyền vào từ props
                     userInfo ||
                     ({
                       fullName: isGroup ? "Thành viên" : "Người dùng",
@@ -834,7 +861,7 @@ export default function MessageItem({
           {/* Display sender name for group messages */}
           {isGroup && !isCurrentUser && !message.recalled && (
             <div className="text-xs font-medium text-blue-600 mb-1">
-              {getSenderName(message, userInfo)}
+              {getSenderName(message, userInfo, userInfoFromConversations)}
             </div>
           )}
 
@@ -852,7 +879,7 @@ export default function MessageItem({
           )}
 
           {/* Tin nhắn văn bản */}
-          {(message.recalled || message.content.text) && (
+          {(message.recalled || messageText) && (
             <div
               className={`rounded-2xl px-3 py-2 break-words w-fit overflow-hidden ${
                 isCurrentUser
@@ -862,10 +889,10 @@ export default function MessageItem({
                   : message.recalled
                     ? "bg-gray-100 text-gray-500 italic"
                     : "bg-gray-200 text-gray-800"
-              } ${!message.recalled ? "cursor-pFointer hover:opacity-90" : ""} ${
-                message.content.media?.length ||
-                message.content.image ||
-                message.content.video
+              } ${!message.recalled ? "cursor-pointer hover:opacity-90" : ""} ${
+                messageMedia.length ||
+                message.content?.image ||
+                message.content?.video
                   ? "mb-2"
                   : ""
               }`}
@@ -885,17 +912,11 @@ export default function MessageItem({
                     </div>
                   )}
                   {highlight
-                    ? renderHighlightedText(
-                        message.content.text || "",
-                        highlight || "",
-                      )
-                    : message.content.text?.split("\n").map((line, index) => (
+                    ? renderHighlightedText(messageText, highlight || "")
+                    : messageText.split("\n").map((line, index) => (
                         <span key={index}>
                           {line.includes("\t") ? processTabsInText(line) : line}
-                          {index <
-                            message.content.text!.split("\n").length - 1 && (
-                            <br />
-                          )}
+                          {index < messageText.split("\n").length - 1 && <br />}
                         </span>
                       ))}
                 </div>

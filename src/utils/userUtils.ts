@@ -58,10 +58,10 @@ export const getUserInitials = (user?: User | null): string => {
  * @returns String with user's display name
  */
 export const getUserDisplayName = (user?: User | null): string => {
-  if (!user) return "Unknown";
+  if (!user) return "Người dùng";
 
-  // Try to use fullName from userInfo
-  if (user.userInfo?.fullName) {
+  // Try to use fullName from userInfo, but avoid "Unknown"
+  if (user.userInfo?.fullName && user.userInfo.fullName !== "Unknown") {
     return user.userInfo.fullName;
   }
 
@@ -86,6 +86,11 @@ export const getUserDisplayName = (user?: User | null): string => {
     return user.phoneNumber;
   }
 
-  // Fallback
-  return "Unknown";
+  // Use user ID as last resort with a friendly format
+  if (user.id) {
+    return `Người dùng ${user.id.slice(-4)}`;
+  }
+
+  // Final fallback
+  return "Người dùng";
 };
