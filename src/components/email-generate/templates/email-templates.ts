@@ -198,6 +198,12 @@ Hãy viết email một cách chuyên nghiệp và phù hợp với yêu cầu. 
 - Chỉ trả về nội dung email, không có phần "Chắc chắn rồi" hay "Đây là email..."`,
     fields: [
       {
+        id: "recipientName",
+        label: "Người nhận",
+        type: "text",
+        placeholder: "Tên người nhận",
+      },
+      {
         id: "customPrompt",
         label: "Mô tả chi tiết email bạn muốn tạo",
         type: "textarea",

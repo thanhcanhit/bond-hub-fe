@@ -43,11 +43,26 @@ export interface CustomFormData extends BaseFormData {
   customPrompt: string;
 }
 
+export interface ThanksFormData extends BaseFormData {
+  reason: string;
+  details?: string;
+  nextSteps?: string;
+}
+
+export interface ApologyFormData extends BaseFormData {
+  issue: string;
+  explanation: string;
+  solution: string;
+  commitment?: string;
+}
+
 // Define form data type union
 export type FormData =
   | LeaveFormData
   | ReportFormData
   | MeetingFormData
+  | ThanksFormData
+  | ApologyFormData
   | CustomFormData;
 
 // Type guards
@@ -61,4 +76,12 @@ export function isMeetingFormData(data: any): data is MeetingFormData {
 
 export function isReportFormData(data: any): data is ReportFormData {
   return "reportingPeriod" in data && "completedTasks" in data;
+}
+
+export function isThanksFormData(data: any): data is ThanksFormData {
+  return "reason" in data && !("dateRange" in data);
+}
+
+export function isApologyFormData(data: any): data is ApologyFormData {
+  return "issue" in data && "solution" in data;
 }

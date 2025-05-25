@@ -18,6 +18,7 @@ import {
   Eye,
   Code,
   ArrowLeft,
+  ChevronLeft,
 } from "lucide-react";
 import { generateAIResponse } from "@/actions/ai.action";
 import { toast } from "sonner";
@@ -37,6 +38,7 @@ import { format } from "date-fns";
 import { vi } from "date-fns/locale";
 import ReactMarkdown from "react-markdown";
 import { useAuthStore } from "@/stores/authStore";
+import { DateRange } from "react-day-picker";
 
 import { EMAIL_TEMPLATES } from "./templates/email-templates";
 import { FormFieldWithTooltip } from "./components/FormFieldWithTooltip";
@@ -59,7 +61,6 @@ export default function AIEmailDialog({ isOpen, onClose }: AIEmailDialogProps) {
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedEmail, setGeneratedEmail] = useState("");
-  const [viewMode, setViewMode] = useState<"preview" | "markdown">("preview");
   const { user } = useAuthStore();
 
   const selectedTemplateData = EMAIL_TEMPLATES.find(
@@ -112,7 +113,7 @@ export default function AIEmailDialog({ isOpen, onClose }: AIEmailDialogProps) {
 
       // Format dates for leave form
       if (selectedTemplate === "leave" && "dateRange" in data) {
-        const dateRange = data.dateRange;
+        const dateRange = data.dateRange as DateRange;
         if (dateRange?.from && dateRange?.to) {
           const startDate = format(dateRange.from, "dd/MM/yyyy", {
             locale: vi,
@@ -192,7 +193,7 @@ export default function AIEmailDialog({ isOpen, onClose }: AIEmailDialogProps) {
             </DialogDescription>
             {selectedTemplate && (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 className="mt-2"
                 onClick={() => {
@@ -204,8 +205,8 @@ export default function AIEmailDialog({ isOpen, onClose }: AIEmailDialogProps) {
                   }
                 }}
               >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Quay lại
+                <ChevronLeft className="h-4 w-4 mr-2" />
+                {generatedEmail ? "Quay lại" : "Chọn mẫu email"}
               </Button>
             )}
           </div>
@@ -213,10 +214,10 @@ export default function AIEmailDialog({ isOpen, onClose }: AIEmailDialogProps) {
 
         <div className="px-6">
           <ScrollArea className="h-[calc(90vh-180px)]">
-            <div className="mt-4">
+            <div className="mt-4 p-1">
               {!selectedTemplate ? (
                 // Step 1: Template Selection
-                <div className="space-y-4">
+                <div className="space-y-4 ">
                   <div className="grid grid-cols-2 gap-4">
                     {EMAIL_TEMPLATES.map((template) => (
                       <Card
@@ -227,9 +228,9 @@ export default function AIEmailDialog({ isOpen, onClose }: AIEmailDialogProps) {
                         )}
                         onClick={() => handleTemplateChange(template.id)}
                       >
-                        <CardHeader className="flex flex-row items-center gap-2">
-                          <template.icon className="h-5 w-5 text-blue-500" />
-                          <CardTitle className="text-lg">
+                        <CardHeader>
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <template.icon className="h-4 w-4 text-blue-500" />
                             {template.name}
                           </CardTitle>
                         </CardHeader>
@@ -410,14 +411,24 @@ export default function AIEmailDialog({ isOpen, onClose }: AIEmailDialogProps) {
                       )}
 
                       {selectedTemplate === "custom" && (
-                        <FormFieldWithTooltip
-                          form={form}
-                          field="customPrompt"
-                          label="Mô tả chi tiết email"
-                          tooltip="Mô tả càng chi tiết càng tốt để AI hiểu đúng yêu cầu của bạn"
-                          type="textarea"
-                          placeholder="Nhập mô tả yêu cầu của bạn tại đây. Ví dụ: Viết email cảm ơn đối tác X đã tham gia sự kiện Y..."
-                        />
+                        <>
+                          <FormFieldWithTooltip
+                            form={form}
+                            field="recipientName"
+                            label="Người nhận"
+                            tooltip="Người nhận email"
+                            type="text"
+                            placeholder="Tên người nhận"
+                          />
+                          <FormFieldWithTooltip
+                            form={form}
+                            field="customPrompt"
+                            label="Mô tả chi tiết email"
+                            tooltip="Mô tả càng chi tiết càng tốt để AI hiểu đúng yêu cầu của bạn"
+                            type="textarea"
+                            placeholder="Nhập mô tả yêu cầu của bạn tại đây. Ví dụ: Viết email cảm ơn đối tác X đã tham gia sự kiện Y..."
+                          />
+                        </>
                       )}
                     </form>
                   </Form>
@@ -425,44 +436,11 @@ export default function AIEmailDialog({ isOpen, onClose }: AIEmailDialogProps) {
               ) : (
                 // Step 3: Preview
                 <div className="space-y-4">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setViewMode(
-                          viewMode === "preview" ? "markdown" : "preview",
-                        )
-                      }
-                    >
-                      {viewMode === "preview" ? (
-                        <>
-                          <Code className="h-4 w-4 mr-2" />
-                          Markdown
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="h-4 w-4 mr-2" />
-                          Xem trước
-                        </>
-                      )}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={handleCopy}>
-                      <Copy className="h-4 w-4 mr-2" />
-                      Sao chép
-                    </Button>
-                  </div>
                   <div className="border rounded-md">
                     <ScrollArea className="h-[400px] p-4">
-                      {viewMode === "preview" ? (
-                        <div className="prose prose-sm max-w-none dark:prose-invert">
-                          <ReactMarkdown>{generatedEmail}</ReactMarkdown>
-                        </div>
-                      ) : (
-                        <div className="whitespace-pre-wrap font-mono text-sm">
-                          {generatedEmail}
-                        </div>
-                      )}
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <ReactMarkdown>{generatedEmail}</ReactMarkdown>
+                      </div>
                     </ScrollArea>
                   </div>
                 </div>
