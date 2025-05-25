@@ -405,12 +405,19 @@ export default function MessageItem({
       // Use setTimeout to break potential update cycles
       const timeoutId = setTimeout(() => {
         try {
+          // Get fresh references to avoid stale closures
+          const currentChatStore = useChatStore.getState();
+          const conversationsStore = useConversationsStore.getState();
+
           // Trigger a refresh of the selected group to get updated member information
-          if (refreshSelectedGroup && selectedGroupId === message.groupId) {
+          if (
+            currentChatStore.refreshSelectedGroup &&
+            currentChatStore.selectedGroup?.id === message.groupId
+          ) {
             console.log(
               `[MessageItem] Refreshing group data for ${message.groupId}`,
             );
-            refreshSelectedGroup();
+            currentChatStore.refreshSelectedGroup();
           } else {
             // If not the selected group, force an update of the conversations list
             console.log(
@@ -421,21 +428,16 @@ export default function MessageItem({
         } catch (error) {
           console.error(`[MessageItem] Error refreshing group data:`, error);
         }
-      }, 500);
-
-      // Cleanup timeout on unmount
-      return () => clearTimeout(timeoutId);
+      }, 1000); // Increased delay to prevent rapid updates
     }
   }, [
     isGroup,
     isCurrentUser,
     message.senderId,
-    message.sender?.userInfo,
+    message.sender?.userInfo?.fullName, // More specific dependency
     message.id,
     message.groupId,
-    refreshSelectedGroup,
-    selectedGroupId,
-    conversationsStore,
+    // Removed chatStore from dependencies to prevent infinite loops
   ]);
 
   // Đánh dấu tin nhắn đã đọc khi hiển thị (nếu chưa đọc và không phải tin nhắn của người dùng hiện tại)

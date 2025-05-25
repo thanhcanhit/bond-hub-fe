@@ -28,6 +28,7 @@ import {
   Link as LinkIcon,
   Pencil,
   RefreshCw,
+  QrCode,
 } from "lucide-react";
 import GroupDialog from "../group/GroupDialog";
 import MediaGalleryView from "./MediaGalleryView";
@@ -74,6 +75,7 @@ import {
   getGroupById,
 } from "@/actions/group.action";
 import AddMemberDialog from "../group/AddMemberDialog";
+import GroupQRCodeDialog from "../GroupQRCodeDialog";
 
 interface GroupInfoProps {
   group: Group | null;
@@ -192,6 +194,7 @@ export default function GroupInfo({
   const [activeGalleryTab, setActiveGalleryTab] = useState<
     "media" | "files" | "links"
   >("media");
+  const [showGroupQRDialog, setShowGroupQRDialog] = useState(false);
 
   const messages = useChatStore((state) => state.messages);
   const currentUser = useAuthStore((state) => state.user);
@@ -1605,6 +1608,25 @@ export default function GroupInfo({
             </CollapsibleContent>
           </Collapsible>
 
+          {/* Mã QR */}
+          <Collapsible defaultOpen className="overflow-hidden bg-white">
+            <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50">
+              <div className="flex items-center">
+                <span className="font-semibold">Mã QR</span>
+              </div>
+              <ChevronDown className="h-5 w-5 text-gray-500" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div
+                className="p-3 flex items-center hover:bg-gray-50 cursor-pointer"
+                onClick={() => setShowGroupQRDialog(true)}
+              >
+                <QrCode className="h-5 w-5 mr-2 text-gray-500" />
+                <span className="text-sm">Mã QR nhóm</span>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
           {/* Ảnh/Video */}
           <Collapsible defaultOpen className="overflow-hidden bg-white">
             <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50">
@@ -2086,6 +2108,16 @@ export default function GroupInfo({
               window.location.reload();
             }, 500);
           }}
+        />
+      )}
+
+      {/* Group QR Code Dialog */}
+      {group && (
+        <GroupQRCodeDialog
+          isOpen={showGroupQRDialog}
+          onClose={() => setShowGroupQRDialog(false)}
+          groupId={group.id}
+          groupName={group.name}
         />
       )}
 

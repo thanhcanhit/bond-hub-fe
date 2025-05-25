@@ -87,6 +87,11 @@ export interface ChatState {
   // Flag to control whether to fetch group data from API
   shouldFetchGroupData: boolean;
 
+  // Additional tracking properties
+  emptyMessageGroups: Record<string, boolean>;
+  lastMessageLoadTime: Record<string, number>;
+  _lastApiCallTime: Record<string, number>;
+
   // Actions
   setSelectedContact: (contact: (User & { userInfo: UserInfo }) | null) => void;
   setSelectedGroup: (group: Group | null) => void;
@@ -274,6 +279,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     console.log(`[chatStore] Processing new message ${message.id}`);
 
+    // Nếu là tin nhắn nhóm, xóa trạng thái emptyMessageGroups cho nhóm đó
+    if (message.groupId && message.messageType === MessageType.GROUP) {
+      set((state) => {
+        if (message.groupId && state.emptyMessageGroups[message.groupId]) {
+          console.log(
+            `[chatStore] Removing group ${message.groupId} from emptyMessageGroups as new message received`,
+          );
+          const newEmptyMessageGroups = { ...state.emptyMessageGroups };
+          delete newEmptyMessageGroups[message.groupId];
+          return { emptyMessageGroups: newEmptyMessageGroups };
+        }
+        return state;
+      });
+    }
+
     // Kiểm tra xem tin nhắn có phù hợp với loại cuộc trò chuyện hiện tại không
     const { currentChatType } = get();
 
@@ -356,9 +376,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentPage: 1,
   hasMoreMessages: true,
 
+  // Missing properties
+  isLoadingMessages: false,
+  hasLoadedMessages: false,
+
   // Initialize caches
   messageCache: {},
   groupCache: {},
+
+  // Initialize tracking properties
+  emptyMessageGroups: {},
+  lastMessageLoadTime: {},
+  _lastApiCallTime: {},
 
   // By default, fetch data from API
   shouldFetchMessages: true,
@@ -2159,8 +2188,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    // Check if we should fetch group data from API
-    if (!shouldFetchGroupData) {
+    const groupId = selectedGroup.id;
+
+    // Kiểm tra thời gian gọi API cuối cùng
+    const now = Date.now();
+    const lastCallTime =
+      get()._lastApiCallTime[`GROUP_${groupId}_refresh`] || 0;
+    const timeSinceLastCall = now - lastCallTime;
+
+    // Nếu đã gọi API trong vòng 10 giây, bỏ qua
+    if (timeSinceLastCall < 10000) {
       console.log(
         `[chatStore] Skipping API fetch as shouldFetchGroupData is false`,
       );
@@ -2168,7 +2205,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     // Check if we have a valid cache for this group
-    const groupId = selectedGroup.id;
     const cachedData = get().groupCache[groupId];
     const currentTime = new Date();
     const isCacheValid =
@@ -2196,6 +2232,59 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     try {
+      // Trước tiên, kiểm tra xem có thông tin nhóm trong conversationsStore không
+      const conversationsStore = useConversationsStore.getState();
+      const groupConversation = conversationsStore.conversations.find(
+        (conv) => conv.type === "GROUP" && conv.group?.id === groupId,
+      );
+
+      // Nếu có thông tin nhóm trong conversationsStore và đã được cập nhật gần đây, sử dụng nó
+      if (
+        groupConversation?.group &&
+        (groupConversation.group as any).lastUpdated
+      ) {
+        const lastUpdated = new Date(
+          (groupConversation.group as any).lastUpdated,
+        );
+        const currentTime = new Date();
+        const timeSinceLastUpdate =
+          currentTime.getTime() - lastUpdated.getTime();
+
+        // Nếu thông tin nhóm đã được cập nhật trong vòng 30 giây, sử dụng nó
+        if (timeSinceLastUpdate < 30000) {
+          console.log(
+            `[chatStore] Using recent group data from conversationsStore for ${groupId}`,
+          );
+
+          // Convert conversation group to full Group type
+          const fullGroup: Group = {
+            id: groupConversation.group.id,
+            name: groupConversation.group.name,
+            avatarUrl: groupConversation.group.avatarUrl,
+            createdAt: groupConversation.group.createdAt || new Date(),
+            creatorId: "", // Will be filled by backend
+            members: [], // Will be filled by backend
+            messages: [], // Will be filled by backend
+          };
+
+          // Update the selected group with converted data
+          set({ selectedGroup: fullGroup });
+
+          // Update the cache
+          set((state) => ({
+            groupCache: {
+              ...state.groupCache,
+              [groupId]: {
+                group: fullGroup,
+                lastFetched: new Date(),
+              },
+            },
+          }));
+
+          return fullGroup;
+        }
+      }
+
       // Fetch updated group data
       console.log(`[chatStore] Fetching fresh group data for ${groupId}`);
       const result = await getGroupById(groupId);
@@ -2228,10 +2317,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           group: result.group,
         });
 
-        // Force UI update
-        setTimeout(() => {
-          conversationsStore.forceUpdate();
-        }, 0);
+        // Don't force UI update here to prevent infinite loops
+        // The updateConversation call above should trigger necessary updates
 
         // Also reload messages to ensure everything is up to date
         await get().reloadConversationMessages(groupId, "GROUP");
