@@ -53,6 +53,23 @@ export interface Conversation {
       profilePictureUrl?: string | null;
       role: GroupRole;
     }>;
+    members?: Array<{
+      id: string;
+      userId: string;
+      role: GroupRole;
+      user: {
+        id: string;
+        userInfo: {
+          id: string;
+          fullName: string;
+          profilePictureUrl?: string | null;
+          createdAt: Date;
+          updatedAt: Date;
+          blockStrangers: boolean;
+          userAuth: { id: string };
+        };
+      };
+    }>;
   };
   lastMessage?: Message;
   unreadCount: number;
@@ -168,6 +185,49 @@ declare global {
     _conversationsForceUpdateTimeout: NodeJS.Timeout | null;
   }
 }
+
+// Helper function to create a placeholder user with all required fields
+const createPlaceholderUserLocal = (
+  userId: string,
+): User & { userInfo: UserInfo } => {
+  return {
+    id: userId,
+    email: null,
+    phoneNumber: null,
+    passwordHash: "",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    userInfo: {
+      id: userId,
+      fullName: `Người dùng ${userId.slice(-4)}`, // Use last 4 chars of ID for uniqueness
+      profilePictureUrl: null,
+      statusMessage: "",
+      blockStrangers: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      userAuth: null as unknown as User,
+    },
+    refreshTokens: [],
+    qrCodes: [],
+    posts: [],
+    stories: [],
+    groupMembers: [],
+    cloudFiles: [],
+    pinnedItems: [],
+    sentFriends: [],
+    receivedFriends: [],
+    contacts: [],
+    contactOf: [],
+    settings: [],
+    postReactions: [],
+    hiddenPosts: [],
+    addedBy: [],
+    notifications: [],
+    sentMessages: [],
+    receivedMessages: [],
+    comments: [],
+  };
+};
 
 // Custom storage that handles SSR
 const storage = {
@@ -862,7 +922,12 @@ export const useConversationsStore = create<ConversationsState>()(
                 (u) => u.userId === userId,
               );
 
-              let updatedTypingUsers;
+              let updatedTypingUsers: Array<{
+                userId: string;
+                fullName: string;
+                profilePictureUrl?: string | null;
+                timestamp: Date;
+              }>;
               if (userIndex >= 0) {
                 // Cập nhật thời gian và thông tin người dùng nếu người dùng đã có trong danh sách
                 updatedTypingUsers = [...currentTypingUsers];
@@ -1179,11 +1244,77 @@ export const useConversationsStore = create<ConversationsState>()(
             }
             // If no sender/receiver info, fetch from API
             else {
+              console.log(
+                `[conversationsStore] Fetching user data for new conversation: ${contactId}`,
+              );
               getUserDataById(contactId)
                 .then((result) => {
                   if (result.success && result.user) {
+                    // Ensure userInfo exists with proper fallback
+                    if (!result.user.userInfo) {
+                      result.user.userInfo = {
+                        id: result.user.id,
+                        fullName:
+                          result.user.email ||
+                          result.user.phoneNumber ||
+                          "Người dùng",
+                        profilePictureUrl: null,
+                        statusMessage: "No status",
+                        blockStrangers: false,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                        userAuth: result.user,
+                      };
+                    } else if (
+                      !result.user.userInfo.fullName ||
+                      result.user.userInfo.fullName === "Unknown"
+                    ) {
+                      // Improve the display name if it's "Unknown"
+                      let betterName = "Người dùng";
+                      if (result.user.email) {
+                        const emailParts = result.user.email.split("@");
+                        if (emailParts[0]) {
+                          if (
+                            emailParts[0].includes(".") ||
+                            emailParts[0].includes("_")
+                          ) {
+                            betterName = emailParts[0]
+                              .split(/[._]/)
+                              .map(
+                                (part) =>
+                                  part.charAt(0).toUpperCase() + part.slice(1),
+                              )
+                              .join(" ");
+                          } else {
+                            betterName =
+                              emailParts[0].charAt(0).toUpperCase() +
+                              emailParts[0].slice(1);
+                          }
+                        }
+                      } else if (result.user.phoneNumber) {
+                        betterName = result.user.phoneNumber;
+                      }
+                      result.user.userInfo.fullName = betterName;
+                    }
+
                     addConversation({
                       contact: result.user as User & { userInfo: UserInfo },
+                      lastMessage: processedMessage,
+                      unreadCount:
+                        processedMessage.senderId !== currentUser.id ? 1 : 0,
+                      lastActivity: new Date(processedMessage.createdAt),
+                      type: "USER",
+                    });
+                  } else {
+                    console.warn(
+                      `[conversationsStore] Failed to fetch user data for ${contactId}, creating placeholder`,
+                    );
+                    // Create a placeholder conversation with better fallback
+                    const placeholderUser =
+                      createPlaceholderUserLocal(contactId);
+
+                    addConversation({
+                      contact: placeholderUser,
                       lastMessage: processedMessage,
                       unreadCount:
                         processedMessage.senderId !== currentUser.id ? 1 : 0,
@@ -1197,6 +1328,17 @@ export const useConversationsStore = create<ConversationsState>()(
                     `[conversationsStore] Error fetching user data for ${contactId}:`,
                     error,
                   );
+                  // Create a placeholder conversation even on error
+                  const placeholderUser = createPlaceholderUserLocal(contactId);
+
+                  addConversation({
+                    contact: placeholderUser,
+                    lastMessage: processedMessage,
+                    unreadCount:
+                      processedMessage.senderId !== currentUser.id ? 1 : 0,
+                    lastActivity: new Date(processedMessage.createdAt),
+                    type: "USER",
+                  });
                 });
             }
           }

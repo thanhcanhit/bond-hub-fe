@@ -198,25 +198,203 @@ export default function ChatSocketHandler() {
         // If sender doesn't have userInfo or has incomplete userInfo
         else if (
           !message.sender.userInfo ||
-          !message.sender.userInfo.fullName
+          !message.sender.userInfo.fullName ||
+          message.sender.userInfo.fullName === "Unknown"
         ) {
-          // Create a fallback userInfo
-          message.sender.userInfo = {
-            id: message.sender.id,
-            fullName:
-              message.sender.userInfo?.fullName ||
-              message.sender.email ||
-              message.sender.phoneNumber ||
-              "Unknown",
-            profilePictureUrl:
-              message.sender.userInfo?.profilePictureUrl || null,
-            statusMessage:
-              message.sender.userInfo?.statusMessage || "No status",
-            blockStrangers: message.sender.userInfo?.blockStrangers || false,
-            createdAt: message.sender.userInfo?.createdAt || new Date(),
-            updatedAt: message.sender.userInfo?.updatedAt || new Date(),
-            userAuth: message.sender,
-          };
+          console.log(
+            `[ChatSocketHandler] Looking for sender info for ${message.sender.id} in conversations store`,
+          );
+
+          let senderInfo: {
+            fullName: string;
+            profilePictureUrl?: string | null;
+            statusMessage?: string;
+            blockStrangers?: boolean;
+            createdAt?: Date;
+            updatedAt?: Date;
+          } | null = null;
+
+          // For group messages, look in the group members
+          if (message.groupId || message.messageType === MessageType.GROUP) {
+            const groupConversation = conversations.find(
+              (conv) =>
+                conv.type === "GROUP" && conv.group?.id === message.groupId,
+            );
+
+            if (groupConversation?.group?.members) {
+              const memberInfo = groupConversation.group.members.find(
+                (member) => member.userId === message.sender.id,
+              );
+              if (
+                memberInfo?.user?.userInfo &&
+                memberInfo.user.userInfo.fullName
+              ) {
+                const userInfo = memberInfo.user.userInfo;
+                senderInfo = {
+                  fullName: userInfo.fullName,
+                  profilePictureUrl: userInfo.profilePictureUrl,
+                  statusMessage: undefined, // Group member userInfo doesn't have statusMessage
+                  blockStrangers: userInfo.blockStrangers,
+                  createdAt: userInfo.createdAt,
+                  updatedAt: userInfo.updatedAt,
+                };
+                console.log(
+                  `[ChatSocketHandler] Found sender info in group members: ${senderInfo.fullName}`,
+                );
+              }
+            }
+          }
+          // For direct messages, look in conversations
+          else {
+            const userConversation = conversations.find(
+              (conv) =>
+                conv.type === "USER" && conv.contact?.id === message.sender.id,
+            );
+            if (
+              userConversation?.contact?.userInfo &&
+              userConversation.contact.userInfo.fullName
+            ) {
+              const userInfo = userConversation.contact.userInfo;
+              senderInfo = {
+                fullName: userInfo.fullName,
+                profilePictureUrl: userInfo.profilePictureUrl,
+                statusMessage: userInfo.statusMessage || undefined,
+                blockStrangers: userInfo.blockStrangers,
+                createdAt: userInfo.createdAt,
+                updatedAt: userInfo.updatedAt,
+              };
+              console.log(
+                `[ChatSocketHandler] Found sender info in user conversation: ${senderInfo.fullName}`,
+              );
+            }
+          }
+
+          // If we found sender info in conversations store, use it
+          if (
+            senderInfo &&
+            senderInfo.fullName &&
+            senderInfo.fullName !== "Unknown"
+          ) {
+            message.sender.userInfo = {
+              id: message.sender.id,
+              fullName: senderInfo.fullName,
+              profilePictureUrl: senderInfo.profilePictureUrl || null,
+              statusMessage: senderInfo.statusMessage || "No status",
+              blockStrangers: senderInfo.blockStrangers || false,
+              createdAt: senderInfo.createdAt || new Date(),
+              updatedAt: senderInfo.updatedAt || new Date(),
+              userAuth: message.sender,
+            };
+            console.log(
+              `[ChatSocketHandler] Updated sender userInfo with: ${senderInfo.fullName}`,
+            );
+          }
+          // If not found in conversations store, create fallback and try to fetch
+          else {
+            console.log(
+              `[ChatSocketHandler] Sender info not found in conversations store, creating fallback`,
+            );
+
+            // Create fallback userInfo
+            message.sender.userInfo = {
+              id: message.sender.id,
+              fullName: `Người dùng ${message.sender.id.slice(-4)}`,
+              profilePictureUrl:
+                message.sender.userInfo?.profilePictureUrl || null,
+              statusMessage:
+                message.sender.userInfo?.statusMessage || "No status",
+              blockStrangers: message.sender.userInfo?.blockStrangers || false,
+              createdAt: message.sender.userInfo?.createdAt || new Date(),
+              updatedAt: message.sender.userInfo?.updatedAt || new Date(),
+              userAuth: message.sender,
+            };
+
+            // Try to fetch user data in background
+            setTimeout(async () => {
+              try {
+                const { getUserDataById } = await import(
+                  "@/actions/user.action"
+                );
+                const result = await getUserDataById(message.sender.id);
+                if (result.success && result.user?.userInfo?.fullName) {
+                  console.log(
+                    `[ChatSocketHandler] Background fetch successful for ${message.sender.id}: ${result.user.userInfo.fullName}`,
+                  );
+
+                  // Update the message sender info
+                  if (message.sender.userInfo) {
+                    message.sender.userInfo.fullName =
+                      result.user.userInfo.fullName;
+                    message.sender.userInfo.profilePictureUrl =
+                      result.user.userInfo.profilePictureUrl ||
+                      message.sender.userInfo.profilePictureUrl;
+                  }
+
+                  // Update conversations store with the new user info
+                  const conversationsStore = useConversationsStore.getState();
+
+                  // For group messages, update the group member info
+                  if (message.groupId) {
+                    const groupConversation =
+                      conversationsStore.conversations.find(
+                        (conv) =>
+                          conv.type === "GROUP" &&
+                          conv.group?.id === message.groupId,
+                      );
+                    if (groupConversation?.group?.members) {
+                      const memberIndex =
+                        groupConversation.group.members.findIndex(
+                          (member) => member.userId === message.sender.id,
+                        );
+                      if (memberIndex >= 0) {
+                        groupConversation.group.members[
+                          memberIndex
+                        ].user.userInfo = {
+                          ...groupConversation.group.members[memberIndex].user
+                            .userInfo,
+                          fullName: result.user.userInfo.fullName,
+                          profilePictureUrl:
+                            result.user.userInfo.profilePictureUrl,
+                        };
+                      }
+                    }
+                  }
+                  // For direct messages, update the contact info
+                  else {
+                    const userConversation =
+                      conversationsStore.conversations.find(
+                        (conv) =>
+                          conv.type === "USER" &&
+                          conv.contact?.id === message.sender.id,
+                      );
+                    if (userConversation) {
+                      conversationsStore.updateConversation(
+                        userConversation.contact.id,
+                        {
+                          contact: {
+                            ...userConversation.contact,
+                            userInfo: {
+                              ...userConversation.contact.userInfo,
+                              fullName: result.user.userInfo.fullName,
+                              profilePictureUrl:
+                                result.user.userInfo.profilePictureUrl ||
+                                userConversation.contact.userInfo
+                                  .profilePictureUrl,
+                            },
+                          },
+                        },
+                      );
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error(
+                  `[ChatSocketHandler] Background user fetch failed for ${message.sender.id}:`,
+                  error,
+                );
+              }
+            }, 100);
+          }
         }
       }
       return message;

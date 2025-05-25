@@ -223,12 +223,21 @@ function getSenderName(
     );
   }
 
-  return (
+  // Try to get the best available name
+  const senderName =
     message.sender?.userInfo?.fullName ||
     userInfo?.fullName ||
     (message as ExtendedMessage).senderName ||
-    "Thành viên nhóm"
-  );
+    (message.senderId
+      ? `Người dùng ${message.senderId.slice(-4)}`
+      : "Thành viên nhóm");
+
+  // Don't show "Unknown" - use a more user-friendly fallback
+  return senderName === "Unknown"
+    ? message.senderId
+      ? `Người dùng ${message.senderId.slice(-4)}`
+      : "Thành viên nhóm"
+    : senderName;
 }
 
 interface MessageItemProps {
