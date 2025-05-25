@@ -121,6 +121,7 @@ export default function ChatPage() {
 
     if (!id) {
       setSelectedContact(null);
+      setSelectedGroup(null);
       return;
     }
 
@@ -132,7 +133,7 @@ export default function ChatPage() {
       setSelectedGroup(null);
 
       // Check if this contact is already selected to prevent infinite loops
-      const currentSelectedContact = useChatStore.getState().selectedContact;
+      const currentSelectedContact = chatStore.selectedContact;
       if (currentSelectedContact?.id === id) {
         console.log(`[ChatPage] Contact ${id} is already selected, skipping`);
         return;
@@ -143,14 +144,9 @@ export default function ChatPage() {
         (conv) => conv.type === "USER" && conv.contact.id === id,
       );
 
-      // Set a flag to track if we've already set the contact
-      let contactSet = false;
-
       if (existingConversation) {
         // Use the contact from the conversations store immediately
-        // This will clear the current messages and set loading state
         setSelectedContact(existingConversation.contact);
-        contactSet = true;
 
         // Check if we have cached messages before forcing a reload
         const cacheKey = `USER_${id}`;
@@ -166,21 +162,12 @@ export default function ChatPage() {
           console.log(
             `[ChatPage] No valid cache for user ${id}, reloading messages`,
           );
-          // Use requestAnimationFrame for smoother UI
-          requestAnimationFrame(() => {
-            // Use a flag to indicate this is a retry to avoid clearing messages again
-            chatStore.setShouldFetchMessages(true);
-            chatStore.reloadConversationMessages(id, "USER");
-          });
+          chatStore.setShouldFetchMessages(true);
+          chatStore.reloadConversationMessages(id, "USER");
         }
-      }
-
-      // Only fetch additional user data if we don't have it in the conversation store
-      // or if we want to update with the latest data
-      if (!contactSet) {
+      } else {
         try {
-          // Only fetch user data for user conversations, not for groups
-          // This avoids unnecessary API calls when selecting a group
+          // Only fetch user data if we don't have it in the conversation store
           const result = await getUserDataById(id);
           if (result.success && result.user) {
             // Ensure userInfo exists
@@ -199,25 +186,20 @@ export default function ChatPage() {
             }
 
             // Only update the contact if it's still the selected one
-            const currentSelectedContact =
-              useChatStore.getState().selectedContact;
-            if (currentSelectedContact?.id === id) {
+            const currentSelectedContact = chatStore.selectedContact;
+            if (!currentSelectedContact || currentSelectedContact.id !== id) {
               setSelectedContact(user as User & { userInfo: UserInfo });
-              contactSet = true;
+              chatStore.setShouldFetchMessages(true);
+              chatStore.reloadConversationMessages(id, "USER");
             }
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
+          setSelectedContact(null);
         }
-      }
-
-      // If we couldn't set the contact from either source, set it to null
-      if (!contactSet) {
-        setSelectedContact(null);
       }
     } else if (type === "GROUP") {
       // Handle group conversation
-      // Use openChat which will handle fetching group data and setting up the conversation
       try {
         console.log(`[ChatPage] Opening group chat with ID: ${id}`);
 
@@ -233,26 +215,28 @@ export default function ChatPage() {
           console.log(
             `[ChatPage] Socket not connected, attempting to reconnect before opening group chat`,
           );
-          // Wait for socket to connect
           messageSocket.connect();
-
-          // Wait a bit for connection to establish
           await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+
+        // Check if this group is already selected
+        const currentSelectedGroup = chatStore.selectedGroup;
+        if (currentSelectedGroup?.id === id) {
+          console.log(`[ChatPage] Group ${id} is already selected, skipping`);
+          return;
         }
 
         // Proceed with opening the chat
         const success = await chatStore.openChat(id, "GROUP");
 
         // Only reload if the initial load failed or if there are no messages
-        // This prevents unnecessary double loading
         if (!success) {
           console.log(
             `[ChatPage] Initial group chat load failed, will retry after delay`,
           );
-          // Use a shorter delay to improve user experience
           setTimeout(() => {
-            const currentSelectedGroup = useChatStore.getState().selectedGroup;
-            const currentMessages = useChatStore.getState().messages;
+            const currentSelectedGroup = chatStore.selectedGroup;
+            const currentMessages = chatStore.messages;
             if (
               currentSelectedGroup?.id === id &&
               (!currentMessages || currentMessages.length === 0)
@@ -260,14 +244,14 @@ export default function ChatPage() {
               console.log(
                 `[ChatPage] Reloading group conversation messages after delay (no messages loaded)`,
               );
-              // Use a flag to indicate this is a retry to avoid clearing messages again
               chatStore.setShouldFetchMessages(true);
               chatStore.reloadConversationMessages(id, "GROUP");
             }
-          }, 1000); // Reduced from 2000ms to 1000ms
+          }, 1000);
         }
       } catch (error) {
         console.error("Error opening group chat:", error);
+        setSelectedGroup(null);
       }
     }
   };

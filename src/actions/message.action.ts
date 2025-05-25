@@ -203,11 +203,10 @@ export async function searchMessages(
  */
 export async function markMessageAsRead(messageId: string) {
   try {
-    const response = await axiosInstance.patch(`/messages/read/${messageId}`);
+    const response = await axiosInstance.post(`/messages/read/${messageId}`);
     const message = response.data as Message;
     return { success: true, message };
   } catch (error) {
-    console.error("Mark message as read failed:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -222,11 +221,10 @@ export async function markMessageAsRead(messageId: string) {
  */
 export async function markMessageAsUnread(messageId: string) {
   try {
-    const response = await axiosInstance.patch(`/messages/unread/${messageId}`);
+    const response = await axiosInstance.post(`/messages/unread/${messageId}`);
     const message = response.data as Message;
     return { success: true, message };
   } catch (error) {
-    console.error("Mark message as unread failed:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

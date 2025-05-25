@@ -6,14 +6,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useNotificationStore } from "@/stores/notificationStore";
-import {
-  Message,
-  Reaction,
-  MessageType,
-  User,
-  UserInfo,
-  Group,
-} from "@/types/base";
+import { Message, Reaction, MessageType } from "@/types/base";
 import { useSocket } from "@/providers/SocketChatProvider";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 
@@ -86,184 +79,6 @@ interface UserStatusEventData {
   timestamp: Date;
 }
 
-// Utility functions for creating minimal objects
-const createMinimalUser = (id: string): User => ({
-  id,
-  passwordHash: "",
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  refreshTokens: [],
-  qrCodes: [],
-  posts: [],
-  stories: [],
-  groupMembers: [],
-  cloudFiles: [],
-  pinnedItems: [],
-  sentFriends: [],
-  receivedFriends: [],
-  contacts: [],
-  contactOf: [],
-  settings: [],
-  postReactions: [],
-  hiddenPosts: [],
-  addedBy: [],
-  notifications: [],
-  sentMessages: [],
-  receivedMessages: [],
-  comments: [],
-});
-
-const createMinimalUserInfo = (
-  id: string,
-  fullName: string,
-  profilePictureUrl: string | null = null,
-): UserInfo => ({
-  id,
-  fullName,
-  profilePictureUrl,
-  statusMessage: "No status",
-  blockStrangers: false,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  userAuth: createMinimalUser(id),
-});
-
-// Constants
-const DUPLICATE_EVENT_THRESHOLD = 2000; // 2 seconds
-const UPDATE_DELAY = 500; // 500ms
-const GROUP_UPDATE_DELAY = 800; // 800ms
-
-// Helper function to check for duplicate events
-const isDuplicateEvent = (
-  recentEvents: Record<string, number>,
-  eventKey: string,
-  threshold: number = DUPLICATE_EVENT_THRESHOLD,
-): boolean => {
-  const recentEventKeys = Object.keys(recentEvents).filter(
-    (key) =>
-      key.startsWith(eventKey) && Date.now() - recentEvents[key] < threshold,
-  );
-  return recentEventKeys.length > 0;
-};
-
-// Helper function to clean up old events
-const cleanupOldEvents = (
-  recentEvents: Record<string, number>,
-  maxAge: number = 5000, // 5 seconds
-) => {
-  Object.keys(recentEvents).forEach((key) => {
-    if (Date.now() - recentEvents[key] > maxAge) {
-      delete recentEvents[key];
-    }
-  });
-};
-
-// Helper function to ensure message has user info
-const ensureMessageHasUserInfo = (
-  message: Message,
-  currentUser: User | null,
-  selectedContact: User | null,
-  selectedGroup: Group | null,
-  currentChatType: "USER" | "GROUP" | null,
-  conversations: any[],
-): Message => {
-  // Make sure messageType is correctly set based on the message properties
-  if (message.groupId && !message.messageType) {
-    message = {
-      ...message,
-      messageType: MessageType.GROUP,
-    };
-  } else if (message.receiverId && !message.messageType) {
-    message = {
-      ...message,
-      messageType: MessageType.USER,
-    };
-  }
-
-  // Create sender object if it doesn't exist
-  if (!message.sender) {
-    message.sender = createMinimalUser(message.senderId);
-  }
-
-  // If sender is current user, always use current user's userInfo
-  if (message.senderId === currentUser?.id) {
-    message.sender = {
-      ...message.sender,
-      ...currentUser,
-      userInfo: currentUser.userInfo,
-    };
-    return message;
-  }
-
-  // If sender is selected contact, always use selected contact's data
-  if (selectedContact && message.senderId === selectedContact.id) {
-    message.sender = {
-      ...message.sender,
-      ...selectedContact,
-      userInfo: selectedContact.userInfo,
-    };
-    return message;
-  }
-
-  // For group messages, try to find sender info from the group members
-  if (message.groupId) {
-    // First check if we're currently viewing this group
-    if (
-      currentChatType === "GROUP" &&
-      selectedGroup &&
-      message.groupId === selectedGroup.id &&
-      selectedGroup.memberUsers
-    ) {
-      const senderMember = selectedGroup.memberUsers.find(
-        (member) => member.id === message.senderId,
-      );
-
-      if (senderMember) {
-        message.sender.userInfo = createMinimalUserInfo(
-          message.senderId,
-          senderMember.fullName,
-          senderMember.profilePictureUrl,
-        );
-        return message;
-      }
-    }
-
-    // If not in selected group or sender not found, try to find the group in conversations
-    const groupConversation = conversations.find(
-      (conv) => conv.type === "GROUP" && conv.group?.id === message.groupId,
-    );
-
-    if (groupConversation && groupConversation.group?.memberUsers) {
-      const senderMember = groupConversation.group.memberUsers.find(
-        (member) => member.id === message.senderId,
-      );
-
-      if (senderMember) {
-        message.sender.userInfo = createMinimalUserInfo(
-          message.senderId,
-          senderMember.fullName,
-          senderMember.profilePictureUrl,
-        );
-        return message;
-      }
-    }
-  }
-
-  // If we still don't have userInfo or it's incomplete, create a fallback
-  if (!message.sender.userInfo || !message.sender.userInfo.fullName) {
-    message.sender.userInfo = createMinimalUserInfo(
-      message.senderId,
-      message.sender.userInfo?.fullName ||
-        message.sender.email ||
-        message.sender.phoneNumber ||
-        "Unknown",
-      message.sender.userInfo?.profilePictureUrl,
-    );
-  }
-
-  return message;
-};
-
 export default function ChatSocketHandler() {
   const { messageSocket } = useSocket();
   const currentUser = useAuthStore((state) => state.user);
@@ -279,16 +94,133 @@ export default function ChatSocketHandler() {
     useNotificationStore();
 
   // Function to ensure message sender has userInfo
-  const ensureMessageHasUserInfoCallback = useCallback(
-    (message: Message) =>
-      ensureMessageHasUserInfo(
-        message,
-        currentUser,
-        selectedContact,
-        selectedGroup,
-        currentChatType,
-        conversations,
-      ),
+  const ensureMessageHasUserInfo = useCallback(
+    (message: Message) => {
+      // Make sure messageType is correctly set based on the message properties
+      if (message.groupId && !message.messageType) {
+        message = {
+          ...message,
+          messageType: MessageType.GROUP,
+        };
+        console.log(
+          "[ChatSocketHandler] ensureMessageHasUserInfo: Set messageType to GROUP for message with groupId",
+          message.id,
+        );
+      } else if (message.receiverId && !message.messageType) {
+        message = {
+          ...message,
+          messageType: MessageType.USER,
+        };
+        console.log(
+          "[ChatSocketHandler] ensureMessageHasUserInfo: Set messageType to USER for message with receiverId",
+          message.id,
+        );
+      }
+
+      if (message.sender) {
+        // If sender is current user, always use current user's userInfo
+        if (message.senderId === currentUser?.id) {
+          message.sender = {
+            ...currentUser,
+            userInfo: currentUser.userInfo,
+          };
+        }
+        // If sender is selected contact, always use selected contact's data
+        else if (selectedContact && message.senderId === selectedContact.id) {
+          message.sender = {
+            ...selectedContact,
+            userInfo: selectedContact.userInfo,
+          };
+        }
+        // For group messages, try to find sender info from the group members
+        else if (
+          currentChatType === "GROUP" &&
+          selectedGroup &&
+          message.groupId === selectedGroup.id
+        ) {
+          const senderMember = selectedGroup.memberUsers?.find(
+            (member) => member.id === message.senderId,
+          );
+          if (senderMember) {
+            // If we found the sender in the group members, use that info
+            message.sender.userInfo = {
+              ...(message.sender.userInfo || {}),
+              id: message.senderId,
+              fullName: senderMember.fullName,
+              profilePictureUrl: senderMember.profilePictureUrl,
+              createdAt: message.sender.userInfo?.createdAt || new Date(),
+              updatedAt: message.sender.userInfo?.updatedAt || new Date(),
+              blockStrangers: message.sender.userInfo?.blockStrangers || false,
+              userAuth: message.sender,
+            };
+          }
+        }
+        // If message is from a group but we're not currently viewing that group
+        else if (message.groupId && message.messageType === "GROUP") {
+          // Try to find the group in conversations
+          const groupConversation = conversations.find(
+            (conv) =>
+              conv.type === "GROUP" && conv.group?.id === message.groupId,
+          );
+
+          if (groupConversation && groupConversation.group?.memberUsers) {
+            const senderMember = groupConversation.group.memberUsers.find(
+              (member) => member.id === message.senderId,
+            );
+
+            if (senderMember && message.sender) {
+              // Update sender info from group members
+              message.sender.userInfo = {
+                ...(message.sender.userInfo || {}),
+                id: message.senderId,
+                fullName: senderMember.fullName,
+                profilePictureUrl: senderMember.profilePictureUrl,
+                createdAt: message.sender.userInfo?.createdAt || new Date(),
+                updatedAt: message.sender.userInfo?.updatedAt || new Date(),
+                blockStrangers: false,
+                userAuth: message.sender,
+              };
+
+              console.log(
+                `[ChatSocketHandler] Updated sender info for group message from ${senderMember.fullName}`,
+              );
+            } else {
+              console.log(
+                `[ChatSocketHandler] Could not find sender ${message.senderId} in group members`,
+              );
+            }
+          } else {
+            console.log(
+              `[ChatSocketHandler] Could not find group conversation for ${message.groupId}`,
+            );
+          }
+        }
+        // If sender doesn't have userInfo or has incomplete userInfo
+        else if (
+          !message.sender.userInfo ||
+          !message.sender.userInfo.fullName
+        ) {
+          // Create a fallback userInfo
+          message.sender.userInfo = {
+            id: message.sender.id,
+            fullName:
+              message.sender.userInfo?.fullName ||
+              message.sender.email ||
+              message.sender.phoneNumber ||
+              "Unknown",
+            profilePictureUrl:
+              message.sender.userInfo?.profilePictureUrl || null,
+            statusMessage:
+              message.sender.userInfo?.statusMessage || "No status",
+            blockStrangers: message.sender.userInfo?.blockStrangers || false,
+            createdAt: message.sender.userInfo?.createdAt || new Date(),
+            updatedAt: message.sender.userInfo?.updatedAt || new Date(),
+            userAuth: message.sender,
+          };
+        }
+      }
+      return message;
+    },
     [
       currentUser,
       selectedContact,
@@ -303,29 +235,8 @@ export default function ChatSocketHandler() {
     (data: MessageEventData) => {
       console.log("[ChatSocketHandler] New message received:", data);
 
-      // For group messages, check if we need to refresh group data
-      if (
-        data.message.groupId &&
-        data.message.messageType === MessageType.GROUP
-      ) {
-        if (
-          currentChatType === "GROUP" &&
-          selectedGroup?.id === data.message.groupId
-        ) {
-          const senderInMembers = selectedGroup.memberUsers?.some(
-            (member) => member.id === data.message.senderId,
-          );
-
-          if (!senderInMembers) {
-            setTimeout(() => {
-              useChatStore.getState().refreshSelectedGroup();
-            }, 0);
-          }
-        }
-      }
-
       // Ensure the message has the correct messageType set and user info
-      const message = ensureMessageHasUserInfoCallback(data.message);
+      const message = ensureMessageHasUserInfo(data.message);
 
       // Log message details for debugging
       console.log(
@@ -537,7 +448,7 @@ export default function ChatSocketHandler() {
       selectedGroup,
       currentChatType,
       messages,
-      ensureMessageHasUserInfoCallback,
+      ensureMessageHasUserInfo,
       playNotificationSound,
       incrementGlobalUnread,
       resetUnread,
@@ -865,98 +776,27 @@ export default function ChatSocketHandler() {
   // Handle user status event
   const handleUserStatus = useCallback(
     (data: UserStatusEventData) => {
-      console.log("[ChatSocketHandler] User status event:", data);
-
-      // Skip processing if the user ID is the current user to avoid self-updates
-      if (data.userId === currentUser?.id) {
-        console.log(
-          "[ChatSocketHandler] Skipping user status update for current user",
-        );
-        return;
-      }
-
-      // Only update direct conversation contacts, not group members
+      console.log("User status event:", data);
+      // Update user online status in conversations
       const conversation = conversations.find(
         (conv) => conv.type === "USER" && conv.contact.id === data.userId,
       );
 
       if (conversation) {
-        // Check if the status is actually different to avoid unnecessary updates
-        const isStatusChanged =
-          (data.status === "online" && !conversation.contact.online) ||
-          (data.status === "offline" && conversation.contact.online);
-
-        if (!isStatusChanged) {
-          console.log(
-            `[ChatSocketHandler] Status for user ${data.userId} hasn't changed, skipping update`,
-          );
-          return;
-        }
-
-        console.log(
-          `[ChatSocketHandler] Updating status for user ${data.userId} to ${data.status}`,
-        );
-
-        // Use a setTimeout to break the potential update cycle
-        setTimeout(() => {
-          try {
-            const conversationsStore = useConversationsStore.getState();
-            // Tạo một bản sao của contact mà không có tham chiếu vòng tròn
-            const contactCopy = {
-              ...conversation.contact,
-              online: data.status === "online",
-              lastSeen:
-                data.status === "offline"
-                  ? new Date()
-                  : conversation.contact.lastSeen,
-            };
-
-            // Loại bỏ tham chiếu vòng tròn trong userInfo.userAuth
-            if (contactCopy.userInfo) {
-              contactCopy.userInfo = {
-                ...contactCopy.userInfo,
-                userAuth: {
-                  id: contactCopy.id,
-                  passwordHash: "",
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                  refreshTokens: [],
-                  qrCodes: [],
-                  posts: [],
-                  stories: [],
-                  groupMembers: [],
-                  cloudFiles: [],
-                  pinnedItems: [],
-                  sentFriends: [],
-                  receivedFriends: [],
-                  contacts: [],
-                  contactOf: [],
-                  settings: [],
-                  postReactions: [],
-                  hiddenPosts: [],
-                  addedBy: [],
-                  notifications: [],
-                  sentMessages: [],
-                  receivedMessages: [],
-                  comments: [],
-                },
-              };
-            }
-
-            // Cập nhật conversation với contact đã được xử lý
-            conversationsStore.updateConversation(data.userId, {
-              contact: contactCopy,
-            });
-          } catch (error) {
-            console.error(
-              "[ChatSocketHandler] Error updating user status:",
-              error,
-            );
-          }
-        }, 0);
+        const conversationsStore = useConversationsStore.getState();
+        conversationsStore.updateConversation(data.userId, {
+          contact: {
+            ...conversation.contact,
+            online: data.status === "online",
+            lastSeen:
+              data.status === "offline"
+                ? new Date()
+                : conversation.contact.lastSeen,
+          },
+        });
       }
     },
-    [conversations, currentUser],
+    [conversations],
   );
 
   // Handle updateGroupList event
@@ -968,29 +808,16 @@ export default function ChatSocketHandler() {
       );
 
       if (data.action === "added_to_group") {
-        const eventKey = `${data.action}_${data.groupId}`;
-
-        if (isDuplicateEvent(recentGroupUpdates.current, eventKey)) {
-          console.log(
-            `[ChatSocketHandler] Skipping duplicate group update event for group ${data.groupId}`,
-          );
-          return;
-        }
-
-        recentGroupUpdates.current[`${eventKey}_${Date.now()}`] = Date.now();
-        cleanupOldEvents(recentGroupUpdates.current);
+        console.log(
+          "[ChatSocketHandler] User was added to a group, updating group list",
+        );
 
         setTimeout(() => {
-          try {
-            useConversationsStore.getState().forceUpdate();
-          } catch (error) {
-            console.error(
-              "[ChatSocketHandler] Error updating group list:",
-              error,
-            );
-          }
-        }, UPDATE_DELAY);
+          useConversationsStore.getState().forceUpdate();
+        }, 0);
       }
+      // Không xử lý các sự kiện removed_from_group và group_dissolved ở đây
+      // vì đã được xử lý trong GroupSocketHandler
     },
     [],
   );
@@ -1005,39 +832,9 @@ export default function ChatSocketHandler() {
 
       // Không xử lý sự kiện group_dissolved ở đây vì đã được xử lý trong GroupSocketHandler
       if (data.action === "group_created" || data.action === "member_removed") {
-        // Use a ref to track if we've already processed this event
-        // to prevent multiple updates for the same event
-        const eventKey = `${data.action}_${data.groupId}_${Date.now()}`;
-
-        // Check if we've already processed a similar event recently (within 2 seconds)
-        const recentEvents = Object.keys(recentGroupUpdates.current).filter(
-          (key) =>
-            key.startsWith(`${data.action}_${data.groupId}`) &&
-            Date.now() - recentGroupUpdates.current[key] < 2000,
-        );
-
-        if (recentEvents.length > 0) {
-          console.log(
-            `[ChatSocketHandler] Skipping duplicate conversation update event for group ${data.groupId}`,
-            recentEvents,
-          );
-          return;
-        }
-
-        // Record this event
-        recentGroupUpdates.current[eventKey] = Date.now();
-
-        // Use setTimeout with a longer delay to break potential update cycles
         setTimeout(() => {
-          try {
-            useConversationsStore.getState().forceUpdate();
-          } catch (error) {
-            console.error(
-              "[ChatSocketHandler] Error updating conversation list:",
-              error,
-            );
-          }
-        }, 800); // Use a longer delay than the group list update
+          useConversationsStore.getState().forceUpdate();
+        }, 0);
       }
     },
     [],
@@ -1090,12 +887,11 @@ export default function ChatSocketHandler() {
     ],
   );
 
+  // Không cần sendHeartbeat nữa vì đã được xử lý trong SocketProvider
+
   // Thiết lập các event listener cho socket
   // Use a ref to track if event listeners are already set up
   const eventListenersSetupRef = useRef(false);
-
-  // Use a ref to track recent group update events to prevent duplicates
-  const recentGroupUpdates = useRef<Record<string, number>>({});
 
   useEffect(() => {
     // Early return if no socket or user
@@ -1288,114 +1084,25 @@ export default function ChatSocketHandler() {
 
     const handleGroupDissolved = (data: UpdateGroupListEventData) => {
       console.log("[ChatSocketHandler] Group dissolved event received:", data);
-
-      // Use a ref to track if we've already processed this event
-      const eventKey = `group_dissolved_${data.groupId}_${Date.now()}`;
-
-      // Check if we've already processed a similar event recently (within 2 seconds)
-      const recentEvents = Object.keys(recentGroupUpdates.current).filter(
-        (key) =>
-          key.startsWith(`group_dissolved_${data.groupId}`) &&
-          Date.now() - recentGroupUpdates.current[key] < 2000,
-      );
-
-      if (recentEvents.length > 0) {
-        console.log(
-          `[ChatSocketHandler] Skipping duplicate group dissolved event for group ${data.groupId}`,
-          recentEvents,
-        );
-        return;
-      }
-
-      // Record this event
-      recentGroupUpdates.current[eventKey] = Date.now();
-
       if (selectedGroup && selectedGroup.id === data.groupId) {
         console.log(
           `[ChatSocketHandler] Leaving group room: group:${data.groupId} via groupDissolved`,
         );
-
-        try {
-          messageSocket.emit("leaveGroup", { groupId: data.groupId });
-        } catch (error) {
-          console.error("[ChatSocketHandler] Error leaving group room:", error);
-        }
-
-        // Use setTimeout to break potential update cycles
-        setTimeout(() => {
-          try {
-            useChatStore.getState().setSelectedGroup(null);
-          } catch (error) {
-            console.error(
-              "[ChatSocketHandler] Error setting selected group to null:",
-              error,
-            );
-          }
-        }, 300);
+        messageSocket.emit("leaveGroup", { groupId: data.groupId });
+        useChatStore.getState().setSelectedGroup(null);
       }
-
-      // Use setTimeout to break potential update cycles
-      setTimeout(() => {
-        try {
-          useConversationsStore.getState().removeConversation(data.groupId);
-        } catch (error) {
-          console.error(
-            "[ChatSocketHandler] Error removing conversation:",
-            error,
-          );
-        }
-      }, 500);
+      useConversationsStore.getState().removeConversation(data.groupId);
     };
 
     const handleMemberRemoved = (data: UpdateGroupListEventData) => {
       console.log("[ChatSocketHandler] Member removed event received:", data);
-
-      // Use a ref to track if we've already processed this event
-      const eventKey = `member_removed_${data.groupId}_${Date.now()}`;
-
-      // Check if we've already processed a similar event recently (within 2 seconds)
-      const recentEvents = Object.keys(recentGroupUpdates.current).filter(
-        (key) =>
-          key.startsWith(`member_removed_${data.groupId}`) &&
-          Date.now() - recentGroupUpdates.current[key] < 2000,
-      );
-
-      if (recentEvents.length > 0) {
-        console.log(
-          `[ChatSocketHandler] Skipping duplicate member removed event for group ${data.groupId}`,
-          recentEvents,
-        );
-        return;
-      }
-
-      // Record this event
-      recentGroupUpdates.current[eventKey] = Date.now();
-
       if (selectedGroup && selectedGroup.id === data.groupId) {
         console.log(
           `[ChatSocketHandler] Refreshing selected group after member removed`,
         );
-        // Use setTimeout to break potential update cycles
-        setTimeout(() => {
-          try {
-            useChatStore.getState().refreshSelectedGroup();
-          } catch (error) {
-            console.error("[ChatSocketHandler] Error refreshing group:", error);
-          }
-        }, 300);
+        useChatStore.getState().refreshSelectedGroup();
       }
-
-      // Use setTimeout to break potential update cycles
-      setTimeout(() => {
-        try {
-          useConversationsStore.getState().removeConversation(data.groupId);
-        } catch (error) {
-          console.error(
-            "[ChatSocketHandler] Error removing conversation:",
-            error,
-          );
-        }
-      }, 500);
+      useConversationsStore.getState().removeConversation(data.groupId);
     };
 
     messageSocket.on("groupDissolved", handleGroupDissolved);

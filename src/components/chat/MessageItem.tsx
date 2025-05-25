@@ -343,6 +343,17 @@ export default function MessageItem({
   const currentUser = useAuthStore((state) => state.user);
   // Get chat store for message operations
   const chatStore = useChatStore();
+  const conversationsStore = useConversationsStore();
+  const refreshSelectedGroup = useChatStore(
+    (state) => state.refreshSelectedGroup,
+  );
+  const selectedGroupId = useChatStore((state) => state.selectedGroup?.id);
+
+  // Store chatStore in a ref to prevent re-renders
+  const chatStoreRef = useRef(chatStore);
+  useEffect(() => {
+    chatStoreRef.current = chatStore;
+  }, [chatStore]);
 
   // Biến để tái sử dụng về sau
   const currentUserId = currentUser?.id || "";
@@ -392,29 +403,28 @@ export default function MessageItem({
       });
 
       // Use setTimeout to break potential update cycles
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         try {
           // Trigger a refresh of the selected group to get updated member information
-          if (
-            chatStore.refreshSelectedGroup &&
-            chatStore.selectedGroup?.id === message.groupId
-          ) {
+          if (refreshSelectedGroup && selectedGroupId === message.groupId) {
             console.log(
               `[MessageItem] Refreshing group data for ${message.groupId}`,
             );
-            chatStore.refreshSelectedGroup();
+            refreshSelectedGroup();
           } else {
             // If not the selected group, force an update of the conversations list
             console.log(
               `[MessageItem] Forcing update of conversations to get group ${message.groupId}`,
             );
-            const conversationsStore = useConversationsStore.getState();
             conversationsStore.forceUpdate();
           }
         } catch (error) {
           console.error(`[MessageItem] Error refreshing group data:`, error);
         }
       }, 500);
+
+      // Cleanup timeout on unmount
+      return () => clearTimeout(timeoutId);
     }
   }, [
     isGroup,
@@ -423,27 +433,17 @@ export default function MessageItem({
     message.sender?.userInfo,
     message.id,
     message.groupId,
-    chatStore,
+    refreshSelectedGroup,
+    selectedGroupId,
+    conversationsStore,
   ]);
 
   // Đánh dấu tin nhắn đã đọc khi hiển thị (nếu chưa đọc và không phải tin nhắn của người dùng hiện tại)
   useEffect(() => {
     if (!isCurrentUser && !isRead && isSent && message.id && currentUserId) {
-      // Chỉ đánh dấu đã đọc nếu tin nhắn không phải của người dùng hiện tại và chưa được đọc
-      // Kiểm tra lại một lần nữa để tránh trường hợp đã được đánh dấu đọc nhiều lần
-      if (!message.readBy.includes(currentUserId)) {
-        chatStore.markMessageAsReadById(message.id);
-      }
+      chatStoreRef.current.markMessageAsReadById(message.id);
     }
-  }, [
-    isCurrentUser,
-    isRead,
-    isSent,
-    message.id,
-    chatStore,
-    currentUserId,
-    message.readBy,
-  ]);
+  }, [isCurrentUser, isRead, isSent, message.id, currentUserId]);
 
   // Get current user's reaction
   const getUserReaction = () => {
@@ -460,7 +460,7 @@ export default function MessageItem({
     try {
       await chatStore.deleteMessageById(message.id);
     } catch (error) {
-      console.error("Error deleting message:", error);
+      // Silent error handling
     }
   };
 
@@ -470,20 +470,17 @@ export default function MessageItem({
         await chatStore.markMessageAsUnreadById(message.id);
       }
     } catch (error) {
-      console.error("Error marking message as unread:", error);
+      // Silent error handling
     }
   };
 
   const handleRecallMessage = async () => {
     try {
-      console.log(`[MessageItem] Attempting to recall message: ${message.id}`);
       await chatStore.recallMessageById(message.id);
-      console.log(`[MessageItem] Message recalled successfully`);
-
       // Force a re-render
       setIsHovered(false);
     } catch (error) {
-      console.error("[MessageItem] Error recalling message:", error);
+      // Silent error handling
     }
   };
 
@@ -503,7 +500,7 @@ export default function MessageItem({
     try {
       await chatStore.addReactionToMessageById(message.id, reactionType);
     } catch (error) {
-      console.error("Error reacting to message:", error);
+      // Silent error handling
     }
   };
 
@@ -511,7 +508,7 @@ export default function MessageItem({
     try {
       await chatStore.removeReactionFromMessageById(message.id);
     } catch (error) {
-      console.error("Error removing reaction:", error);
+      // Silent error handling
     }
   };
 
