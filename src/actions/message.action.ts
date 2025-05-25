@@ -406,11 +406,17 @@ export async function sendGroupTextMessage(
     return { success: true, message };
   } catch (error: unknown) {
     const axiosError = error as AxiosError;
-    console.error("Send group text message failed:", {
-      error: axiosError.message,
-      status: axiosError.response?.status,
-      data: axiosError.response?.data,
-    });
+    const errorDetails = {
+      groupId: groupId,
+      text: text?.substring(0, 100) + (text?.length > 100 ? "..." : ""), // Truncate long text for logging
+      repliedTo: repliedTo,
+      error: axiosError.message || "Unknown error",
+      status: axiosError.response?.status || "No status",
+      data: axiosError.response?.data || "No response data",
+      url: axiosError.config?.url || "No URL",
+    };
+
+    console.error("Send group text message failed:", errorDetails);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -455,8 +461,20 @@ export async function sendGroupMediaMessage(
 
     const message = response.data as Message;
     return { success: true, message };
-  } catch (error) {
-    console.error("Send group media message failed:", error);
+  } catch (error: unknown) {
+    const axiosError = error as AxiosError;
+    const errorDetails = {
+      groupId: groupId,
+      text: text?.substring(0, 100) + (text?.length > 100 ? "..." : ""), // Truncate long text for logging
+      repliedTo: repliedTo,
+      filesCount: files?.length || 0,
+      error: axiosError.message || "Unknown error",
+      status: axiosError.response?.status || "No status",
+      data: axiosError.response?.data || "No response data",
+      url: axiosError.config?.url || "No URL",
+    };
+
+    console.error("Send group media message failed:", errorDetails);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -477,8 +495,18 @@ export async function getGroupMessages(groupId: string, page: number = 1) {
     });
     const messages = response.data as Message[];
     return { success: true, messages };
-  } catch (error) {
-    console.error("Get group messages failed:", error);
+  } catch (error: unknown) {
+    const axiosError = error as AxiosError;
+    const errorDetails = {
+      groupId: groupId,
+      page: page,
+      error: axiosError.message || "Unknown error",
+      status: axiosError.response?.status || "No status",
+      data: axiosError.response?.data || "No response data",
+      url: axiosError.config?.url || "No URL",
+    };
+
+    console.error("Get group messages failed:", errorDetails);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

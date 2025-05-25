@@ -10,12 +10,12 @@ import {
   X,
   ChevronLeft,
   Users,
-  Phone,
-  Video,
+  // Phone,
+  // Video,
 } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
-import { toast } from "sonner";
+//import { toast } from "sonner";
 
 import { Input } from "@/components/ui/input";
 

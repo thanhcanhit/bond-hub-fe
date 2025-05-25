@@ -148,6 +148,11 @@ export default function GroupSocketHandler() {
                 ...groupData,
               },
             });
+
+            // Force update to ensure UI reflects changes immediately
+            setTimeout(() => {
+              useConversationsStore.getState().forceUpdate();
+            }, 100);
             return;
           }
         }
@@ -157,8 +162,8 @@ export default function GroupSocketHandler() {
         const lastCallTime = window._lastGroupApiCallTime?.[groupId] || 0;
         const timeSinceLastCall = now - lastCallTime;
 
-        // Nếu đã gọi API trong vòng 5 giây, bỏ qua
-        if (timeSinceLastCall < 5000) {
+        // Nếu đã gọi API trong vòng 10 giây, bỏ qua để giảm lag
+        if (timeSinceLastCall < 10000) {
           console.log(
             `[GroupSocketHandler] Skipping API call for ${groupId}, last call was ${timeSinceLastCall}ms ago`,
           );
@@ -186,6 +191,11 @@ export default function GroupSocketHandler() {
             updateConversation(groupId, {
               group: result.group,
             });
+
+            // Force update to ensure UI reflects changes immediately
+            setTimeout(() => {
+              useConversationsStore.getState().forceUpdate();
+            }, 100);
           }
         }
       } catch (error) {
@@ -252,17 +262,18 @@ export default function GroupSocketHandler() {
         if (data.addedById !== currentUser?.id) {
           toast.info("Thành viên mới đã được thêm vào nhóm");
         }
-      } else {
-        // Find the group in conversations
-        const groupConversation = conversations.find(
-          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
-        );
+      }
 
-        if (groupConversation) {
-          // Refresh this group's data in the conversations store
-          // Sử dụng dữ liệu từ socket nếu có
-          updateConversationWithLatestGroupData(data.groupId, data);
-        }
+      // Always update conversations store for both selected and non-selected groups
+      // This ensures GroupChatHeader and other components get updated
+      const groupConversation = conversations.find(
+        (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+      );
+
+      if (groupConversation) {
+        // Refresh this group's data in the conversations store
+        // Sử dụng dữ liệu từ socket nếu có
+        updateConversationWithLatestGroupData(data.groupId, data);
       }
     };
 
@@ -277,8 +288,13 @@ export default function GroupSocketHandler() {
         useChatStore.getState().clearChatCache("GROUP", data.groupId);
         useConversationsStore.getState().removeConversation(data.groupId);
       } else {
-        // Refresh the group data in the conversations store
-        // Sử dụng dữ liệu từ socket nếu có
+        // For other members being removed, update both selected group and conversations
+        if (selectedGroup && selectedGroup.id === data.groupId) {
+          // Refresh the selected group data
+          refreshSelectedGroup();
+        }
+
+        // Always update conversations store to ensure GroupChatHeader gets updated
         updateConversationWithLatestGroupData(data.groupId, data);
       }
     };

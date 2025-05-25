@@ -343,17 +343,15 @@ export default function MessageItem({
   const currentUser = useAuthStore((state) => state.user);
   // Get chat store for message operations
   const chatStore = useChatStore();
-  const conversationsStore = useConversationsStore();
-  const refreshSelectedGroup = useChatStore(
-    (state) => state.refreshSelectedGroup,
-  );
-  const selectedGroupId = useChatStore((state) => state.selectedGroup?.id);
 
   // Store chatStore in a ref to prevent re-renders
   const chatStoreRef = useRef(chatStore);
   useEffect(() => {
     chatStoreRef.current = chatStore;
   }, [chatStore]);
+
+  // Ref to track if we've already attempted to mark this message as read
+  const markAsReadAttemptedRef = useRef(new Set<string>());
 
   // Biến để tái sử dụng về sau
   const currentUserId = currentUser?.id || "";
@@ -403,7 +401,7 @@ export default function MessageItem({
       });
 
       // Use setTimeout to break potential update cycles
-      const timeoutId = setTimeout(() => {
+      setTimeout(() => {
         try {
           // Get fresh references to avoid stale closures
           const currentChatStore = useChatStore.getState();
@@ -442,10 +440,39 @@ export default function MessageItem({
 
   // Đánh dấu tin nhắn đã đọc khi hiển thị (nếu chưa đọc và không phải tin nhắn của người dùng hiện tại)
   useEffect(() => {
-    if (!isCurrentUser && !isRead && isSent && message.id && currentUserId) {
-      chatStoreRef.current.markMessageAsReadById(message.id);
+    // Only run this effect when the message ID changes or when the component first mounts
+    // Don't include isRead in dependencies to prevent infinite loops
+    if (!isCurrentUser && isSent && message.id && currentUserId) {
+      // Check if message is already read by current user
+      const isAlreadyRead =
+        Array.isArray(message.readBy) && message.readBy.includes(currentUserId);
+
+      if (!isAlreadyRead && !markAsReadAttemptedRef.current.has(message.id)) {
+        markAsReadAttemptedRef.current.add(message.id);
+        chatStoreRef.current.markMessageAsReadById(message.id);
+      }
     }
-  }, [isCurrentUser, isRead, isSent, message.id, currentUserId]);
+  }, [isCurrentUser, isSent, message.id, currentUserId]); // Removed isRead from dependencies
+
+  // Separate effect to clean up the ref when message becomes read
+  useEffect(() => {
+    if (
+      isRead &&
+      message.id &&
+      markAsReadAttemptedRef.current.has(message.id)
+    ) {
+      markAsReadAttemptedRef.current.delete(message.id);
+    }
+  }, [isRead, message.id]);
+
+  // Cleanup effect to remove message ID from ref when component unmounts
+  useEffect(() => {
+    return () => {
+      if (message.id && markAsReadAttemptedRef.current.has(message.id)) {
+        markAsReadAttemptedRef.current.delete(message.id);
+      }
+    };
+  }, [message.id]);
 
   // Get current user's reaction
   const getUserReaction = () => {

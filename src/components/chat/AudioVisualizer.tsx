@@ -103,10 +103,10 @@ export default function AudioVisualizer({
 
       try {
         // Kiểm tra xem audio.error có tồn tại không
-        if (audio.error) {
+        if (audio && audio.error) {
           errorInfo = {
             code: audio.error.code || "unknown",
-            message: audio.error.message || "Unknown error",
+            message: audio.error.message || "Unknown audio error",
           };
         } else {
           errorInfo = { message: "Audio error object is null or undefined" };
@@ -118,24 +118,28 @@ export default function AudioVisualizer({
         };
       }
 
-      // Log detailed error information - use a string message instead of empty object
-      console.error(
-        "Audio loading error: " + (errorInfo.message || "Unknown error"),
-        {
-          errorDetails: errorInfo,
-          url: url,
-          fileName: fileName,
-          eventType: event ? event.type : "unknown",
-          audioState: audio
-            ? {
-                paused: audio.paused,
-                ended: audio.ended,
-                networkState: audio.networkState,
-                readyState: audio.readyState,
-              }
-            : "audio object unavailable",
-        },
-      );
+      // Create a comprehensive error message with all details
+      const errorMessage = `Audio loading error: ${errorInfo.message || "Unknown error"}`;
+      const errorDetails = {
+        errorCode: errorInfo.code,
+        url: url,
+        fileName: fileName,
+        eventType: event ? event.type : "unknown",
+        audioState: audio
+          ? {
+              paused: audio.paused,
+              ended: audio.ended,
+              networkState: audio.networkState,
+              readyState: audio.readyState,
+              src: audio.src,
+            }
+          : "audio object unavailable",
+        loadAttempts: loadAttempts + 1,
+        maxAttempts: maxAttempts,
+      };
+
+      // Log with proper error details - avoid empty object logging
+      console.error(errorMessage, errorDetails);
 
       // Implement exponential backoff for retries
       if (loadAttempts < maxAttempts) {
@@ -213,8 +217,14 @@ export default function AudioVisualizer({
           });
 
           // Set a specific error for the fallback attempt
-          fallbackAudio.addEventListener("error", () => {
+          fallbackAudio.addEventListener("error", (fallbackEvent) => {
             if (isMounted) {
+              console.error("Fallback audio also failed to load", {
+                url: url,
+                fileName: fileName,
+                eventType: fallbackEvent.type,
+                fallbackError: fallbackAudio.error,
+              });
               setLoadError("Không thể tải tệp âm thanh. Vui lòng thử lại sau.");
             }
           });
@@ -236,13 +246,21 @@ export default function AudioVisualizer({
     audio.addEventListener("error", handleError);
 
     // Tạo các hàm xử lý riêng biệt để có thể gỡ bỏ đăng ký sau này
-    const handleStalled = () => {
-      console.warn("Audio playback stalled");
-      handleError();
+    const handleStalled = (event: Event) => {
+      console.warn("Audio playback stalled", {
+        url: url,
+        fileName: fileName,
+        eventType: event.type,
+      });
+      handleError(event);
     };
 
     const handleAbort = (event: Event) => {
-      console.warn("Audio loading aborted");
+      console.warn("Audio loading aborted", {
+        url: url,
+        fileName: fileName,
+        eventType: event.type,
+      });
       handleError(event);
     };
 
@@ -378,11 +396,20 @@ export default function AudioVisualizer({
           setIsPlaying(true);
         })
         .catch((error) => {
-          console.error("Error playing audio:", error);
+          console.error("Error playing audio:", {
+            error: error,
+            errorName: error.name,
+            errorMessage: error.message,
+            url: url,
+            fileName: fileName,
+          });
 
           // Check if it's a user interaction error (common in browsers)
           if (error.name === "NotAllowedError") {
-            console.warn("Audio playback requires user interaction first");
+            console.warn("Audio playback requires user interaction first", {
+              url: url,
+              fileName: fileName,
+            });
             // We could show a UI message here if needed
           }
 
@@ -392,11 +419,19 @@ export default function AudioVisualizer({
             // Try playing again after a short delay
             setTimeout(() => {
               audioRef.current?.play().catch((e) => {
-                console.error("Second play attempt failed:", e);
+                console.error("Second play attempt failed:", {
+                  error: e,
+                  url: url,
+                  fileName: fileName,
+                });
               });
             }, 500);
           } catch (reloadError) {
-            console.error("Error reloading audio:", reloadError);
+            console.error("Error reloading audio:", {
+              error: reloadError,
+              url: url,
+              fileName: fileName,
+            });
           }
         });
     }
@@ -430,7 +465,11 @@ export default function AudioVisualizer({
           document.body.removeChild(a);
         }, 100);
       } catch (error) {
-        console.error("Error downloading file:", error);
+        console.error("Error downloading file:", {
+          error: error,
+          url: url,
+          fileName: fileName,
+        });
         // Fallback: mở file trong tab mới
         window.open(url, "_blank");
       }
