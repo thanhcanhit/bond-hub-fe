@@ -37,6 +37,28 @@ const extractNameFromEmail = (email?: string | null): string => {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
+// Helper function to get user data from localStorage conversations
+const getUserFromLocalStorage = (userId: string): User | null => {
+  try {
+    if (typeof window === "undefined") return null;
+
+    const storedData = localStorage.getItem("conversations-store");
+    if (!storedData) return null;
+
+    const parsedData = JSON.parse(storedData);
+    if (!parsedData?.state?.conversations) return null;
+
+    const conversation = parsedData.state.conversations.find(
+      (conv: any) => conv.contact?.id === userId,
+    );
+
+    return conversation?.contact || null;
+  } catch (error) {
+    console.error("Error reading user from localStorage:", error);
+    return null;
+  }
+};
+
 // Define a conversation type that includes the last message
 export interface Conversation {
   contact: User & {
@@ -421,22 +443,34 @@ export const useConversationsStore = create<ConversationsState>()(
                     5 * 60 * 1000
                   : false;
 
+                // Try to get fullName from multiple sources with priority order
+                const existingConversations = get().conversations;
+                const existingContact = existingConversations.find(
+                  (c) => c.contact.id === conv.user?.id,
+                )?.contact;
+
+                // Also try to get from localStorage
+                const localStorageUser = getUserFromLocalStorage(conv.user!.id);
+
                 const userContact = {
-                  id: conv.user.id,
+                  id: conv.user!.id,
                   userInfo: {
-                    id: conv.user.id,
+                    id: conv.user!.id,
                     fullName:
-                      conv.user.fullName ||
-                      `Người dùng ${conv.user.id.slice(-4)}`,
-                    profilePictureUrl: conv.user.profilePictureUrl || null,
-                    statusMessage: conv.user.statusMessage || null,
-                    lastSeen: conv.user.lastSeen
-                      ? new Date(conv.user.lastSeen)
+                      conv.user!.fullName ||
+                      existingContact?.userInfo?.fullName ||
+                      localStorageUser?.userInfo?.fullName ||
+                      extractNameFromEmail(conv.user!.statusMessage) ||
+                      `Người dùng ${conv.user!.id.slice(-4)}`,
+                    profilePictureUrl: conv.user!.profilePictureUrl || null,
+                    statusMessage: conv.user!.statusMessage || null,
+                    lastSeen: conv.user!.lastSeen
+                      ? new Date(conv.user!.lastSeen)
                       : null,
                     blockStrangers: false,
                     createdAt: new Date(),
                     updatedAt: new Date(),
-                    userAuth: { id: conv.user.id },
+                    userAuth: { id: conv.user!.id },
                   },
                   // Add online status based on lastSeen (consider online if active in last 5 minutes)
                   online: isOnline,
@@ -550,6 +584,24 @@ export const useConversationsStore = create<ConversationsState>()(
             })
             .filter(Boolean)
             .map(convertDatesInConversation) as Conversation[]; // Convert dates after filtering
+
+          // Debug: Log user fullNames to check data quality
+          console.log(
+            "[conversationsStore] Formatted conversations count:",
+            formattedConversations.length,
+          );
+          formattedConversations.forEach((conv, index) => {
+            if (index < 3) {
+              // Only log first 3 for debugging
+              console.log(`[conversationsStore] Conversation ${index}:`, {
+                userId: conv.contact?.id,
+                fullName: conv.contact?.userInfo?.fullName,
+                type: conv.type,
+                hasLastMessage: !!conv.lastMessage,
+                lastMessageSender: conv.lastMessage?.sender?.userInfo?.fullName,
+              });
+            }
+          });
 
           set({
             conversations: sortConversationsByActivity(formattedConversations),

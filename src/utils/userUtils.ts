@@ -52,6 +52,28 @@ export const getUserInitials = (user?: User | null): string => {
   return "US";
 };
 
+// Helper function to get user data from localStorage conversations
+const getUserFromLocalStorage = (userId: string): User | null => {
+  try {
+    if (typeof window === "undefined") return null;
+
+    const storedData = localStorage.getItem("conversations-store");
+    if (!storedData) return null;
+
+    const parsedData = JSON.parse(storedData);
+    if (!parsedData?.state?.conversations) return null;
+
+    const conversation = parsedData.state.conversations.find(
+      (conv: any) => conv.contact?.id === userId,
+    );
+
+    return conversation?.contact || null;
+  } catch (error) {
+    console.error("Error reading user from localStorage:", error);
+    return null;
+  }
+};
+
 /**
  * Get display name for a user
  * @param user User object
@@ -63,6 +85,17 @@ export const getUserDisplayName = (user?: User | null): string => {
   // Try to use fullName from userInfo, but avoid "Unknown"
   if (user.userInfo?.fullName && user.userInfo.fullName !== "Unknown") {
     return user.userInfo.fullName;
+  }
+
+  // Try to get fullName from localStorage if available
+  if (user.id) {
+    const localStorageUser = getUserFromLocalStorage(user.id);
+    if (
+      localStorageUser?.userInfo?.fullName &&
+      localStorageUser.userInfo.fullName !== "Unknown"
+    ) {
+      return localStorageUser.userInfo.fullName;
+    }
   }
 
   // Try to extract name from email
