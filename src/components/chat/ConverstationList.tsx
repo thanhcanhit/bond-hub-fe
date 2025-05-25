@@ -245,11 +245,24 @@ export default function ContactList({
                         : // Add prefix based on sender
                           (isGroupConversation &&
                           conversation.lastMessage.senderId !== currentUser?.id
-                            ? (conversation.lastMessage.sender?.userInfo
-                                ?.fullName ||
-                                (conversation.lastMessage.senderId
-                                  ? `Người dùng ${conversation.lastMessage.senderId.slice(-4)}`
-                                  : "Thành viên")) + ": "
+                            ? (() => {
+                                // Try to get sender name from multiple sources
+                                const lastMessage = conversation.lastMessage!;
+                                const senderName =
+                                  lastMessage.sender?.userInfo?.fullName ||
+                                  // Try to find sender in group members
+                                  conversation.group?.memberUsers?.find(
+                                    (m) => m.id === lastMessage.senderId,
+                                  )?.fullName ||
+                                  conversation.group?.members?.find(
+                                    (m) => m.userId === lastMessage.senderId,
+                                  )?.user?.userInfo?.fullName ||
+                                  // Use getUserDisplayName as fallback
+                                  (lastMessage.sender
+                                    ? getUserDisplayName(lastMessage.sender)
+                                    : `Người dùng ${lastMessage.senderId?.slice(-4) || ""}`);
+                                return senderName + ": ";
+                              })()
                             : conversation.lastMessage.senderId ===
                                 currentUser?.id
                               ? "Bạn: "
