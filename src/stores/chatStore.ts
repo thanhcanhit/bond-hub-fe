@@ -91,6 +91,7 @@ export interface ChatState {
   emptyMessageGroups: Record<string, boolean>;
   lastMessageLoadTime: Record<string, number>;
   _lastApiCallTime: Record<string, number>;
+  _lastMessageTime?: number;
 
   // Actions
   setSelectedContact: (contact: (User & { userInfo: UserInfo }) | null) => void;
@@ -277,7 +278,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    console.log(`[chatStore] Processing new message ${message.id}`);
+    console.log(`[chatStore] Processing new message ${message.id}`, {
+      messageType: message.messageType,
+      groupId: message.groupId,
+      receiverId: message.receiverId,
+      senderId: message.senderId,
+    });
 
     // Nếu là tin nhắn nhóm, xóa trạng thái emptyMessageGroups cho nhóm đó
     if (message.groupId && message.messageType === MessageType.GROUP) {
@@ -294,8 +300,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     }
 
-    // Kiểm tra xem tin nhắn có phù hợp với loại cuộc trò chuyện hiện tại không
-    const { currentChatType } = get();
+    // Lấy thông tin cuộc trò chuyện hiện tại
+    const { selectedContact, selectedGroup, currentChatType } = get();
 
     // Đảm bảo tin nhắn có messageType được đặt chính xác
     const processedMessage = { ...message };
@@ -315,17 +321,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
-    // Kiểm tra xem tin nhắn có phù hợp với cuộc trò chuyện hiện tại không
-    const isMessageTypeCompatible =
+    // Kiểm tra xem tin nhắn có thuộc về cuộc trò chuyện hiện tại không
+    const isFromCurrentChat =
       (currentChatType === "USER" &&
-        processedMessage.messageType === MessageType.USER) ||
+        processedMessage.messageType === MessageType.USER &&
+        (processedMessage.receiverId === selectedContact?.id ||
+          processedMessage.senderId === selectedContact?.id)) ||
       (currentChatType === "GROUP" &&
-        processedMessage.messageType === MessageType.GROUP);
+        processedMessage.messageType === MessageType.GROUP &&
+        processedMessage.groupId === selectedGroup?.id);
 
-    // Nếu tin nhắn không phù hợp với loại cuộc trò chuyện hiện tại, chỉ đồng bộ với conversationsStore
-    if (!isMessageTypeCompatible && currentChatType !== null) {
+    console.log(
+      `[chatStore] Message belongs to current chat: ${isFromCurrentChat}`,
+      {
+        currentChatType,
+        selectedContactId: selectedContact?.id,
+        selectedGroupId: selectedGroup?.id,
+        messageType: processedMessage.messageType,
+        messageReceiverId: processedMessage.receiverId,
+        messageSenderId: processedMessage.senderId,
+        messageGroupId: processedMessage.groupId,
+      },
+    );
+
+    // Nếu tin nhắn không thuộc về cuộc trò chuyện hiện tại, chỉ đồng bộ với conversationsStore
+    if (!isFromCurrentChat && currentChatType !== null) {
       console.log(
-        `[chatStore] Message type ${processedMessage.messageType} doesn't match current chat type ${currentChatType}, skipping chat update`,
+        `[chatStore] Message doesn't belong to current chat, only updating conversations store`,
       );
 
       // Vẫn đồng bộ với conversationsStore để cập nhật danh sách cuộc trò chuyện
@@ -347,7 +369,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     // Thêm tin nhắn vào danh sách
-    set((state) => ({ messages: [...state.messages, processedMessage] }));
+    console.log(`[chatStore] Adding message to chat messages array:`, {
+      messageId: processedMessage.id,
+      currentMessagesCount: get().messages.length,
+      messageType: processedMessage.messageType,
+      groupId: processedMessage.groupId,
+      receiverId: processedMessage.receiverId,
+    });
+
+    // Force immediate state update with new array reference to trigger re-render
+    const currentMessages = get().messages;
+    const newMessages = [...currentMessages, processedMessage];
+
+    console.log(`[chatStore] Creating new messages array:`, {
+      oldLength: currentMessages.length,
+      newLength: newMessages.length,
+      newMessageId: processedMessage.id,
+    });
+
+    set((state) => ({
+      messages: newMessages,
+      // Also update a timestamp to force re-render if needed
+      _lastMessageTime: Date.now(),
+    }));
+
+    console.log(
+      `[chatStore] Message added successfully, new count:`,
+      get().messages.length,
+    );
 
     // Cập nhật cache nếu cần
     if (updateCache) {
@@ -1289,12 +1338,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
       skipDuplicateCheck = false,
     } = options;
 
-    // Sử dụng hàm processNewMessage để xử lý tin nhắn mới
-    get().processNewMessage(message, {
-      updateCache,
-      notifyConversationStore,
-      skipDuplicateCheck,
+    console.log(`[chatStore] addMessage called:`, {
+      messageId: message.id,
+      currentMessagesCount: get().messages.length,
     });
+
+    // Simple approach like mobile app - just add to messages array
+    if (!skipDuplicateCheck && get().isDuplicateMessage(message)) {
+      console.log(`[chatStore] Message ${message.id} is duplicate, skipping`);
+      return;
+    }
+
+    // Add message directly to the array (like mobile app)
+    set((state) => ({
+      messages: [...state.messages, message],
+      _lastMessageTime: Date.now(),
+    }));
+
+    console.log(`[chatStore] Message added, new count:`, get().messages.length);
+
+    // Update cache if needed
+    if (updateCache) {
+      get().updateMessageCache(message, "add");
+    }
+
+    // Sync with conversations store if needed
+    if (notifyConversationStore) {
+      get().syncWithConversationStore(message);
+    }
   },
 
   updateMessage: (

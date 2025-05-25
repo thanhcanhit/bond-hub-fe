@@ -9,6 +9,7 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { Message, Reaction, MessageType } from "@/types/base";
 import { useSocket } from "@/providers/SocketChatProvider";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
+import { getCachedUserInfo, cacheUserInfo } from "@/utils/userCache";
 
 // Extend Window interface to include our socket
 declare global {
@@ -93,248 +94,234 @@ export default function ChatSocketHandler() {
   const { incrementUnread: incrementGlobalUnread, resetUnread } =
     useNotificationStore();
 
-  // Function to ensure message sender has userInfo
+  // Simplified function to ensure message sender has userInfo - similar to mobile approach
+  // NOTE: This function is not used in the mobile-style approach but kept for reference
   const ensureMessageHasUserInfo = useCallback(
     (message: Message) => {
-      // Make sure messageType is correctly set based on the message properties
+      // Set messageType based on message properties
       if (message.groupId && !message.messageType) {
-        message = {
-          ...message,
-          messageType: MessageType.GROUP,
-        };
-        console.log(
-          "[ChatSocketHandler] ensureMessageHasUserInfo: Set messageType to GROUP for message with groupId",
-          message.id,
-        );
+        message = { ...message, messageType: MessageType.GROUP };
       } else if (message.receiverId && !message.messageType) {
-        message = {
-          ...message,
-          messageType: MessageType.USER,
-        };
-        console.log(
-          "[ChatSocketHandler] ensureMessageHasUserInfo: Set messageType to USER for message with receiverId",
-          message.id,
-        );
+        message = { ...message, messageType: MessageType.USER };
       }
 
-      if (message.sender) {
-        // If sender is current user, always use current user's userInfo
-        if (message.senderId === currentUser?.id) {
-          message.sender = {
+      // If message already has complete sender info, return as is
+      if (message.sender?.userInfo?.fullName) {
+        return message;
+      }
+
+      // If sender is current user, use current user's info
+      if (message.senderId === currentUser?.id && currentUser?.userInfo) {
+        return {
+          ...message,
+          sender: {
             ...currentUser,
             userInfo: currentUser.userInfo,
-          };
-        }
-        // If sender is selected contact, always use selected contact's data
-        else if (selectedContact && message.senderId === selectedContact.id) {
-          message.sender = {
-            ...selectedContact,
-            userInfo: selectedContact.userInfo,
-          };
-        }
-        // For group messages, try to find sender info from the group members
-        else if (
-          currentChatType === "GROUP" &&
-          selectedGroup &&
-          message.groupId === selectedGroup.id
+          },
+        };
+      }
+
+      // For group messages, try to find sender in group members
+      if (message.groupId) {
+        // First try current selected group
+        if (
+          selectedGroup?.id === message.groupId &&
+          selectedGroup.memberUsers
         ) {
-          const senderMember = selectedGroup.memberUsers?.find(
+          const senderMember = selectedGroup.memberUsers.find(
             (member) => member.id === message.senderId,
           );
           if (senderMember) {
-            // If we found the sender in the group members, use that info
-            message.sender.userInfo = {
-              ...(message.sender.userInfo || {}),
+            const userInfo = {
               id: message.senderId,
               fullName: senderMember.fullName,
               profilePictureUrl: senderMember.profilePictureUrl,
-              createdAt: message.sender.userInfo?.createdAt || new Date(),
-              updatedAt: message.sender.userInfo?.updatedAt || new Date(),
-              blockStrangers: message.sender.userInfo?.blockStrangers || false,
-              userAuth: message.sender,
+              statusMessage: "",
+              blockStrangers: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              userAuth: message.sender || ({ id: message.senderId } as any),
+            };
+            // Cache the user info for future use
+            cacheUserInfo(message.senderId, userInfo);
+            return {
+              ...message,
+              sender: {
+                ...message.sender,
+                id: message.senderId,
+                userInfo,
+              },
             };
           }
         }
-        // If message is from a group but we're not currently viewing that group
-        else if (message.groupId && message.messageType === "GROUP") {
-          // Try to find the group in conversations
-          const groupConversation = conversations.find(
-            (conv) =>
-              conv.type === "GROUP" && conv.group?.id === message.groupId,
+
+        // Then try to find in conversations
+        const groupConversation = conversations.find(
+          (conv) => conv.type === "GROUP" && conv.group?.id === message.groupId,
+        );
+        if (groupConversation?.group?.memberUsers) {
+          const senderMember = groupConversation.group.memberUsers.find(
+            (member) => member.id === message.senderId,
           );
-
-          if (groupConversation && groupConversation.group?.memberUsers) {
-            const senderMember = groupConversation.group.memberUsers.find(
-              (member) => member.id === message.senderId,
-            );
-
-            if (senderMember && message.sender) {
-              // Update sender info from group members
-              message.sender.userInfo = {
-                ...(message.sender.userInfo || {}),
+          if (senderMember) {
+            const userInfo = {
+              id: message.senderId,
+              fullName: senderMember.fullName,
+              profilePictureUrl: senderMember.profilePictureUrl,
+              statusMessage: "",
+              blockStrangers: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              userAuth: message.sender || ({ id: message.senderId } as any),
+            };
+            // Cache the user info for future use
+            cacheUserInfo(message.senderId, userInfo);
+            return {
+              ...message,
+              sender: {
+                ...message.sender,
                 id: message.senderId,
-                fullName: senderMember.fullName,
-                profilePictureUrl: senderMember.profilePictureUrl,
-                createdAt: message.sender.userInfo?.createdAt || new Date(),
-                updatedAt: message.sender.userInfo?.updatedAt || new Date(),
-                blockStrangers: false,
-                userAuth: message.sender,
-              };
-
-              console.log(
-                `[ChatSocketHandler] Updated sender info for group message from ${senderMember.fullName}`,
-              );
-            } else {
-              console.log(
-                `[ChatSocketHandler] Could not find sender ${message.senderId} in group members`,
-              );
-            }
-          } else {
-            console.log(
-              `[ChatSocketHandler] Could not find group conversation for ${message.groupId}`,
-            );
+                userInfo,
+              },
+            };
           }
         }
-        // If sender doesn't have userInfo or has incomplete userInfo
-        else if (
-          !message.sender.userInfo ||
-          !message.sender.userInfo.fullName
-        ) {
-          // Create a fallback userInfo
-          message.sender.userInfo = {
-            id: message.sender.id,
-            fullName:
-              message.sender.userInfo?.fullName ||
-              message.sender.email ||
-              message.sender.phoneNumber ||
-              "Unknown",
-            profilePictureUrl:
-              message.sender.userInfo?.profilePictureUrl || null,
-            statusMessage:
-              message.sender.userInfo?.statusMessage || "No status",
-            blockStrangers: message.sender.userInfo?.blockStrangers || false,
-            createdAt: message.sender.userInfo?.createdAt || new Date(),
-            updatedAt: message.sender.userInfo?.updatedAt || new Date(),
-            userAuth: message.sender,
-          };
-        }
       }
-      return message;
+
+      // For direct messages, check if sender is selected contact
+      if (
+        selectedContact?.id === message.senderId &&
+        selectedContact.userInfo
+      ) {
+        return {
+          ...message,
+          sender: {
+            ...selectedContact,
+            userInfo: selectedContact.userInfo,
+          },
+        };
+      }
+
+      // Try to get user info from cache first
+      const cachedUserInfo = getCachedUserInfo(message.senderId);
+      if (cachedUserInfo) {
+        return {
+          ...message,
+          sender: {
+            ...message.sender,
+            id: message.senderId,
+            userInfo: cachedUserInfo,
+          },
+        };
+      }
+
+      // Try to get user info from conversations store cache
+      const conversationsStore = useConversationsStore.getState();
+      const conversationUserInfo =
+        conversationsStore.getUserInfoFromConversations(message.senderId);
+      if (conversationUserInfo) {
+        // Cache it for future use
+        cacheUserInfo(message.senderId, conversationUserInfo);
+        return {
+          ...message,
+          sender: {
+            ...message.sender,
+            id: message.senderId,
+            userInfo: conversationUserInfo,
+          },
+        };
+      }
+
+      // If all else fails, create minimal fallback
+      const fallbackUserInfo = {
+        id: message.senderId,
+        fullName: `Người dùng ${message.senderId?.slice(-4) || ""}`,
+        profilePictureUrl: null,
+        statusMessage: "",
+        blockStrangers: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        userAuth: message.sender || ({ id: message.senderId } as any),
+      };
+
+      // Cache the fallback to avoid repeated processing
+      cacheUserInfo(message.senderId, fallbackUserInfo);
+
+      return {
+        ...message,
+        sender: {
+          ...message.sender,
+          id: message.senderId,
+          userInfo: fallbackUserInfo,
+        },
+      };
     },
-    [
-      currentUser,
-      selectedContact,
-      selectedGroup,
-      currentChatType,
-      conversations,
-    ],
+    [currentUser, selectedContact, selectedGroup, conversations],
   );
 
-  // Handle new message event
+  // Handle new message event - using mobile app approach
   const handleNewMessage = useCallback(
     (data: MessageEventData) => {
-      console.log("[ChatSocketHandler] New message received:", data);
+      // Normalize message structure like mobile app
+      const normalizedMessage: Message = {
+        ...data.message,
+        content: {
+          text: data.message.content.text || "",
+          media: data.message.content.media || [],
+          image: data.message.content.image,
+          video: data.message.content.video,
+        },
+      };
 
-      // Ensure the message has the correct messageType set and user info
-      const message = ensureMessageHasUserInfo(data.message);
+      // Check if this is current user chat or current group chat (like mobile)
+      const isCurrentUserChat =
+        currentChatType === "USER" &&
+        selectedContact &&
+        (normalizedMessage.senderId === selectedContact.id ||
+          normalizedMessage.receiverId === selectedContact.id);
 
-      // Log message details for debugging
-      console.log(
-        `[ChatSocketHandler] Processing new message: id=${message.id}, type=${message.messageType}, groupId=${message.groupId || "none"}, senderId=${message.senderId}, receiverId=${message.receiverId || "none"}`,
-      );
+      const isCurrentGroupChat =
+        currentChatType === "GROUP" &&
+        selectedGroup &&
+        normalizedMessage.groupId === selectedGroup.id;
 
-      const conversationsStore = useConversationsStore.getState();
-      const chatStore = useChatStore.getState();
-
-      // Check if message already exists in current chat
-      const messageExists = messages.some((msg) => msg.id === message.id);
-      if (messageExists) {
-        console.log(
-          `[ChatSocketHandler] Message ${message.id} already exists in chat, skipping`,
-        );
-        return;
-      }
-
-      // Check if this is a message from current user
-      if (message.senderId === currentUser?.id) {
-        // Check for temporary messages with similar content
-        const tempMessages = messages.filter(
-          (msg) =>
-            msg.id.startsWith("temp-") &&
-            msg.senderId === message.senderId &&
-            msg.content.text === message.content.text &&
-            Math.abs(
-              new Date(msg.createdAt).getTime() -
-                new Date(message.createdAt).getTime(),
-            ) < 10000,
-        );
-
-        if (tempMessages.length > 0) {
-          console.log(
-            `[ChatSocketHandler] Found ${tempMessages.length} similar temporary messages, replacing with real message`,
-          );
-
-          // Replace first temporary message with real message
-          chatStore.updateMessage(tempMessages[0].id, message, {
-            notifyConversationStore: true,
-            updateCache: true,
-          });
-
-          // Remove other temporary messages if any
-          if (tempMessages.length > 1) {
-            for (let i = 1; i < tempMessages.length; i++) {
-              chatStore.removeMessage(tempMessages[i].id, {
-                notifyConversationStore: false,
-              });
-            }
-          }
-          return;
-        }
-      }
-
-      // Check if message belongs to current chat
-      let isFromCurrentChat = false;
-      if (message.messageType === MessageType.GROUP || message.groupId) {
-        isFromCurrentChat = Boolean(
-          currentChatType === "GROUP" &&
-            selectedGroup &&
-            message.groupId === selectedGroup.id,
-        );
-      } else {
-        isFromCurrentChat = Boolean(
-          currentChatType === "USER" &&
-            selectedContact &&
-            (message.senderId === selectedContact.id ||
-              message.receiverId === selectedContact.id),
-        );
-      }
-
-      // Play notification sound and increment unread count for messages from others
-      if (message.senderId !== currentUser?.id && !isFromCurrentChat) {
-        playNotificationSound();
-        incrementGlobalUnread();
-      }
-
-      // Add message to current chat if applicable
-      if (isFromCurrentChat) {
-        chatStore.processNewMessage(message, {
-          notifyConversationStore: false,
+      // Only add message if we're in the right conversation (like mobile)
+      if (isCurrentUserChat || isCurrentGroupChat) {
+        // Use simple addMessage like mobile app
+        const chatStore = useChatStore.getState();
+        chatStore.addMessage(normalizedMessage, {
           updateCache: true,
+          notifyConversationStore: false,
           skipDuplicateCheck: true,
         });
 
         // Mark as read if from others
-        if (message.senderId !== currentUser?.id) {
-          chatStore.markMessageAsReadById(message.id);
+        if (normalizedMessage.senderId !== currentUser?.id) {
           resetUnread();
         }
       }
 
-      // Process message in conversations store
-      conversationsStore.processNewMessage(message, {
+      // Handle notifications for messages from others (like mobile)
+      if (
+        normalizedMessage.senderId !== currentUser?.id &&
+        !isCurrentUserChat &&
+        !isCurrentGroupChat
+      ) {
+        playNotificationSound();
+        incrementGlobalUnread();
+      }
+
+      // Always update conversations store
+      const conversationsStore = useConversationsStore.getState();
+      conversationsStore.processNewMessage(normalizedMessage, {
         incrementUnreadCount:
-          message.senderId !== currentUser?.id && !isFromCurrentChat,
-        markAsRead: isFromCurrentChat && message.senderId !== currentUser?.id,
+          normalizedMessage.senderId !== currentUser?.id &&
+          !isCurrentUserChat &&
+          !isCurrentGroupChat,
+        markAsRead: Boolean(
+          (isCurrentUserChat || isCurrentGroupChat) &&
+            normalizedMessage.senderId !== currentUser?.id,
+        ),
         updateLastActivity: true,
       });
     },
@@ -343,8 +330,6 @@ export default function ChatSocketHandler() {
       selectedContact,
       selectedGroup,
       currentChatType,
-      messages,
-      ensureMessageHasUserInfo,
       playNotificationSound,
       incrementGlobalUnread,
       resetUnread,

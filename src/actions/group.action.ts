@@ -6,49 +6,26 @@ import { Socket } from "socket.io-client";
 // Helper function to get the socket instance if available
 const getGroupSocket = (): Socket | null => {
   if (typeof window === "undefined") return null;
-
   // Try to find the socket in the window object
   const socketRef = window.groupSocket;
   return socketRef || null;
 };
 
-// Helper function to emit group events
-const emitGroupEvent = (event: string, data: Record<string, unknown>) => {
+// Helper function to join group room - simplified to match backend
+const joinGroupRoom = (groupId: string, userId: string) => {
   const socket = getGroupSocket();
   if (socket && socket.connected) {
-    console.log(`[group.action] Emitting ${event} event:`, data);
-    socket.emit(event, data);
-
-    // Emit broadcastReload to ensure all clients get updated
-    console.log(`[group.action] Emitting broadcastReload event to server`);
-    socket.emit("broadcastReload");
-
-    // Trigger a manual reload after a short delay to ensure all clients get updated
-    setTimeout(() => {
-      if (typeof window !== "undefined") {
-        if (window.groupSocket && window.groupSocket.connected) {
-          console.log(`[group.action] Emitting requestReload event to server`);
-          window.groupSocket.emit("requestReload");
-        } else if (window.triggerGroupsReload) {
-          console.log(
-            `[group.action] Triggering manual reload after ${event} event`,
-          );
-          window.triggerGroupsReload();
-        }
-      }
-    }, 500);
+    console.log(
+      `[group.action] Joining group room: ${groupId} for user: ${userId}`,
+    );
+    socket.emit("joinGroup", {
+      userId: userId,
+      groupId: groupId,
+    });
   } else {
     console.log(
-      `[group.action] Socket not available or not connected, skipping ${event} event`,
+      `[group.action] Socket not available, cannot join group room: ${groupId}`,
     );
-
-    // Even if socket is not available, try to trigger reload
-    if (typeof window !== "undefined" && window.triggerGroupsReload) {
-      console.log(
-        `[group.action] Triggering manual reload after ${event} event (fallback)`,
-      );
-      window.triggerGroupsReload();
-    }
   }
 };
 
@@ -57,6 +34,7 @@ const emitGroupEvent = (event: string, data: Record<string, unknown>) => {
 declare global {
   interface Window {
     groupSocket: Socket | null;
+    messageSocket: Socket | null;
   }
 }
 
@@ -147,51 +125,23 @@ export async function createGroup(createGroupDto: CreateGroupDto) {
     const response = await axiosInstance.post("/groups", payload);
     console.log("API response:", response.data);
 
-    // Explicitly join the group socket room first
-    const socket = getGroupSocket();
-    if (socket && socket.connected) {
-      console.log(
-        `[group.action] Explicitly joining group room after creation: ${response.data.id}`,
-      );
-
-      // Join the group room with a retry mechanism
-      const joinGroupRoom = () => {
-        socket.emit("joinGroup", {
-          userId: createGroupDto.creatorId,
-          groupId: response.data.id,
-        });
-
-        // Also emit a direct join request to ensure server processes it
-        socket.emit("directJoinGroup", {
-          userId: createGroupDto.creatorId,
-          groupId: response.data.id,
-          isCreator: true,
-        });
-
-        console.log(
-          `[group.action] Join group request sent for group: ${response.data.id}`,
-        );
-      };
-
-      // Join immediately
-      joinGroupRoom();
-
-      // And retry after a delay to ensure it works - reduced frequency
-      setTimeout(joinGroupRoom, 1000);
-      setTimeout(joinGroupRoom, 3000);
-    } else {
-      console.log(
-        `[group.action] Socket not available or not connected, cannot join group room: ${response.data.id}`,
-      );
+    // Join the group room for the creator - simplified approach
+    if (createGroupDto.creatorId) {
+      joinGroupRoom(response.data.id, createGroupDto.creatorId);
     }
 
-    // Then emit group created event
-    emitGroupEvent("groupCreated", {
-      groupId: response.data.id,
-      createdBy: createGroupDto.creatorId,
-      timestamp: new Date(),
-      group: response.data, // Include group data in the event
-    });
+    // Reconnect message socket to ensure user joins group rooms for messaging
+    // This is critical for receiving group messages
+    if (typeof window !== "undefined" && window.messageSocket) {
+      console.log(
+        "[group.action] Reconnecting message socket after group creation",
+      );
+      window.messageSocket.disconnect();
+      window.messageSocket.connect();
+    }
+
+    // Backend will handle notifying all members via socket events
+    // No need for manual event emission as backend handles this
 
     // Trả về dữ liệu nhóm đã tạo để client có thể cập nhật store
     return { success: true, group: response.data };
@@ -324,22 +274,8 @@ export async function updateGroup(
       updateGroupDto,
     );
 
-    // Emit group updated event
-    if (updateGroupDto.name) {
-      emitGroupEvent("groupNameUpdated", {
-        groupId,
-        updatedBy: response.data.updatedBy || "unknown",
-        newName: updateGroupDto.name,
-        timestamp: new Date(),
-      });
-    }
-
-    // Emit generic group updated event
-    emitGroupEvent("groupUpdated", {
-      groupId,
-      updatedBy: response.data.updatedBy || "unknown",
-      timestamp: new Date(),
-    });
+    // Backend will handle notifying all members via socket events
+    // No need for manual event emission as backend handles this
 
     // Trả về dữ liệu nhóm đã cập nhật để client có thể cập nhật store
     return { success: true, group: response.data };
@@ -359,33 +295,13 @@ export async function updateGroup(
  */
 export async function deleteGroup(groupId: string, deletedById?: string) {
   try {
-    // Get group info to include group name in the event
-    let groupName = "chat";
-    try {
-      const groupResult = await getGroupById(groupId);
-      if (groupResult.success && groupResult.group) {
-        groupName = groupResult.group.name || "chat";
-      }
-    } catch (groupError) {
-      console.error(`Error getting group info for ${groupId}:`, groupError);
-    }
-
     await axiosInstance.delete(`/groups/${groupId}`);
 
-    // Chỉ phát một sự kiện duy nhất để tránh gửi quá nhiều request
-    // Sử dụng tên sự kiện của backend để đảm bảo tương thích
+    // Backend will handle notifying all members via socket events
+    // No need for manual event emission as backend handles this
     console.log(
-      `[group.action] Emitting single groupDissolved event for group ${groupId}`,
+      `[group.action] Group ${groupId} deleted, backend will handle socket notifications`,
     );
-    emitGroupEvent("groupDissolved", {
-      groupId,
-      dissolvedBy: deletedById || "unknown",
-      timestamp: new Date(),
-      groupName,
-      // Thêm các trường cần thiết để đảm bảo tất cả các handler đều có thể xử lý
-      action: "group_dissolved",
-      deletedById: deletedById || "unknown",
-    });
 
     // Cập nhật UI ngay lập tức
     if (typeof window !== "undefined") {
@@ -464,14 +380,8 @@ export async function addGroupMember(
       role,
     });
 
-    // Emit member added event
-    emitGroupEvent("memberAdded", {
-      groupId,
-      userId,
-      addedById,
-      role,
-      timestamp: new Date(),
-    });
+    // Backend will handle notifying all members via socket events
+    // No need for manual event emission as backend handles this
 
     return { success: true, member: response.data };
   } catch (error) {
@@ -495,56 +405,11 @@ export async function removeGroupMember(
   removedById?: string,
 ) {
   try {
-    // Get group info to include group name in the event
-    let groupName = "chat";
-    try {
-      const groupResult = await getGroupById(groupId);
-      if (groupResult.success && groupResult.group) {
-        groupName = groupResult.group.name || "chat";
-      }
-    } catch (groupError) {
-      console.error(`Error getting group info for ${groupId}:`, groupError);
-    }
-
     // Call API to remove member
     await axiosInstance.delete(`/groups/${groupId}/members/${userId}`);
 
-    // Emit member removed event
-    emitGroupEvent("memberRemoved", {
-      groupId,
-      userId,
-      removedById: removedById || "unknown",
-      timestamp: new Date(),
-      groupName, // Include group name in the event
-    });
-
-    // Emit direct event to the removed user
-    // This is a backup in case the server doesn't send the event
-    emitGroupEvent("directUserEvent", {
-      targetUserId: userId,
-      eventName: "removedFromGroup",
-      eventData: {
-        groupId,
-        userId,
-        removedById: removedById || "unknown",
-        timestamp: new Date(),
-        groupName,
-        action: "removed_from_group",
-      },
-    });
-
-    // Also emit updateGroupList event directly to the removed user
-    emitGroupEvent("directUserEvent", {
-      targetUserId: userId,
-      eventName: "updateGroupList",
-      eventData: {
-        action: "removed_from_group",
-        groupId,
-        removedById: removedById || "unknown",
-        timestamp: new Date(),
-        groupName,
-      },
-    });
+    // Backend will handle notifying all members via socket events
+    // No need for manual event emission as backend handles this
 
     return { success: true };
   } catch (error) {
@@ -581,23 +446,8 @@ export async function updateMemberRole(
       { role },
     );
 
-    // Emit member role updated event - use both our custom event name and backend event name
-    emitGroupEvent("memberRoleUpdated", {
-      groupId,
-      userId,
-      updatedById: updatedById || "unknown",
-      newRole: role,
-      timestamp: new Date(),
-    });
-
-    // Also emit the backend event name
-    emitGroupEvent("roleChanged", {
-      groupId,
-      userId,
-      updatedById: updatedById || "unknown",
-      newRole: role,
-      timestamp: new Date(),
-    });
+    // Backend will handle notifying all members via socket events
+    // No need for manual event emission as backend handles this
 
     return { success: true, member: response.data };
   } catch (error) {
@@ -616,47 +466,10 @@ export async function updateMemberRole(
  */
 export async function leaveGroup(groupId: string, userId?: string) {
   try {
-    // Get group info to include group name in the event
-    let groupName = "chat";
-    try {
-      const groupResult = await getGroupById(groupId);
-      if (groupResult.success && groupResult.group) {
-        groupName = groupResult.group.name || "chat";
-      }
-    } catch (groupError) {
-      console.error(`Error getting group info for ${groupId}:`, groupError);
-    }
-
     await axiosInstance.post(`/groups/${groupId}/leave`);
 
-    // Emit member removed event (self-removal)
-    if (userId) {
-      emitGroupEvent("memberRemoved", {
-        groupId,
-        userId,
-        removedById: userId, // Self-removal
-        timestamp: new Date(),
-        groupName, // Include group name in the event
-        left: true, // Indicate this is a voluntary leave
-      });
-    }
-
-    // Emit additional events for better UI handling
-    if (userId) {
-      // Emit updateGroupList event to ensure frontend updates the group list
-      emitGroupEvent("directUserEvent", {
-        targetUserId: userId,
-        eventName: "updateGroupList",
-        eventData: {
-          action: "removed_from_group",
-          groupId,
-          removedById: userId, // Self-removal
-          timestamp: new Date(),
-          groupName,
-          left: true, // Indicate this is a voluntary leave
-        },
-      });
-    }
+    // Backend will handle notifying all members via socket events
+    // No need for manual event emission as backend handles this
 
     return { success: true };
   } catch (error) {
@@ -785,28 +598,8 @@ export async function updateGroupAvatar(groupId: string, formData: FormData) {
       },
     );
 
-    // Emit group avatar updated event - use both our custom event name and backend event name
-    emitGroupEvent("groupAvatarUpdated", {
-      groupId,
-      updatedBy: response.data.updatedBy || "unknown",
-      newAvatarUrl: response.data.avatarUrl,
-      timestamp: new Date(),
-    });
-
-    // Also emit the backend event name
-    emitGroupEvent("avatarUpdated", {
-      groupId,
-      updatedBy: response.data.updatedBy || "unknown",
-      newAvatarUrl: response.data.avatarUrl,
-      timestamp: new Date(),
-    });
-
-    // Emit generic group updated event
-    emitGroupEvent("groupUpdated", {
-      groupId,
-      updatedBy: response.data.updatedBy || "unknown",
-      timestamp: new Date(),
-    });
+    // Backend will handle notifying all members via socket events
+    // No need for manual event emission as backend handles this
 
     // Trả về dữ liệu nhóm đã cập nhật để client có thể cập nhật store
     return { success: true, group: response.data };
@@ -819,17 +612,16 @@ export async function updateGroupAvatar(groupId: string, formData: FormData) {
   }
 }
 
-// Ensure correct emission of group-related events
+// Additional helper functions for backward compatibility
 
-// Emit group dissolved event
+// Dissolve group function (alias for deleteGroup)
 export async function dissolveGroup(groupId: string, dissolvedById: string) {
   try {
     await axiosInstance.delete(`/groups/${groupId}`);
-    emitGroupEvent("groupDissolved", {
-      groupId,
-      dissolvedBy: dissolvedById,
-      timestamp: new Date(),
-    });
+
+    // Backend will handle notifying all members via socket events
+    // No need for manual event emission as backend handles this
+
     return { success: true };
   } catch (error) {
     console.error(`Dissolve group ${groupId} failed:`, error);
@@ -840,7 +632,7 @@ export async function dissolveGroup(groupId: string, dissolvedById: string) {
   }
 }
 
-// Emit member removed event
+// Remove member function (alias for removeGroupMember)
 export async function removeMemberFromGroup(
   groupId: string,
   userId: string,
@@ -848,12 +640,10 @@ export async function removeMemberFromGroup(
 ) {
   try {
     await axiosInstance.delete(`/groups/${groupId}/members/${userId}`);
-    emitGroupEvent("memberRemoved", {
-      groupId,
-      userId,
-      removedById,
-      timestamp: new Date(),
-    });
+
+    // Backend will handle notifying all members via socket events
+    // No need for manual event emission as backend handles this
+
     return { success: true };
   } catch (error) {
     console.error(`Remove member from group ${groupId} failed:`, error);

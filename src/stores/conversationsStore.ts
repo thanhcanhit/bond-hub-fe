@@ -14,6 +14,10 @@ import {
   markAllMessagesAsRead,
 } from "@/actions/message.action";
 import { useAuthStore } from "./authStore";
+import {
+  cacheUserInfoFromGroupMembers,
+  cacheUserInfo,
+} from "@/utils/userCache";
 
 // Helper function to sort conversations by lastActivity (newest first)
 const sortConversationsByActivity = (conversations: Conversation[]) => {
@@ -546,6 +550,11 @@ export const useConversationsStore = create<ConversationsState>()(
                     })) || [],
                   messages: [],
                 };
+
+                // Cache user info from group members for better performance
+                if (group.memberUsers && group.memberUsers.length > 0) {
+                  cacheUserInfoFromGroupMembers(group.memberUsers);
+                }
 
                 // Create a contact representation for the group
                 const groupContact = {
@@ -1381,7 +1390,26 @@ export const useConversationsStore = create<ConversationsState>()(
             comments: [],
           };
 
-          // Add new group conversation
+          // Log group information for debugging
+          console.log(`[conversationsStore] Group info from message:`, {
+            id: processedMessage.group.id,
+            name: processedMessage.group.name,
+            memberUsers: processedMessage.group.memberUsers,
+            members: processedMessage.group.members,
+          });
+
+          // Cache user info from group members if available
+          if (
+            processedMessage.group.memberUsers &&
+            processedMessage.group.memberUsers.length > 0
+          ) {
+            cacheUserInfoFromGroupMembers(processedMessage.group.memberUsers);
+            console.log(
+              `[conversationsStore] Cached user info for ${processedMessage.group.memberUsers.length} group members`,
+            );
+          }
+
+          // Add new group conversation with member information
           addConversation({
             contact: placeholderContact,
             group: {
@@ -1389,12 +1417,24 @@ export const useConversationsStore = create<ConversationsState>()(
               name: processedMessage.group.name,
               avatarUrl: processedMessage.group.avatarUrl,
               createdAt: processedMessage.group.createdAt,
+              // Include member information if available
+              memberUsers: processedMessage.group.memberUsers,
             },
             lastMessage: processedMessage,
             unreadCount: processedMessage.senderId !== currentUser.id ? 1 : 0,
             lastActivity: new Date(processedMessage.createdAt),
             type: "GROUP",
           });
+
+          // If group doesn't have member information, log it
+          if (
+            !processedMessage.group.memberUsers ||
+            processedMessage.group.memberUsers.length === 0
+          ) {
+            console.log(
+              `[conversationsStore] Group ${processedMessage.groupId} has no member info in socket message`,
+            );
+          }
         }
       } else if (
         isUserMessage ||
@@ -1439,6 +1479,12 @@ export const useConversationsStore = create<ConversationsState>()(
             processedMessage.sender &&
             processedMessage.sender.userInfo
           ) {
+            // Cache sender user info for future use
+            cacheUserInfo(
+              processedMessage.senderId,
+              processedMessage.sender.userInfo,
+            );
+
             addConversation({
               contact: processedMessage.sender as User & {
                 userInfo: UserInfo;
