@@ -356,7 +356,7 @@ function CallPageContent({ userId }: { userId: string }) {
       // Simple socket initialization without multiple stages or reconnection attempts
       try {
         console.log("[CALL_PAGE] Initializing call socket");
-        socket = await ensureCallSocket(true);
+        socket = await ensureCallSocket();
 
         if (socket && socket.connected) {
           console.log("[CALL_PAGE] Successfully initialized call socket");
@@ -529,7 +529,7 @@ function CallPageContent({ userId }: { userId: string }) {
 
           // Initialize the socket
           try {
-            const newSocket = await ensureCallSocket(true);
+            const newSocket = await ensureCallSocket();
 
             if (newSocket) {
               console.log(
@@ -693,19 +693,16 @@ function CallPageContent({ userId }: { userId: string }) {
         let callSocket: any = null;
 
         try {
-          console.log("[CALL_PAGE] Call socket initialization attempt");
-
-          // First try direct initialization which might be more reliable
           console.log(
             "[CALL_PAGE] Trying direct call socket initialization first",
           );
-          callSocket = callSocketModule.initCallSocket(token, true);
+          callSocket = callSocketModule.initCallSocket(token);
 
           if (!callSocket) {
             console.log(
               "[CALL_PAGE] Direct initialization returned null, trying ensureCallSocket",
             );
-            callSocket = await callSocketModule.ensureCallSocket(true);
+            callSocket = await callSocketModule.ensureCallSocket();
           }
 
           if (callSocket) {
@@ -1434,11 +1431,9 @@ function CallPageContent({ userId }: { userId: string }) {
 }
 
 // Main component that will be exported
-export default function CallPage({ params }: { params: { id: string } }) {
-  // Unwrap params at the top level of the component
-  // This is valid in Next.js page components
-  const unwrappedParams = use(params as any) as { id: string };
-  const id = unwrappedParams.id;
+export default function VideoCallPage({ params }: { params: { id: string } }) {
+  // Remove the use() call since it's not needed for params
+  const userId = params.id;
 
-  return <CallPageContent userId={id} />;
+  return <CallPageContent userId={userId} />;
 }

@@ -105,7 +105,9 @@ function verifyEnvironmentVariables(): boolean {
         sessionStorage.setItem("default_socket_url", defaultSocketUrl);
 
         // Use this as a fallback, but still return false to indicate the environment is not properly set
-        process.env.NEXT_PUBLIC_SOCKET_URL = defaultSocketUrl;
+        const fallbackUrl =
+          process.env.NEXT_PUBLIC_SOCKET_URL || "https://api.bondhub.cloud";
+        sessionStorage.setItem("default_socket_url", fallbackUrl);
       }
     } catch (error) {
       console.error("[WEBRTC] Error setting default Socket URL:", error);
@@ -317,7 +319,7 @@ export async function initializeWebRTC(
 
           // Ensure call socket is initialized and connected with improved error handling
           try {
-            const callSocket = await callSocketModule.ensureCallSocket(true);
+            const callSocket = await callSocketModule.ensureCallSocket();
 
             if (!callSocket) {
               console.warn(

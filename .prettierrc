@@ -19,5 +19,8 @@
   "requirePragma": false,
   "tabWidth": 2,
   "useTabs": false,
-  "embeddedLanguageFormatting": "auto"
+  "embeddedLanguageFormatting": "auto",
+  "rules": {
+    "@typescript-eslint/no-unused-vars": "off"
+  }
 }

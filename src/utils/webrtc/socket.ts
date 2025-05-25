@@ -30,7 +30,7 @@ export async function connectToSocket(): Promise<void> {
       }
 
       // If we have a socket that's connecting, wait for it to connect
-      if (state.socket && state.socket.connecting) {
+      if (state.socket && !state.socket.connected) {
         console.log(
           "[WEBRTC] Socket is already connecting, waiting for connection...",
         );
@@ -154,7 +154,7 @@ export async function connectToSocket(): Promise<void> {
 
         // Try to get token and user from auth store first
         let accessToken = useAuthStore.getState().accessToken;
-        let user = useAuthStore.getState().user;
+        const user = useAuthStore.getState().user;
 
         // If no token in auth store, try to get from session storage
         if (!accessToken) {
@@ -226,7 +226,7 @@ export async function connectToSocket(): Promise<void> {
             reconnectionDelay: 1000, // Start with 1s delay
             reconnectionDelayMax: 5000, // Maximum 5s delay between reconnection attempts
             timeout: 60000, // Increased timeout to 60s for better reliability
-            // @ts-ignore - socket.io does support this option
+            // @ts-expect-error - socket.io does support this option
             pingTimeout: 180000, // Increased ping timeout to 3 minutes
             pingInterval: 10000, // More frequent pings (every 10 seconds)
             forceNew: true, // Force a new connection to avoid reusing problematic connections
@@ -256,7 +256,8 @@ export async function connectToSocket(): Promise<void> {
           clearTimeout(connectionTimeout);
           reject(
             new Error(
-              "Failed to create socket: " + socketCreationError.message,
+              "Failed to create socket: " +
+                (socketCreationError as Error).message,
             ),
           );
           return;
@@ -292,7 +293,13 @@ export async function connectToSocket(): Promise<void> {
           }
 
           // Set up event listeners
-          setupSocketListeners(state.socket);
+          if (state.socket) {
+            setupSocketListeners(state.socket);
+          } else {
+            console.error(
+              "[WEBRTC] Cannot set up event listeners: state.socket is null",
+            );
+          }
 
           // Set up a keep-alive ping interval to prevent timeouts
           const keepAliveInterval = setInterval(() => {

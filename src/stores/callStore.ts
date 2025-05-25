@@ -109,9 +109,9 @@ export const useCallStore = create<CallState>((set, get) => ({
         const callData = {
           id: result.callId,
           roomId: result.roomId,
-          type: type, // Use the passed type parameter to avoid TypeScript error
+          type: type,
           targetId: receiverId,
-          targetType: "USER",
+          targetType: "USER" as const,
         };
 
         logCall("CALL_INITIATED_SUCCESSFULLY", callData);

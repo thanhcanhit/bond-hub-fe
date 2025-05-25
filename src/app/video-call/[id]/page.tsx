@@ -9,6 +9,16 @@ import { getUserInitials } from "@/utils/userUtils";
 import { Phone, Video, VideoOff, Mic, MicOff, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { use } from "react";
+import { useWebRTC } from "@/hooks/useWebRTC";
+
+// Define call status type
+type CallStatus = "connecting" | "connected" | "ended" | "error";
+
+// Define media stream state type
+interface MediaStreamState {
+  stream: MediaStream | null;
+  originalStream: MediaStream | null;
+}
 
 export default function VideoCallPage({ params }: { params: { id: string } }) {
   // Unwrap params using React.use() at the top level of the component
@@ -18,25 +28,37 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
   const [user, setUser] = useState<any>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
-  const [callStatus, setCallStatus] = useState<
-    "connecting" | "connected" | "ended"
-  >("connecting");
+  const [callStatus, setCallStatus] = useState<CallStatus>("connecting");
   const [callDuration, setCallDuration] = useState(0);
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [originalVideoStream, setOriginalVideoStream] =
-    useState<MediaStream | null>(null);
+  const [mediaState, setMediaState] = useState<MediaStreamState>({
+    stream: null,
+    originalStream: null,
+  });
+  const [isLoading, setIsLoading] = useState(true);
   const localVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Initialize WebRTC hook at the component level
+  const {
+    initWebRTC,
+    endWebRTC,
+    toggleMute: toggleMuteWebRTC,
+  } = useWebRTC({
+    roomId: userId,
+    isOutgoing: true,
+  });
 
   // Fetch user data
   useEffect(() => {
     const fetchUserData = async () => {
       try {
+        setIsLoading(true);
         const result = await getUserDataById(userId);
         if (result.success && result.user) {
           setUser(result.user);
           document.title = `Cuộc gọi video với ${result.user.userInfo?.fullName || "Người dùng"}`;
         } else {
           toast.error("Không thể tải thông tin người dùng");
+          setCallStatus("error");
           setTimeout(() => {
             window.close();
           }, 2000);
@@ -44,9 +66,12 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
       } catch (error) {
         console.error("Error fetching user data:", error);
         toast.error("Đã xảy ra lỗi khi tải thông tin người dùng");
+        setCallStatus("error");
         setTimeout(() => {
           window.close();
         }, 2000);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -68,40 +93,24 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
     };
   }, [callStatus]);
 
-  // Initialize WebRTC connection with improved error handling
+  // Initialize WebRTC connection
   useEffect(() => {
     if (!userId) return;
 
-    // Track initialization state to prevent duplicate attempts
     let isInitializing = false;
     let isInitialized = false;
 
-    const initWebRTC = async () => {
-      // Prevent multiple simultaneous initialization attempts
-      if (isInitializing) {
+    const initializeCall = async () => {
+      if (isInitializing || isInitialized) {
         console.log(
-          "[CALL_PAGE] WebRTC initialization already in progress, skipping",
+          "[CALL_PAGE] WebRTC initialization already in progress or completed",
         );
-        return;
-      }
-
-      if (isInitialized) {
-        console.log("[CALL_PAGE] WebRTC already initialized, skipping");
         return;
       }
 
       isInitializing = true;
 
       try {
-        // Import dynamically to avoid SSR issues
-        const { useWebRTC } = await import("@/hooks/useWebRTC");
-
-        // Create a temporary instance of the hook's returned functions
-        const { initWebRTC: startWebRTC } = useWebRTC({
-          roomId: userId,
-          isOutgoing: true,
-        });
-
         // Dispatch event to notify that initialization is starting
         window.dispatchEvent(
           new CustomEvent("call:pageLoaded", {
@@ -111,16 +120,9 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
             },
           }),
         );
-        console.log("[CALL_PAGE] Dispatched call:pageLoaded event");
 
-        // Initialize WebRTC with a single attempt
         console.log(`[CALL_PAGE] Initializing WebRTC for room ${userId}`);
-
-        // Use the useWebRTC hook's initialization function
-        await startWebRTC(true);
-
-        // If we get here, initialization was successful
-        console.log("[CALL_PAGE] WebRTC connection established successfully");
+        await initWebRTC(true);
 
         // Get the media stream from the WebRTC state
         const { state } = await import("@/utils/webrtc/state");
@@ -133,8 +135,10 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
         }
 
         // Save the stream
-        setLocalStream(stream);
-        setOriginalVideoStream(stream);
+        setMediaState({
+          stream,
+          originalStream: stream,
+        });
 
         // Display local video
         if (localVideoRef.current) {
@@ -147,7 +151,6 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
       } catch (error) {
         console.error("[CALL_PAGE] Error initializing WebRTC:", error);
 
-        // Show a more specific error message
         if (error instanceof Error) {
           if (
             error.message.includes("timeout") ||
@@ -173,9 +176,7 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
         }
 
         setIsVideoOff(true);
-
-        // Still set to connected to allow the user to see the UI
-        setCallStatus("connected");
+        setCallStatus("error");
       } finally {
         isInitializing = false;
       }
@@ -184,14 +185,13 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
     // Check if this is a response to an incoming call
     const checkIncomingCall = async () => {
       try {
-        // Get active call information
         const { getActiveCall } = await import("@/actions/call.action");
         const { useAuthStore } = await import("@/stores/authStore");
         const token = useAuthStore.getState().accessToken;
 
         if (!token) {
           console.warn("[CALL_PAGE] No token available to check active call");
-          initWebRTC();
+          initializeCall();
           return;
         }
 
@@ -202,7 +202,6 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
             "[CALL_PAGE] Active call found:",
             activeCallResult.activeCall,
           );
-          // We have an active call, proceed with WebRTC initialization
           window.dispatchEvent(
             new CustomEvent("call:pageLoaded", {
               detail: {
@@ -212,22 +211,20 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
               },
             }),
           );
-          console.log("[CALL_PAGE] This is an incoming call or reconnection");
-          initWebRTC();
+          initializeCall();
         } else {
           console.log(
             "[CALL_PAGE] No active call found, but continuing anyway",
           );
-          initWebRTC();
+          initializeCall();
         }
       } catch (error) {
         console.error("[CALL_PAGE] Error checking active call:", error);
-        // Continue with WebRTC initialization anyway
-        initWebRTC();
+        initializeCall();
       }
     };
 
-    // Add a small delay before initialization to ensure the page is fully loaded
+    // Add a small delay before initialization
     setTimeout(() => {
       checkIncomingCall();
     }, 500);
@@ -237,13 +234,11 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
       const { id, stream, kind } = event.detail;
       console.log(`Remote stream added: ${id}, kind: ${kind}`);
 
-      // Create or get the remote video element
       const remoteVideoContainer = document.getElementById(
         "remote-video-container",
       );
       if (!remoteVideoContainer) return;
 
-      // Hide the avatar when we get a video stream
       if (kind === "video") {
         const avatars = remoteVideoContainer.querySelectorAll(
           ".remote-user-avatar",
@@ -253,13 +248,11 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
         });
       }
 
-      // Check if we already have a video element for this stream
       let videoElement = document.getElementById(
         `remote-video-${id}`,
       ) as HTMLVideoElement;
 
       if (!videoElement) {
-        // Create a new video element
         videoElement = document.createElement("video");
         videoElement.id = `remote-video-${id}`;
         videoElement.autoplay = true;
@@ -268,7 +261,6 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
         remoteVideoContainer.appendChild(videoElement);
       }
 
-      // Set the stream as the source
       videoElement.srcObject = stream;
     };
 
@@ -276,13 +268,11 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
       const { id } = event.detail;
       console.log(`Remote stream removed: ${id}`);
 
-      // Remove the video element
       const videoElement = document.getElementById(`remote-video-${id}`);
       if (videoElement) {
         videoElement.remove();
       }
 
-      // Show the avatar again if no video streams are left
       const remoteVideoContainer = document.getElementById(
         "remote-video-container",
       );
@@ -313,13 +303,18 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
         handleRemoteStreamRemoved,
       );
 
-      if (localStream) {
-        localStream.getTracks().forEach((track) => {
-          track.stop();
-        });
-      }
+      const cleanupStream = (stream: MediaStream | null) => {
+        if (stream) {
+          stream.getTracks().forEach((track) => {
+            track.stop();
+          });
+        }
+      };
+
+      cleanupStream(mediaState.stream);
+      cleanupStream(mediaState.originalStream);
     };
-  }, [userId]);
+  }, [userId, initWebRTC]);
 
   // Format call duration as mm:ss
   const formatDuration = (seconds: number) => {
@@ -330,36 +325,30 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
 
   const handleEndCall = async () => {
     try {
-      // Import dynamically to avoid SSR issues
-      const { endCall } = await import("@/utils/webrtcUtils");
       const { useAuthStore } = await import("@/stores/authStore");
-
-      // Get token for API call
       const token = useAuthStore.getState().accessToken;
 
       // End the WebRTC call
-      endCall();
+      await endWebRTC();
 
-      // Also notify the server that the call has ended
+      // Notify the server that the call has ended
       if (user?.id && token) {
         await endCallAction(user.id, token);
       }
 
       setCallStatus("ended");
 
-      // Stop all tracks of the main stream
-      if (localStream) {
-        localStream.getTracks().forEach((track) => {
-          track.stop();
-        });
-      }
+      // Clean up media streams
+      const cleanupStream = (stream: MediaStream | null) => {
+        if (stream) {
+          stream.getTracks().forEach((track) => {
+            track.stop();
+          });
+        }
+      };
 
-      // Stop the original video stream if it exists
-      if (originalVideoStream) {
-        originalVideoStream.getTracks().forEach((track) => {
-          track.stop();
-        });
-      }
+      cleanupStream(mediaState.stream);
+      cleanupStream(mediaState.originalStream);
 
       toast.info(
         `Cuộc gọi video với ${user?.userInfo?.fullName || "người dùng"} đã kết thúc`,
@@ -373,92 +362,26 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
     }
   };
 
-  const toggleMute = async () => {
+  const handleToggleMute = async () => {
     try {
-      // Import dynamically to avoid SSR issues
-      const { toggleMute: toggleMuteUtil } = await import(
-        "@/utils/webrtcUtils"
-      );
-
-      // Toggle mute state
-      const newMuteState = await toggleMuteUtil();
+      const newMuteState = await toggleMuteWebRTC();
       setIsMuted(newMuteState);
-
       toast.info(newMuteState ? "Đã tắt micrô" : "Đã bật micrô");
     } catch (error) {
       console.error("Error toggling mute:", error);
-
-      // Fallback to local implementation
-      const newMuteState = !isMuted;
-
-      if (localStream) {
-        const audioTracks = localStream.getAudioTracks();
-        audioTracks.forEach((track) => {
-          track.enabled = !newMuteState;
-        });
-      }
-
-      setIsMuted(newMuteState);
-      toast.info(newMuteState ? "Đã tắt micrô" : "Đã bật micrô");
+      toast.error("Không thể thay đổi trạng thái micrô");
     }
   };
 
-  const toggleVideo = async () => {
+  const handleToggleVideo = async () => {
     try {
-      // Import dynamically to avoid SSR issues
       const { toggleCamera } = await import("@/utils/webrtcUtils");
-
-      // Toggle camera state
       const isOff = await toggleCamera();
       setIsVideoOff(isOff);
-
       toast.info(isOff ? "Đã tắt camera" : "Đã bật camera");
     } catch (error) {
       console.error("Error toggling camera:", error);
-
-      // Fallback to local implementation
-      const willTurnCameraOff = !isVideoOff;
-
-      if (localStream) {
-        if (!willTurnCameraOff) {
-          // Turn camera ON
-          try {
-            const newVideoStream = await navigator.mediaDevices.getUserMedia({
-              video: true,
-              audio: false,
-            });
-
-            const newVideoTrack = newVideoStream.getVideoTracks()[0];
-            localStream.addTrack(newVideoTrack);
-
-            if (localVideoRef.current) {
-              localVideoRef.current.srcObject = localStream;
-            }
-
-            setOriginalVideoStream(newVideoStream);
-          } catch (error) {
-            console.error("Không thể bật lại camera:", error);
-            toast.error("Không thể bật lại camera. Vui lòng thử lại.");
-            return;
-          }
-        } else {
-          // Turn camera OFF
-          const videoTracks = localStream.getVideoTracks();
-          videoTracks.forEach((track) => {
-            localStream.removeTrack(track);
-            track.stop();
-          });
-
-          if (originalVideoStream) {
-            originalVideoStream.getTracks().forEach((track) => {
-              track.stop();
-            });
-          }
-        }
-      }
-
-      setIsVideoOff(willTurnCameraOff);
-      toast.info(willTurnCameraOff ? "Đã tắt camera" : "Đã bật camera");
+      toast.error("Không thể thay đổi trạng thái camera");
     }
   };
 
@@ -466,10 +389,7 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (callStatus === "connected") {
-        // Cách hiện đại để xử lý sự kiện beforeunload
         e.preventDefault();
-        // Đặt một thông báo chung (nhiều trình duyệt hiện đại không hiển thị thông báo tùy chỉnh)
-        // Phương pháp hiện đại - không sử dụng returnValue đã bị deprecated
         return "Bạn có chắc chắn muốn kết thúc cuộc gọi?";
       }
     };
@@ -480,6 +400,17 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [callStatus]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-black">
+        <div className="flex flex-col items-center">
+          <RotateCcw className="h-8 w-8 animate-spin text-white mb-4" />
+          <span className="text-white">Đang tải...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-black">
@@ -495,7 +426,9 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
             ? "Đang kết nối..."
             : callStatus === "connected"
               ? formatDuration(callDuration)
-              : "Cuộc gọi đã kết thúc"}
+              : callStatus === "error"
+                ? "Lỗi kết nối"
+                : "Cuộc gọi đã kết thúc"}
         </div>
       </div>
 
@@ -519,16 +452,25 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
                 <span>Đang kết nối...</span>
               </div>
             </div>
+          ) : callStatus === "error" ? (
+            <div className="flex flex-col items-center justify-center text-white">
+              <div className="text-red-500 mb-4">Lỗi kết nối</div>
+              <Button
+                onClick={() => window.location.reload()}
+                variant="outline"
+                className="text-white"
+              >
+                Thử lại
+              </Button>
+            </div>
           ) : (
             <>
-              {/* Hiển thị video của người dùng */}
+              {/* Remote video display */}
               <div className="w-full h-full">
-                {/* Video stream của người nhận cuộc gọi */}
                 <div
                   id="remote-video-container"
                   className="w-full h-full bg-gradient-to-b from-gray-800 to-gray-900 flex items-center justify-center"
                 >
-                  {/* Video element sẽ được thêm vào đây bằng JavaScript */}
                   <Avatar className="h-32 w-32 remote-user-avatar">
                     <AvatarImage
                       src={user?.userInfo?.profilePictureUrl || undefined}
@@ -546,7 +488,6 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
 
         {/* Local video (small overlay) */}
         <div className="absolute bottom-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden border-2 border-white">
-          {/* Luôn hiển thị video element, nhưng ẩn nó khi video bị tắt */}
           <video
             ref={localVideoRef}
             autoPlay
@@ -555,7 +496,6 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
             className={`w-full h-full object-cover ${isVideoOff ? "hidden" : ""}`}
           />
 
-          {/* Hiển thị icon khi video bị tắt */}
           {isVideoOff && (
             <div className="w-full h-full flex items-center justify-center bg-gray-700">
               <Video className="h-6 w-6 text-gray-400" />
@@ -567,7 +507,7 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
       {/* Call controls */}
       <div className="w-full bg-black p-6 flex items-center justify-center gap-6">
         <Button
-          onClick={toggleMute}
+          onClick={handleToggleMute}
           variant="ghost"
           size="icon"
           className={`rounded-full p-3 h-14 w-14 ${isMuted ? "bg-gray-700" : "bg-gray-800"}`}
@@ -580,7 +520,7 @@ export default function VideoCallPage({ params }: { params: { id: string } }) {
         </Button>
 
         <Button
-          onClick={toggleVideo}
+          onClick={handleToggleVideo}
           variant="ghost"
           size="icon"
           className={`rounded-full p-3 h-14 w-14 ${isVideoOff ? "bg-gray-700" : "bg-gray-800"}`}

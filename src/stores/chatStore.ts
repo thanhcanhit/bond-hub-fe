@@ -45,6 +45,198 @@ interface MessageHandlingOptions {
   skipDuplicateCheck?: boolean;
 }
 
+// Utility functions for creating minimal objects
+const createMinimalUser = (id: string): User => ({
+  id,
+  passwordHash: "",
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  refreshTokens: [],
+  qrCodes: [],
+  posts: [],
+  stories: [],
+  groupMembers: [],
+  cloudFiles: [],
+  pinnedItems: [],
+  sentFriends: [],
+  receivedFriends: [],
+  contacts: [],
+  contactOf: [],
+  settings: [],
+  postReactions: [],
+  hiddenPosts: [],
+  addedBy: [],
+  notifications: [],
+  sentMessages: [],
+  receivedMessages: [],
+  comments: [],
+});
+
+const createMinimalUserInfo = (
+  id: string,
+  fullName: string,
+  profilePictureUrl: string | null = null,
+): UserInfo => ({
+  id,
+  fullName,
+  profilePictureUrl,
+  statusMessage: "No status",
+  blockStrangers: false,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  userAuth: createMinimalUser(id),
+});
+
+// Constants
+const DUPLICATE_MESSAGE_THRESHOLD = 2000; // 2 seconds
+const CACHE_VALIDITY_DURATION = 5 * 60 * 1000; // 5 minutes
+const API_CALL_THROTTLE = 2000; // 2 seconds
+const GROUP_REFRESH_THROTTLE = 5000; // 5 seconds
+const GROUP_CACHE_VALIDITY = 30000; // 30 seconds
+
+// Helper function to check for duplicate messages
+const isDuplicateMessage = (
+  message: Message,
+  existingMessages: Message[],
+): boolean => {
+  // Check exact ID match
+  const exactMessageExists = existingMessages.some(
+    (msg) => msg.id === message.id,
+  );
+  if (exactMessageExists) {
+    console.log(`[chatStore] Message with ID ${message.id} already exists`);
+    return true;
+  }
+
+  // Check content, sender and time for non-temporary messages
+  if (!message.id.startsWith("temp-")) {
+    const similarMessageExists = existingMessages.some(
+      (msg) =>
+        !msg.id.startsWith("temp-") &&
+        msg.senderId === message.senderId &&
+        msg.content.text === message.content.text &&
+        Math.abs(
+          new Date(msg.createdAt).getTime() -
+            new Date(message.createdAt).getTime(),
+        ) < DUPLICATE_MESSAGE_THRESHOLD,
+    );
+
+    if (similarMessageExists) {
+      console.log(`[chatStore] Similar message content detected`);
+      return true;
+    }
+  }
+
+  return false;
+};
+
+// Helper function to create a complete group object
+const createCompleteGroup = (group: Partial<Group>): Group => ({
+  id: group.id || "",
+  name: group.name || "",
+  creatorId: group.creatorId || "",
+  avatarUrl: group.avatarUrl ?? null,
+  createdAt: group.createdAt || new Date(),
+  members: Array.isArray(group.members) ? group.members : [],
+  messages: Array.isArray(group.messages) ? group.messages : [],
+  memberUsers: Array.isArray(group.memberUsers) ? group.memberUsers : [],
+});
+
+// Helper function to ensure message has correct type
+const ensureMessageType = (message: Message): Message => {
+  if (!message.messageType) {
+    if (message.groupId) {
+      return { ...message, messageType: MessageType.GROUP };
+    } else if (message.receiverId) {
+      return { ...message, messageType: MessageType.USER };
+    }
+  }
+  return message;
+};
+
+// Helper function to deduplicate readBy array
+const deduplicateReadBy = (readBy: string[] | undefined): string[] => {
+  if (!readBy) return [];
+  return Array.isArray(readBy) ? [...new Set(readBy)] : [];
+};
+
+// Helper function to validate message
+const validateMessage = (message: Message): boolean => {
+  if (!message.id) {
+    console.error("[chatStore] Message validation failed: Missing ID");
+    return false;
+  }
+  if (!message.senderId) {
+    console.error("[chatStore] Message validation failed: Missing senderId");
+    return false;
+  }
+  if (!message.content) {
+    console.error("[chatStore] Message validation failed: Missing content");
+    return false;
+  }
+  return true;
+};
+
+// Helper function to check if message belongs to current chat
+const isMessageForCurrentChat = (
+  message: Message,
+  currentChatType: "USER" | "GROUP" | null,
+  selectedContact: (User & { userInfo: UserInfo }) | null,
+  selectedGroup: Group | null,
+): boolean => {
+  if (!currentChatType) return false;
+
+  if (currentChatType === "USER" && selectedContact) {
+    return (
+      message.messageType === MessageType.USER &&
+      (message.senderId === selectedContact.id ||
+        message.receiverId === selectedContact.id)
+    );
+  }
+
+  if (currentChatType === "GROUP" && selectedGroup) {
+    return (
+      message.messageType === MessageType.GROUP &&
+      message.groupId === selectedGroup.id
+    );
+  }
+
+  return false;
+};
+
+// Helper function to validate cache key
+const validateCacheKey = (key: string): boolean => {
+  if (!key) {
+    console.error("[chatStore] Invalid cache key: Empty key");
+    return false;
+  }
+  if (!key.includes("_")) {
+    console.error("[chatStore] Invalid cache key: Missing type separator");
+    return false;
+  }
+  const [type, id] = key.split("_");
+  if (!type || !id) {
+    console.error("[chatStore] Invalid cache key: Missing type or ID");
+    return false;
+  }
+  if (type !== "USER" && type !== "GROUP") {
+    console.error("[chatStore] Invalid cache key: Invalid type");
+    return false;
+  }
+  return true;
+};
+
+// Helper function to get cache key from message
+const getCacheKeyFromMessage = (message: Message): string | null => {
+  if (message.groupId) {
+    return `GROUP_${message.groupId}`;
+  }
+  if (message.receiverId) {
+    return `USER_${message.receiverId}`;
+  }
+  return null;
+};
+
 export interface ChatState {
   // Current chat state
   messages: Message[];
@@ -64,10 +256,8 @@ export interface ChatState {
   hasMoreMessages: boolean;
   sendTypingIndicator?: (isTyping: boolean) => void;
 
-  // Cờ hiệu để chỉ định rằng đang trong quá trình tải tin nhắn
+  // Loading state flags
   isLoadingMessages: boolean;
-
-  // Cờ hiệu để chỉ định rằng đã tải tin nhắn cho nhóm hiện tại
   hasLoadedMessages: boolean;
 
   // Cache for messages
@@ -88,10 +278,14 @@ export interface ChatState {
     }
   >;
 
-  // Flag to control whether to fetch messages from API
+  // Cache control flags
   shouldFetchMessages: boolean;
-  // Flag to control whether to fetch group data from API
   shouldFetchGroupData: boolean;
+
+  // Internal tracking
+  emptyMessageGroups: Record<string, boolean>;
+  lastMessageLoadTime: Record<string, number>;
+  _lastApiCallTime: Record<string, number>;
 
   // Actions
   setSelectedContact: (contact: (User & { userInfo: UserInfo }) | null) => void;
@@ -146,6 +340,7 @@ export interface ChatState {
 
   // Cache control methods
   setShouldFetchMessages: (shouldFetch: boolean) => void;
+  setShouldFetchGroupData: (shouldFetch: boolean) => void;
   clearChatCache: (type: "USER" | "GROUP", id: string) => void;
   clearAllCache: () => void;
   openChat: (id: string, type: "USER" | "GROUP") => Promise<boolean>;
@@ -165,101 +360,73 @@ export interface ChatState {
 export const useChatStore = create<ChatState>((set, get) => ({
   // Utility functions
   isDuplicateMessage: (message: Message): boolean => {
-    const { messages } = get();
-
-    // Kiểm tra ID chính xác - đây là cách chắc chắn nhất để xác định trùng lặp
-    const exactMessageExists = messages.some((msg) => msg.id === message.id);
-    if (exactMessageExists) {
-      console.log(`[chatStore] Message with ID ${message.id} already exists`);
-      return true;
-    }
-
-    // Kiểm tra nội dung, người gửi và thời gian gửi gần nhau cho tin nhắn không phải tạm thời
-    // Chỉ áp dụng cho tin nhắn không phải tạm thời và không phải từ người dùng hiện tại
-    if (!message.id.startsWith("temp-")) {
-      const similarMessageExists = messages.some(
-        (msg) =>
-          !msg.id.startsWith("temp-") && // Không phải tin nhắn tạm thời
-          msg.senderId === message.senderId &&
-          msg.content.text === message.content.text &&
-          Math.abs(
-            new Date(msg.createdAt).getTime() -
-              new Date(message.createdAt).getTime(),
-          ) < 2000, // 2 giây
-      );
-
-      if (similarMessageExists) {
-        console.log(`[chatStore] Similar message content detected`);
-        return true;
-      }
-    }
-
-    return false;
+    return isDuplicateMessage(message, get().messages);
   },
 
   updateMessageCache: (
     message: Message,
     action: "add" | "update" | "remove",
   ): void => {
+    const cacheKey = getCacheKeyFromMessage(message);
+    if (!cacheKey || !validateCacheKey(cacheKey)) {
+      console.error(
+        "[chatStore] Cannot update message cache: Invalid cache key",
+      );
+      return;
+    }
+
     set((state) => {
-      const { currentChatType, selectedContact, selectedGroup } = state;
-      let cacheKey = "";
+      const cache = state.messageCache[cacheKey] || {
+        messages: [],
+        lastFetched: new Date(),
+      };
 
-      if (currentChatType === "USER" && selectedContact) {
-        cacheKey = `USER_${selectedContact.id}`;
-      } else if (currentChatType === "GROUP" && selectedGroup) {
-        cacheKey = `GROUP_${selectedGroup.id}`;
-      }
-
-      if (!cacheKey || !state.messageCache[cacheKey]) {
-        return state; // Không có cache để cập nhật
-      }
-
-      let updatedCache: typeof state.messageCache;
+      let messages = [...cache.messages];
+      let hasChanges = false;
 
       switch (action) {
         case "add":
-          updatedCache = {
-            ...state.messageCache,
-            [cacheKey]: {
-              messages: [...state.messageCache[cacheKey].messages, message],
-              lastFetched: new Date(),
-            },
-          };
+          if (!messages.some((m) => m.id === message.id)) {
+            messages = [...messages, message];
+            hasChanges = true;
+          }
           break;
-
         case "update":
-          updatedCache = {
-            ...state.messageCache,
-            [cacheKey]: {
-              messages: state.messageCache[cacheKey].messages.map((msg) =>
-                msg.id === message.id ? message : msg,
-              ),
-              lastFetched: new Date(),
-            },
-          };
+          const index = messages.findIndex((m) => m.id === message.id);
+          if (index !== -1) {
+            messages[index] = message;
+            hasChanges = true;
+          }
           break;
-
         case "remove":
-          updatedCache = {
-            ...state.messageCache,
-            [cacheKey]: {
-              messages: state.messageCache[cacheKey].messages.filter(
-                (msg) => msg.id !== message.id,
-              ),
-              lastFetched: new Date(),
-            },
-          };
+          const newMessages = messages.filter((m) => m.id !== message.id);
+          if (newMessages.length !== messages.length) {
+            messages = newMessages;
+            hasChanges = true;
+          }
           break;
       }
 
-      return { messageCache: updatedCache };
-    });
-  },
+      if (!hasChanges) {
+        return state;
+      }
 
-  syncWithConversationStore: (message: Message): void => {
-    const conversationsStore = useConversationsStore.getState();
-    conversationsStore.processNewMessage(message);
+      // Sort messages by creation time
+      messages.sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+
+      return {
+        messageCache: {
+          ...state.messageCache,
+          [cacheKey]: {
+            messages,
+            lastFetched: new Date(),
+          },
+        },
+      };
+    });
   },
 
   processNewMessage: (
@@ -272,94 +439,82 @@ export const useChatStore = create<ChatState>((set, get) => ({
       skipDuplicateCheck = false,
     } = options;
 
-    // Kiểm tra trùng lặp nếu không bỏ qua
+    // Validate message
+    if (!validateMessage(message)) {
+      console.error(
+        "[chatStore] Invalid message received, skipping processing",
+      );
+      return;
+    }
+
+    // Duplicate check
     if (!skipDuplicateCheck && get().isDuplicateMessage(message)) {
       console.log(`[chatStore] Message ${message.id} is duplicate, skipping`);
       return;
     }
 
-    console.log(`[chatStore] Processing new message ${message.id}`);
-
-    // Nếu là tin nhắn nhóm, xóa trạng thái emptyMessageGroups cho nhóm đó
+    // Group message handling
     if (message.groupId && message.messageType === MessageType.GROUP) {
       set((state) => {
-        if (state.emptyMessageGroups[message.groupId]) {
+        const groupId = message.groupId!;
+        if (state.emptyMessageGroups[groupId]) {
           console.log(
-            `[chatStore] Removing group ${message.groupId} from emptyMessageGroups as new message received`,
+            `[chatStore] Removing group ${groupId} from emptyMessageGroups as new message received`,
           );
           const newEmptyMessageGroups = { ...state.emptyMessageGroups };
-          delete newEmptyMessageGroups[message.groupId];
+          delete newEmptyMessageGroups[groupId];
           return { emptyMessageGroups: newEmptyMessageGroups };
         }
         return state;
       });
     }
 
-    // Kiểm tra xem tin nhắn có phù hợp với loại cuộc trò chuyện hiện tại không
-    const { currentChatType } = get();
+    // Message type handling
+    const processedMessage = ensureMessageType(message);
+    const { currentChatType, selectedContact, selectedGroup } = get();
 
-    // Đảm bảo tin nhắn có messageType được đặt chính xác
-    const processedMessage = { ...message };
+    // Check if message belongs to current chat
+    const isForCurrentChat = isMessageForCurrentChat(
+      processedMessage,
+      currentChatType,
+      selectedContact,
+      selectedGroup,
+    );
 
-    // Nếu không có messageType, hãy xác định dựa trên các trường khác
-    if (!processedMessage.messageType) {
-      if (processedMessage.groupId) {
-        processedMessage.messageType = MessageType.GROUP;
-        console.log(
-          `[chatStore] Set messageType to GROUP for message ${processedMessage.id}`,
-        );
-      } else if (processedMessage.receiverId) {
-        processedMessage.messageType = MessageType.USER;
-        console.log(
-          `[chatStore] Set messageType to USER for message ${processedMessage.id}`,
-        );
-      }
-    }
-
-    // Kiểm tra xem tin nhắn có phù hợp với cuộc trò chuyện hiện tại không
-    const isMessageTypeCompatible =
-      (currentChatType === "USER" &&
-        processedMessage.messageType === MessageType.USER) ||
-      (currentChatType === "GROUP" &&
-        processedMessage.messageType === MessageType.GROUP);
-
-    // Nếu tin nhắn không phù hợp với loại cuộc trò chuyện hiện tại, chỉ đồng bộ với conversationsStore
-    if (!isMessageTypeCompatible && currentChatType !== null) {
+    if (!isForCurrentChat && currentChatType !== null) {
       console.log(
-        `[chatStore] Message type ${processedMessage.messageType} doesn't match current chat type ${currentChatType}, skipping chat update`,
+        `[chatStore] Message ${processedMessage.id} is not for current chat, only syncing with conversation store`,
       );
-
-      // Vẫn đồng bộ với conversationsStore để cập nhật danh sách cuộc trò chuyện
       if (notifyConversationStore) {
         get().syncWithConversationStore(processedMessage);
       }
       return;
     }
 
-    // Ensure readBy array doesn't contain duplicates
-    if (processedMessage.readBy) {
-      // Convert to array if it's not already
-      const readByArray = Array.isArray(processedMessage.readBy)
-        ? processedMessage.readBy
-        : [];
+    // Deduplicate readBy array
+    processedMessage.readBy = deduplicateReadBy(processedMessage.readBy);
 
-      // Use Set to remove duplicates
-      processedMessage.readBy = [...new Set(readByArray)];
-    }
+    // Add message to list
+    set((state) => {
+      // Ensure messages are sorted by creation time
+      const newMessages = [...state.messages, processedMessage].sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+      return { messages: newMessages };
+    });
 
-    // Thêm tin nhắn vào danh sách
-    set((state) => ({ messages: [...state.messages, processedMessage] }));
-
-    // Cập nhật cache nếu cần
+    // Update cache if needed
     if (updateCache) {
       get().updateMessageCache(processedMessage, "add");
     }
 
-    // Đồng bộ với conversationsStore nếu cần
+    // Sync with conversationsStore if needed
     if (notifyConversationStore) {
       get().syncWithConversationStore(processedMessage);
     }
   },
+
   // Initial state
   messages: [],
   selectedContact: null,
@@ -376,10 +531,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isSearching: false,
   currentPage: 1,
   hasMoreMessages: true,
+  isLoadingMessages: false,
+  hasLoadedMessages: false,
 
   // Initialize caches
   messageCache: {},
   groupCache: {},
+  emptyMessageGroups: {},
+  lastMessageLoadTime: {},
+  _lastApiCallTime: {},
 
   // By default, fetch data from API
   shouldFetchMessages: true,
@@ -438,107 +598,53 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // Thêm một biến để theo dõi thời gian tải tin nhắn cuối cùng cho mỗi nhóm
-  lastMessageLoadTime: {} as Record<string, number>,
+  setSelectedGroup: (group: Group | null) => {
+    if (!group) {
+      set({
+        selectedGroup: null,
+        currentChatType: null,
+        messages: [],
+        isLoading: false,
+      });
+      return;
+    }
 
-  setSelectedGroup: (group) => {
-    console.log(`[chatStore] Setting selected group: ${group?.id}`);
+    // Ensure all required Group properties are present
+    const completeGroup: Group = {
+      id: group.id,
+      name: group.name,
+      creatorId: group.creatorId || "",
+      avatarUrl: group.avatarUrl ?? null,
+      createdAt: group.createdAt || new Date(),
+      members: Array.isArray(group.members) ? group.members : [],
+      messages: Array.isArray(group.messages) ? group.messages : [],
+      memberUsers: Array.isArray(group.memberUsers) ? group.memberUsers : [],
+    };
 
-    // No need to fetch additional data for groups - all necessary information
-    // is already available in the conversation store
-
-    // Update state but don't clear messages immediately to avoid flickering
-    set({
-      selectedGroup: group,
-      selectedContact: null,
-      currentChatType: group ? "GROUP" : null,
-      // Don't clear messages immediately to avoid flickering
-      // messages: [],
-      // Don't set loading state immediately to avoid flickering
-      // isLoading: group ? true : false,
-      currentPage: 1, // Reset page number
-      hasMoreMessages: true, // Reset hasMoreMessages flag
-      replyingTo: null, // Clear any reply state
-      searchText: "", // Clear search text
-      searchResults: [], // Clear search results
-      isSearching: false, // Reset search state
-    });
-
-    if (group) {
-      // Create cache key for this group
-      const cacheKey = `GROUP_${group.id}`;
-      const cachedData = get().messageCache[cacheKey];
-      const currentTime = new Date();
-      const now = currentTime.getTime();
-
-      // Kiểm tra xem nhóm này đã được xác định là không có tin nhắn chưa
-      if (get().emptyMessageGroups[group.id]) {
-        console.log(
-          `[chatStore] Group ${group.id} is known to have no messages, skipping message loading`,
-        );
-        // Đặt messages thành mảng rỗng và cập nhật cache
-        set({
-          messages: [],
-          isLoading: false,
-          messageCache: {
-            ...get().messageCache,
-            [cacheKey]: {
-              messages: [],
-              lastFetched: currentTime,
-            },
+    // Only update cache if id is a valid string
+    if (typeof completeGroup.id === "string" && completeGroup.id) {
+      set((state) => ({
+        selectedGroup: completeGroup,
+        currentChatType: "GROUP",
+        messages: [],
+        isLoading: false,
+        groupCache: {
+          ...state.groupCache,
+          [completeGroup.id]: {
+            group: completeGroup,
+            lastFetched: new Date(),
           },
-        });
-        return;
-      }
-
-      // Kiểm tra xem chúng ta đã tải tin nhắn gần đây chưa (trong vòng 5 giây)
-      const lastLoadTime = get().lastMessageLoadTime[group.id] || 0;
-      const timeSinceLastLoad = now - lastLoadTime;
-
-      if (timeSinceLastLoad < 5000) {
-        // 5 giây
-        console.log(
-          `[chatStore] Skipping message load for group ${group.id}, last load was ${timeSinceLastLoad}ms ago`,
-        );
-        return;
-      }
-
-      // Check if we have valid cache data (less than 5 minutes old)
-      const isCacheValid =
-        cachedData && now - cachedData.lastFetched.getTime() < 5 * 60 * 1000;
-
-      if (isCacheValid && cachedData.messages.length > 0) {
-        console.log(`[chatStore] Using cached messages for group ${group.id}`);
-        // Use cached data
-        set({
-          messages: cachedData.messages,
-          isLoading: false,
-        });
-      } else {
-        // If no cache or old cache, load messages from API
-        console.log(
-          `[chatStore] No valid cache for group ${group.id}, fetching from API`,
-        );
-
-        // Cập nhật thời gian tải tin nhắn cuối cùng
-        set((state) => ({
-          lastMessageLoadTime: {
-            ...state.lastMessageLoadTime,
-            [group.id]: now,
-          },
-          isLoading: true,
-        }));
-
-        // Use setTimeout to ensure state updates are processed before loading messages
-        setTimeout(() => {
-          get().loadMessages(group.id, "GROUP");
-        }, 0);
-      }
+        },
+      }));
+    } else {
+      set({
+        selectedGroup: null,
+        currentChatType: null,
+        messages: [],
+        isLoading: false,
+      });
     }
   },
-
-  // Thêm một cache để theo dõi các nhóm đã tải tin nhắn nhưng không có tin nhắn nào
-  emptyMessageGroups: {} as Record<string, boolean>,
 
   loadMessages: async (id, type) => {
     console.log(`[chatStore] Loading messages for ${type} ${id}`);
@@ -1891,399 +1997,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     socket.emit(event, data);
   },
 
-  // Biến để theo dõi thời gian gọi API cuối cùng cho mỗi nhóm
-  _lastApiCallTime: {} as Record<string, number>,
-
-  openChat: async (id: string, type: "USER" | "GROUP") => {
-    try {
-      console.log(`[chatStore] Opening chat with ${type} ID: ${id}`);
-
-      // Kiểm tra thời gian gọi API cuối cùng
-      const now = Date.now();
-      const lastCallTime = get()._lastApiCallTime[`${type}_${id}`] || 0;
-      const timeSinceLastCall = now - lastCallTime;
-
-      // Nếu đã gọi API trong vòng 2 giây, bỏ qua
-      if (timeSinceLastCall < 2000) {
-        console.log(
-          `[chatStore] Skipping API call, last call was ${timeSinceLastCall}ms ago`,
-        );
-        return true;
-      }
-
-      // Cập nhật thời gian gọi API cuối cùng
-      get()._lastApiCallTime[`${type}_${id}`] = now;
-
-      // Reset any existing state to ensure clean start
-      set({
-        searchText: "",
-        searchResults: [],
-        isSearching: false,
-        replyingTo: null,
-        selectedMessage: null,
-        isDialogOpen: false,
-        isForwarding: false,
-      });
-
-      if (type === "USER") {
-        // Fetch user data
-        const result = await getUserDataById(id);
-
-        if (result.success && result.user) {
-          // Ensure userInfo exists
-          const user = result.user;
-          if (!user.userInfo) {
-            user.userInfo = {
-              id: user.id,
-              fullName: user.email || user.phoneNumber || "Unknown",
-              profilePictureUrl: null,
-              statusMessage: "No status",
-              blockStrangers: false,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              userAuth: user,
-            };
-          }
-
-          console.log(`[chatStore] User data fetched successfully for ${id}`);
-
-          // Set the selected contact
-          get().setSelectedContact(user as User & { userInfo: UserInfo });
-
-          // Get the conversations store
-          const conversationsStore = useConversationsStore.getState();
-
-          // Check if conversation exists
-          const existingConversation = conversationsStore.conversations.find(
-            (conv) => conv.type === "USER" && conv.contact.id === id,
-          );
-
-          // If conversation doesn't exist, create it
-          if (!existingConversation) {
-            console.log(`[chatStore] Creating new conversation for user ${id}`);
-            conversationsStore.addConversation({
-              contact: user as User & { userInfo: UserInfo },
-              lastMessage: undefined,
-              unreadCount: 0,
-              lastActivity: new Date(),
-              type: "USER",
-            });
-          } else {
-            console.log(
-              `[chatStore] Using existing conversation for user ${id}`,
-            );
-          }
-
-          // Load messages for this conversation
-          await get().loadMessages(id, "USER");
-
-          // Check if messages were loaded successfully
-          const messagesLoaded = get().messages.length > 0;
-          console.log(
-            `[chatStore] User messages loaded successfully: ${messagesLoaded}`,
-          );
-          return messagesLoaded;
-        }
-        console.log(`[chatStore] Failed to fetch user data for ${id}`);
-        return false;
-      } else if (type === "GROUP") {
-        // First, check if the group exists in the conversations store
-        const conversationsStore = useConversationsStore.getState();
-        const existingConversation = conversationsStore.conversations.find(
-          (conv) => conv.type === "GROUP" && conv.group?.id === id,
-        );
-
-        // If we have the group in conversations store, use that data first
-        if (existingConversation && existingConversation.group) {
-          console.log(
-            `[chatStore] Using group data from conversations store for ${id}`,
-          );
-
-          // Set the selected group from conversations store
-          const groupFromConversation: Group = {
-            id: existingConversation.group.id,
-            name: existingConversation.group.name,
-            avatarUrl: existingConversation.group.avatarUrl,
-            createdAt: existingConversation.group.createdAt || new Date(), // Provide default value
-            creatorId: "", // Required by Group type
-            messages: [], // Required by Group type
-            members: (existingConversation.group.memberUsers?.map((member) => ({
-              id: `${existingConversation.group?.id}_${member.id}`,
-              groupId: existingConversation.group?.id || "",
-              userId: member.id,
-              role: member.role,
-              user: {
-                id: member.id,
-                userInfo: {
-                  id: member.id,
-                  fullName: member.fullName,
-                  profilePictureUrl: member.profilePictureUrl,
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                  blockStrangers: false,
-                  userAuth: { id: member.id } as User,
-                },
-              } as User,
-              // Add missing properties required by GroupMember
-              group: null as unknown as Group, // Will be set by the backend
-              joinedAt: new Date(),
-              addedBy: null as unknown as User,
-              addedById: "",
-            })) || []) as GroupMember[],
-          };
-
-          get().setSelectedGroup(groupFromConversation);
-
-          // Update the cache with this data
-          set((state) => {
-            const newGroupCache = { ...state.groupCache };
-            newGroupCache[id] = {
-              group: groupFromConversation,
-              lastFetched: new Date(),
-            };
-            return { groupCache: newGroupCache };
-          });
-
-          // Kiểm tra xem nhóm này đã được xác định là không có tin nhắn chưa
-          if (get().emptyMessageGroups[id]) {
-            console.log(
-              `[chatStore] Group ${id} is known to have no messages, skipping message loading`,
-            );
-            // Đặt messages thành mảng rỗng
-            set({
-              messages: [],
-              isLoading: false,
-            });
-            return true; // Vẫn trả về true vì đã xử lý thành công
-          }
-
-          // Kiểm tra xem chúng ta đã tải tin nhắn gần đây chưa (trong vòng 5 giây)
-          const now = Date.now();
-          const lastLoadTime = get().lastMessageLoadTime[id] || 0;
-          const timeSinceLastLoad = now - lastLoadTime;
-
-          if (timeSinceLastLoad < 5000) {
-            // 5 giây
-            console.log(
-              `[chatStore] Skipping message load for group ${id}, last load was ${timeSinceLastLoad}ms ago`,
-            );
-            return true; // Vẫn trả về true vì đã xử lý thành công
-          }
-
-          // Cập nhật thời gian tải tin nhắn cuối cùng
-          set((state) => ({
-            lastMessageLoadTime: {
-              ...state.lastMessageLoadTime,
-              [id]: now,
-            },
-          }));
-
-          // Load messages for this group
-          console.log(
-            `[chatStore] Loading messages for group ${id} from conversations store`,
-          );
-          await get().loadMessages(id, "GROUP");
-
-          // Check if messages were loaded successfully
-          const messagesLoaded = get().messages.length > 0;
-          console.log(
-            `[chatStore] Group messages loaded successfully from conversations store: ${messagesLoaded}`,
-          );
-          return true; // Luôn trả về true vì đã xử lý thành công, ngay cả khi không có tin nhắn
-        }
-
-        // If not in conversations store or we need fresh data, check our group cache
-        const cachedData = get().groupCache[id];
-        const currentTime = new Date();
-        const isCacheValid =
-          cachedData &&
-          currentTime.getTime() - cachedData.lastFetched.getTime() < 30 * 1000; // 30 seconds cache
-
-        let group: Group | undefined;
-
-        // Always fetch fresh group data when opening a group chat to ensure we have the latest member information
-        console.log(`[chatStore] Fetching fresh group data for ${id}`);
-        const result = await getGroupById(id);
-
-        if (result.success && result.group) {
-          group = result.group;
-          console.log(`[chatStore] Group data fetched successfully for ${id}`);
-          console.log(
-            `[chatStore] Group has ${result.group.members?.length || 0} members`,
-          );
-
-          // Update the cache
-          set((state) => ({
-            groupCache: {
-              ...state.groupCache,
-              [id]: {
-                group: result.group,
-                lastFetched: new Date(),
-              },
-            },
-          }));
-        } else {
-          // If API fetch fails but we have valid cache, use that as fallback
-          if (isCacheValid) {
-            console.log(
-              `[chatStore] API fetch failed, using cached group data for ${id}`,
-            );
-            group = cachedData.group;
-          } else {
-            console.log(
-              `[chatStore] Failed to fetch group data for ${id} and no valid cache available`,
-            );
-            return false;
-          }
-        }
-
-        if (group) {
-          // Set the selected group
-          get().setSelectedGroup(group);
-
-          // Get the conversations store
-          const conversationsStore = useConversationsStore.getState();
-          const currentUser = useAuthStore.getState().user;
-
-          // Check if group conversation exists
-          const existingConversation = conversationsStore.conversations.find(
-            (conv) => conv.type === "GROUP" && conv.group?.id === id,
-          );
-
-          // If group conversation doesn't exist, create it
-          if (!existingConversation && currentUser) {
-            console.log(
-              `[chatStore] Creating new conversation for group ${id}`,
-            );
-
-            // Tạo placeholder contact vì Conversation type yêu cầu
-            const placeholderContact: User & { userInfo: UserInfo } = {
-              id: currentUser.id,
-              email: currentUser.email || "",
-              phoneNumber: currentUser.phoneNumber || "",
-              passwordHash: currentUser.passwordHash,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              userInfo: currentUser.userInfo || {
-                id: currentUser.id,
-                fullName: "Group Member",
-                profilePictureUrl: null,
-                statusMessage: "",
-                blockStrangers: false,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                userAuth: currentUser,
-              },
-              refreshTokens: [],
-              qrCodes: [],
-              posts: [],
-              stories: [],
-              groupMembers: [],
-              cloudFiles: [],
-              pinnedItems: [],
-              sentFriends: [],
-              receivedFriends: [],
-              contacts: [],
-              contactOf: [],
-              settings: [],
-              postReactions: [],
-              hiddenPosts: [],
-              addedBy: [],
-              notifications: [],
-              sentMessages: [],
-              receivedMessages: [],
-              comments: [],
-            };
-
-            conversationsStore.addConversation({
-              contact: placeholderContact,
-              group: {
-                id: group.id,
-                name: group.name,
-                avatarUrl: group.avatarUrl,
-                createdAt: group.createdAt,
-              },
-              lastMessage: undefined,
-              unreadCount: 0,
-              lastActivity: new Date(),
-              type: "GROUP",
-            });
-          } else {
-            console.log(
-              `[chatStore] Using existing conversation for group ${id}`,
-            );
-          }
-
-          // Kiểm tra xem nhóm này đã được xác định là không có tin nhắn chưa
-          if (get().emptyMessageGroups[id]) {
-            console.log(
-              `[chatStore] Group ${id} is known to have no messages, skipping message loading`,
-            );
-            // Đặt messages thành mảng rỗng
-            set({
-              messages: [],
-              isLoading: false,
-            });
-            return true; // Vẫn trả về true vì đã xử lý thành công
-          }
-
-          // Kiểm tra xem chúng ta đã tải tin nhắn gần đây chưa (trong vòng 5 giây)
-          const now = Date.now();
-          const lastLoadTime = get().lastMessageLoadTime[id] || 0;
-          const timeSinceLastLoad = now - lastLoadTime;
-
-          if (timeSinceLastLoad < 5000) {
-            // 5 giây
-            console.log(
-              `[chatStore] Skipping message load for group ${id}, last load was ${timeSinceLastLoad}ms ago`,
-            );
-            return true; // Vẫn trả về true vì đã xử lý thành công
-          }
-
-          // Cập nhật thời gian tải tin nhắn cuối cùng
-          set((state) => ({
-            lastMessageLoadTime: {
-              ...state.lastMessageLoadTime,
-              [id]: now,
-            },
-          }));
-
-          // Load messages for this group
-          console.log(`[chatStore] Loading messages for group ${id}`);
-          await get().loadMessages(id, "GROUP");
-
-          // Check if messages were loaded successfully
-          const messagesLoaded = get().messages.length > 0;
-          console.log(
-            `[chatStore] Group messages loaded successfully: ${messagesLoaded}`,
-          );
-          return true; // Luôn trả về true vì đã xử lý thành công, ngay cả khi không có tin nhắn
-        }
-        return false;
-      }
-
-      console.log(`[chatStore] Failed to open chat with ${type} ID: ${id}`);
-      return false;
-    } catch (error) {
-      console.error(
-        `[chatStore] Error opening chat with ${type} ID: ${id}:`,
-        error,
-      );
-      return false;
-    } finally {
-      console.log(`[chatStore] Completed opening chat with ${type} ID: ${id}`);
-    }
-  },
-
-  // Kiểm soát việc fetch dữ liệu từ API
-  setShouldFetchMessages: (shouldFetch) => {
-    set({ shouldFetchMessages: shouldFetch });
-  },
-
-  setShouldFetchGroupData: (shouldFetch: boolean) => {
-    set({ shouldFetchGroupData: shouldFetch });
-  },
-
   // Xóa cache của một cuộc trò chuyện cụ thể
   clearChatCache: (type, id) => {
     set((state) => {
@@ -2380,7 +2093,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // Refresh the selected group data
-  refreshSelectedGroup: async () => {
+  refreshSelectedGroup: async (): Promise<void> => {
     console.log(`[chatStore] Refreshing selected group data`);
     const { selectedGroup } = get();
 
@@ -2398,11 +2111,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const timeSinceLastCall = now - lastCallTime;
 
     // Nếu đã gọi API trong vòng 5 giây, bỏ qua
-    if (timeSinceLastCall < 5000) {
+    if (timeSinceLastCall < GROUP_REFRESH_THROTTLE) {
       console.log(
         `[chatStore] Skipping refresh, last call was ${timeSinceLastCall}ms ago`,
       );
-      return selectedGroup;
+      return;
     }
 
     // Cập nhật thời gian gọi API
@@ -2421,33 +2134,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
 
       // Nếu có thông tin nhóm trong conversationsStore và đã được cập nhật gần đây, sử dụng nó
-      if (groupConversation?.group && groupConversation.group.lastUpdated) {
-        const lastUpdated = new Date(groupConversation.group.lastUpdated);
-        const currentTime = new Date();
-        const timeSinceLastUpdate =
-          currentTime.getTime() - lastUpdated.getTime();
+      if (groupConversation?.group) {
+        const lastFetched = get().groupCache[groupId]?.lastFetched;
+        if (lastFetched) {
+          const timeSinceLastFetch = now - lastFetched.getTime();
+          if (timeSinceLastFetch < GROUP_CACHE_VALIDITY) {
+            console.log(
+              `[chatStore] Using recent group data from conversationsStore for ${groupId}`,
+            );
 
-        // Nếu thông tin nhóm đã được cập nhật trong vòng 30 giây, sử dụng nó
-        if (timeSinceLastUpdate < 30000) {
-          console.log(
-            `[chatStore] Using recent group data from conversationsStore for ${groupId}`,
-          );
+            // Update the selected group with data from conversationsStore
+            const completeGroup = createCompleteGroup(groupConversation.group);
+            set({ selectedGroup: completeGroup });
 
-          // Update the selected group with data from conversationsStore
-          set({ selectedGroup: groupConversation.group });
-
-          // Update the cache
-          set((state) => ({
-            groupCache: {
-              ...state.groupCache,
-              [groupId]: {
-                group: groupConversation.group,
-                lastFetched: new Date(),
+            // Update the cache
+            set((state) => ({
+              groupCache: {
+                ...state.groupCache,
+                [groupId]: {
+                  group: completeGroup,
+                  lastFetched: new Date(),
+                },
               },
-            },
-          }));
+            }));
 
-          return groupConversation.group;
+            return;
+          }
         }
       }
 
@@ -2463,41 +2175,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
           `[chatStore] New members count: ${result.group.members?.length || 0}`,
         );
 
-        // Thêm timestamp để theo dõi thời gian cập nhật
-        result.group.lastUpdated = new Date();
+        const completeGroup = createCompleteGroup(result.group);
 
         // Update the cache
         set((state) => ({
           groupCache: {
             ...state.groupCache,
             [groupId]: {
-              group: result.group,
+              group: completeGroup,
               lastFetched: new Date(),
             },
           },
         }));
 
         // Update the selected group with new data
-        set({ selectedGroup: result.group });
+        set({ selectedGroup: completeGroup });
 
         // Update the group in the conversations store as well
         conversationsStore.updateConversation(groupId, {
-          group: result.group,
+          group: completeGroup,
         });
 
         // Force UI update
         setTimeout(() => {
           conversationsStore.forceUpdate();
         }, 0);
-
-        return result.group;
       } else {
         console.log(`[chatStore] Failed to refresh group data for ${groupId}`);
-        return null;
       }
     } catch (error) {
       console.error("Error refreshing group data:", error);
-      return null;
     }
   },
 
@@ -2521,5 +2228,86 @@ export const useChatStore = create<ChatState>((set, get) => ({
       state.clearChatCache("GROUP", groupId);
       return state;
     });
+  },
+
+  setShouldFetchMessages: (shouldFetch: boolean) => {
+    set({ shouldFetchMessages: shouldFetch });
+  },
+
+  setShouldFetchGroupData: (shouldFetch: boolean) => {
+    set({ shouldFetchGroupData: shouldFetch });
+  },
+
+  openChat: async (id: string, type: "USER" | "GROUP"): Promise<boolean> => {
+    try {
+      // Reset any existing state to ensure clean start
+      set({
+        searchText: "",
+        searchResults: [],
+        isSearching: false,
+        replyingTo: null,
+        selectedMessage: null,
+        isDialogOpen: false,
+        isForwarding: false,
+      });
+
+      if (type === "USER") {
+        const result = await getUserDataById(id);
+        if (result.success && result.user) {
+          const user = result.user;
+          if (!user.userInfo) {
+            user.userInfo = {
+              id: user.id,
+              fullName: user.email || user.phoneNumber || "Unknown",
+              profilePictureUrl: null,
+              statusMessage: "No status",
+              blockStrangers: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              userAuth: user,
+            };
+          }
+
+          get().setSelectedContact(user as User & { userInfo: UserInfo });
+          await get().loadMessages(id, "USER");
+          return get().messages.length > 0;
+        }
+        return false;
+      } else if (type === "GROUP") {
+        const result = await getGroupById(id);
+        if (result.success && result.group) {
+          const group = result.group;
+          // Ensure the group has all required properties
+          const completeGroup: Group = {
+            id: group.id,
+            name: group.name,
+            creatorId: group.creatorId || "",
+            avatarUrl: group.avatarUrl ?? null,
+            createdAt: group.createdAt || new Date(),
+            members: group.members ?? [],
+            messages: group.messages ?? [],
+            memberUsers: group.memberUsers ?? [],
+          };
+          get().setSelectedGroup(completeGroup);
+          await get().loadMessages(id, "GROUP");
+          return true;
+        }
+        return false;
+      }
+
+      return false;
+    } catch (error) {
+      console.error(
+        `[chatStore] Error opening chat with ${type} ID: ${id}:`,
+        error,
+      );
+      return false;
+    }
+  },
+
+  // Add missing syncWithConversationStore function
+  syncWithConversationStore: (message: Message): void => {
+    const conversationsStore = useConversationsStore.getState();
+    conversationsStore.processNewMessage(message);
   },
 }));

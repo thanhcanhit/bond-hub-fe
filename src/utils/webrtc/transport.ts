@@ -114,7 +114,7 @@ export async function createSendTransport(roomId: string): Promise<void> {
           console.log("[WEBRTC] Ensuring call socket for recovery");
 
           // First try with normal approach
-          const callSocket = await callSocketModule.ensureCallSocket(true);
+          const callSocket = await callSocketModule.ensureCallSocket();
 
           if (callSocket && callSocket.connected) {
             console.log(
@@ -130,7 +130,7 @@ export async function createSendTransport(roomId: string): Promise<void> {
             );
 
             // Try direct initialization as a fallback
-            const directSocket = callSocketModule.initCallSocket(token, true);
+            const directSocket = callSocketModule.initCallSocket(token);
 
             if (directSocket) {
               // Wait for the socket to connect
@@ -303,7 +303,7 @@ export async function createSendTransport(roomId: string): Promise<void> {
             // Handle transport events
             state.sendTransport.on(
               "connect",
-              ({ dtlsParameters }: any, callback: Function) => {
+              ({ dtlsParameters }: any, callback: (error?: Error) => void) => {
                 console.log("Send transport connect event triggered");
 
                 // Add a timeout for connectWebRtcTransport
@@ -366,7 +366,10 @@ export async function createSendTransport(roomId: string): Promise<void> {
 
             state.sendTransport.on(
               "produce",
-              ({ kind, rtpParameters, appData }: any, callback: Function) => {
+              (
+                { kind, rtpParameters, appData }: any,
+                callback: (error?: Error | { id: string }) => void,
+              ) => {
                 console.log(`Producing ${kind}`);
 
                 // Add a timeout for produce
@@ -448,6 +451,7 @@ export async function createSendTransport(roomId: string): Promise<void> {
                               "[WEBRTC] Reproducing audio track after recovery",
                             );
                             try {
+                              const { produce } = await import("./producer");
                               await produce("audio", audioTrack);
                             } catch (audioError) {
                               console.error(
@@ -464,6 +468,7 @@ export async function createSendTransport(roomId: string): Promise<void> {
                               "[WEBRTC] Reproducing video track after recovery",
                             );
                             try {
+                              const { produce } = await import("./producer");
                               await produce("video", videoTrack);
                             } catch (videoError) {
                               console.error(
@@ -558,7 +563,7 @@ export async function createRecvTransport(roomId: string): Promise<void> {
           console.log("[WEBRTC] Ensuring call socket for recovery");
 
           // First try with normal approach
-          const callSocket = await callSocketModule.ensureCallSocket(true);
+          const callSocket = await callSocketModule.ensureCallSocket();
 
           if (callSocket && callSocket.connected) {
             console.log(
@@ -574,7 +579,7 @@ export async function createRecvTransport(roomId: string): Promise<void> {
             );
 
             // Try direct initialization as a fallback
-            const directSocket = callSocketModule.initCallSocket(token, true);
+            const directSocket = callSocketModule.initCallSocket(token);
 
             if (directSocket) {
               // Wait for the socket to connect
@@ -747,7 +752,7 @@ export async function createRecvTransport(roomId: string): Promise<void> {
             // Handle transport events
             state.recvTransport.on(
               "connect",
-              ({ dtlsParameters }: any, callback: Function) => {
+              ({ dtlsParameters }: any, callback: (error?: Error) => void) => {
                 console.log("Receive transport connect event triggered");
 
                 // Add a timeout for connectWebRtcTransport

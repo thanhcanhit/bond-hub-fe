@@ -19,13 +19,9 @@ export const getCallSocket = (): Socket | null => {
 /**
  * Initialize a new call socket with the provided token
  * @param token Authentication token
- * @param _forceInit Force initialization even if not on a call page (unused but kept for API compatibility)
  * @returns The initialized call socket
  */
-export const initCallSocket = (
-  token: string,
-  _forceInit: boolean = false, // Renamed to _forceInit to indicate it's not used
-): Socket | null => {
+export const initCallSocket = (token: string): Socket | null => {
   console.log(
     `[WEBRTC] Setting up call socket with token: ${token ? "Token exists" : "No token"}`,
   );
@@ -112,10 +108,6 @@ export const initCallSocket = (
       auth: { token },
       reconnection: false, // Disable automatic reconnection
       timeout: 60000, // 60 second timeout
-      // pingTimeout is not in the type definition, but it's a valid option
-      // @ts-ignore - socket.io does support this option
-      pingTimeout: 180000, // Increased ping timeout to 3 minutes
-      pingInterval: 10000, // More frequent pings (every 10 seconds)
       transports: ["websocket"],
       forceNew: true, // Always create a new connection for the call namespace
       autoConnect: true, // Auto connect when initialized
@@ -159,7 +151,7 @@ export const initCallSocket = (
           // Store the last ping timestamp in sessionStorage
           try {
             sessionStorage.setItem("last_socket_ping", Date.now().toString());
-          } catch (storageError) {
+          } catch {
             // Ignore storage errors
           }
         } else if (keepAliveInterval) {
@@ -296,7 +288,7 @@ export const initCallSocket = (
     // Store the last pong timestamp in sessionStorage
     try {
       sessionStorage.setItem("last_socket_pong", Date.now().toString());
-    } catch (storageError) {
+    } catch {
       // Ignore storage errors
     }
   });
@@ -397,9 +389,7 @@ export const initCallSocket = (
  * @param forceInit Force initialization even if not on a call page
  * @returns The call socket instance
  */
-export const ensureCallSocket = async (
-  forceInit: boolean = false,
-): Promise<Socket | null> => {
+export const ensureCallSocket = async (): Promise<Socket | null> => {
   // If we already have a connected socket, return it
   if (callSocket && callSocket.connected) {
     console.log(
@@ -485,7 +475,7 @@ export const ensureCallSocket = async (
     }
 
     console.log("[WEBRTC] Creating new call socket with token");
-    const newSocket = initCallSocket(token, forceInit);
+    const newSocket = initCallSocket(token);
 
     if (!newSocket) {
       const errorMsg = "[WEBRTC] initCallSocket returned null";
