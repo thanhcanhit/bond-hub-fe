@@ -43,7 +43,7 @@ export function playCallRingtone(volume: number = 0.7): HTMLAudioElement {
         console.error("Error playing call ringtone:", error);
 
         // Try again with user interaction if autoplay was blocked
-        if (error.name === "NotAllowedError") {
+        if (error instanceof Error && error.name === "NotAllowedError") {
           console.log("Autoplay blocked, will try again with user interaction");
         }
       }
@@ -82,7 +82,7 @@ export function playCallDialTone(volume: number = 0.5): HTMLAudioElement {
         console.error("Error playing dial tone:", error);
 
         // Try again with user interaction if autoplay was blocked
-        if (error.name === "NotAllowedError") {
+        if (error instanceof Error && error.name === "NotAllowedError") {
           console.log("Autoplay blocked, will try again with user interaction");
         }
       }

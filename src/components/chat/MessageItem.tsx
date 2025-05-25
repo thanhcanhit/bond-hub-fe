@@ -277,6 +277,12 @@ function SummaryDialog({
             </div>
           ) : (
             <>
+              <div className="bg-blue-50 p-3 rounded-md text-sm border border-blue-100">
+                <h4 className="font-medium text-blue-700 mb-1">
+                  Nội dung tóm tắt:
+                </h4>
+                <p className="text-blue-600 whitespace-pre-wrap">{summary}</p>
+              </div>
               <div className="bg-gray-100 p-3 rounded-md text-sm">
                 <h4 className="font-medium text-gray-700 mb-1">
                   Nội dung gốc:
@@ -284,12 +290,6 @@ function SummaryDialog({
                 <p className="text-gray-600 whitespace-pre-wrap">
                   {originalText}
                 </p>
-              </div>
-              <div className="bg-blue-50 p-3 rounded-md text-sm border border-blue-100">
-                <h4 className="font-medium text-blue-700 mb-1">
-                  Nội dung tóm tắt:
-                </h4>
-                <p className="text-blue-600 whitespace-pre-wrap">{summary}</p>
               </div>
             </>
           )}

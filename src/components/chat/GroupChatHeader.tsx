@@ -134,9 +134,7 @@ export default function GroupChatHeader({
       // Nếu có thông tin nhóm trong conversationsStore, sử dụng nó
       if (groupConversation?.group) {
         const isMember =
-          groupConversation.group.members?.some(
-            (member) => member.userId === currentUserId,
-          ) ||
+          groupConversation.group.memberIds?.includes(currentUserId) ||
           groupConversation.group.memberUsers?.some(
             (member) => member.id === currentUserId,
           );
@@ -214,9 +212,11 @@ export default function GroupChatHeader({
         }
 
         // Kiểm tra xem người dùng hiện tại có trong danh sách thành viên không
-        const isMember = result.group.members?.some(
-          (member) => member.userId === currentUserId,
-        );
+        const isMember =
+          result.group.memberIds?.includes(currentUserId) ||
+          result.group.memberUsers?.some(
+            (member) => member.id === currentUserId,
+          );
 
         if (!isMember) {
           console.log(

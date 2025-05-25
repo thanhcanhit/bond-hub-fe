@@ -146,7 +146,6 @@ export default function GroupSocketHandler() {
               group: {
                 ...conversation.group,
                 ...groupData,
-                lastUpdated: new Date(), // Thêm timestamp để theo dõi thời gian cập nhật
               },
             });
             return;
@@ -183,9 +182,6 @@ export default function GroupSocketHandler() {
           );
 
           if (conversation) {
-            // Thêm timestamp để theo dõi thời gian cập nhật
-            result.group.lastUpdated = new Date();
-
             // Update the conversation with the latest group data
             updateConversation(groupId, {
               group: result.group,
@@ -408,7 +404,6 @@ export default function GroupSocketHandler() {
           useChatStore.getState().setSelectedGroup({
             ...selectedGroup,
             avatarUrl: data.avatarUrl,
-            lastUpdated: new Date(), // Thêm timestamp để theo dõi thời gian cập nhật
           });
 
           // Cập nhật cache
@@ -420,9 +415,13 @@ export default function GroupSocketHandler() {
             chatStore.groupCache[data.groupId] = {
               ...cachedData,
               group: {
-                ...cachedData.group,
+                id: cachedData.group.id,
+                name: cachedData.group.name,
+                creatorId: cachedData.group.creatorId,
                 avatarUrl: data.avatarUrl,
-                lastUpdated: new Date(),
+                createdAt: cachedData.group.createdAt,
+                members: cachedData.group.members,
+                messages: cachedData.group.messages,
               },
               lastFetched: new Date(),
             };
@@ -437,13 +436,16 @@ export default function GroupSocketHandler() {
           (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
         );
 
-        if (groupConversation && data.avatarUrl) {
+        if (groupConversation?.group && data.avatarUrl) {
           // Cập nhật trực tiếp avatarUrl vào conversation
           updateConversation(data.groupId, {
             group: {
-              ...groupConversation.group,
+              id: groupConversation.group.id,
+              name: groupConversation.group.name,
               avatarUrl: data.avatarUrl,
-              lastUpdated: new Date(),
+              createdAt: groupConversation.group.createdAt,
+              memberIds: groupConversation.group.memberIds,
+              memberUsers: groupConversation.group.memberUsers,
             },
           });
         } else if (groupConversation) {

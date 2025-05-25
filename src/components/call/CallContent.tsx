@@ -4,14 +4,7 @@ import React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getUserInitials } from "@/utils/userUtils";
 import { Loader2 } from "lucide-react";
-
-interface User {
-  id: string;
-  userInfo?: {
-    fullName?: string;
-    profilePictureUrl?: string;
-  };
-}
+import { User } from "@/types/base";
 
 interface CallContentProps {
   user: User | null;
