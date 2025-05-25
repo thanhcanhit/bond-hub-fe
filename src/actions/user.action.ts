@@ -117,7 +117,7 @@ export async function getUserDataById(id: string, token?: string) {
         updatedAt: new Date(),
         userInfo: {
           id: id,
-          fullName: "Người dùng",
+          fullName: `Người dùng ${id.slice(-4)}`, // Use last 4 chars of ID for uniqueness
           profilePictureUrl: null,
           statusMessage: "",
           blockStrangers: false,
@@ -165,7 +165,7 @@ export async function getUserDataById(id: string, token?: string) {
       updatedAt: new Date(),
       userInfo: {
         id: id,
-        fullName: "Người dùng",
+        fullName: `Người dùng ${id.slice(-4)}`, // Use last 4 chars of ID for uniqueness
         profilePictureUrl: null,
         statusMessage: "",
         blockStrangers: false,

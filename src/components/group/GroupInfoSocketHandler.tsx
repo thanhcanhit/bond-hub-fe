@@ -90,8 +90,8 @@ const GroupInfoSocketHandler = ({
         const lastUpdateTime = window._lastGroupInfoUpdateTime[groupId] || 0;
         const timeSinceLastUpdate = now - lastUpdateTime;
 
-        // Nếu đã gọi trong vòng 2 giây, bỏ qua
-        if (timeSinceLastUpdate < 2000) {
+        // Nếu đã gọi trong vòng 5 giây, bỏ qua để giảm lag
+        if (timeSinceLastUpdate < 5000) {
           console.log(
             `[GroupInfoSocketHandler] Skipping update, last update was ${timeSinceLastUpdate}ms ago`,
           );
@@ -140,6 +140,11 @@ const GroupInfoSocketHandler = ({
         if (onGroupUpdated) {
           onGroupUpdated();
         }
+
+        // Force update conversations to ensure all components get updated
+        setTimeout(() => {
+          useConversationsStore.getState().forceUpdate();
+        }, 100);
       }
     };
 
@@ -193,6 +198,11 @@ const GroupInfoSocketHandler = ({
           if (onGroupUpdated) {
             onGroupUpdated();
           }
+
+          // Force update conversations to ensure all components get updated
+          setTimeout(() => {
+            useConversationsStore.getState().forceUpdate();
+          }, 100);
         }
       }
     };
@@ -228,6 +238,11 @@ const GroupInfoSocketHandler = ({
         if (onGroupUpdated) {
           onGroupUpdated();
         }
+
+        // Force update conversations to ensure all components get updated
+        setTimeout(() => {
+          useConversationsStore.getState().forceUpdate();
+        }, 100);
       }
     };
 
@@ -270,8 +285,8 @@ const GroupInfoSocketHandler = ({
         const lastUpdateTime = window._lastGroupInfoUpdateTime[groupId] || 0;
         const timeSinceLastUpdate = now - lastUpdateTime;
 
-        // Nếu đã gọi trong vòng 2 giây, bỏ qua
-        if (timeSinceLastUpdate < 2000) {
+        // Nếu đã gọi trong vòng 5 giây, bỏ qua để giảm lag
+        if (timeSinceLastUpdate < 5000) {
           console.log(
             `[GroupInfoSocketHandler] Skipping update, last update was ${timeSinceLastUpdate}ms ago`,
           );

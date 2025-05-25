@@ -30,10 +30,10 @@ export default function ChatPage() {
   } = useChatStore();
   const { loadConversations, markAsRead } = useConversationsStore();
 
-  // Get URL search params
+  // Get URL search params (currently unused but may be needed for future features)
   const searchParams = useSearchParams();
-  const groupIdParam = searchParams.get("groupId");
-  const userIdParam = searchParams.get("userId");
+  // const groupIdParam = searchParams.get("groupId");
+  // const userIdParam = searchParams.get("userId");
 
   // Use a ref to track if conversations have been loaded
   const conversationsLoadedRef = useRef(false);
@@ -48,7 +48,8 @@ export default function ChatPage() {
       // The API now returns both user and group conversations
       conversationsLoadedRef.current = true;
     }
-  }, [currentUser?.id, loadConversations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]); // Remove loadConversations from dependencies as Zustand store functions are stable
 
   // Handle URL parameters for opening specific chats
   // useEffect(() => {
@@ -241,6 +242,7 @@ export default function ChatPage() {
         conversationsStore.markAsRead(id);
 
         // Only reload if the initial load failed or if there are no messages
+        // Reduced retry frequency to improve performance
         if (!success) {
           console.log(
             `[ChatPage] Initial group chat load failed, will retry after delay`,
@@ -258,7 +260,7 @@ export default function ChatPage() {
               chatStore.setShouldFetchMessages(true);
               chatStore.reloadConversationMessages(id, "GROUP");
             }
-          }, 1000);
+          }, 2000); // Increased delay to reduce server load
         }
       } catch (error) {
         console.error("Error opening group chat:", error);

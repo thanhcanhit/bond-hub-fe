@@ -1858,7 +1858,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (!user.userInfo) {
             user.userInfo = {
               id: user.id,
-              fullName: user.email || user.phoneNumber || "Unknown",
+              fullName:
+                user.email ||
+                user.phoneNumber ||
+                `Người dùng ${user.id.slice(-4)}`,
               profilePictureUrl: null,
               statusMessage: "No status",
               blockStrangers: false,
@@ -2220,7 +2223,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Update the group in the conversations store as well
       const conversationsStore = useConversationsStore.getState();
       conversationsStore.updateConversation(groupId, {
-        group: cachedData.group,
+        group: {
+          id: cachedData.group.id,
+          name: cachedData.group.name,
+          avatarUrl: cachedData.group.avatarUrl,
+          createdAt: cachedData.group.createdAt,
+          memberIds: cachedData.group.members?.map((m: any) => m.id) || [],
+          memberUsers:
+            cachedData.group.members?.map((member: any) => ({
+              id: member.userId,
+              fullName:
+                member.user?.userInfo?.fullName ||
+                `Người dùng ${member.userId.slice(-4)}`,
+              profilePictureUrl: member.user?.userInfo?.profilePictureUrl,
+              role: member.role,
+            })) || [],
+        },
       });
 
       // Force UI update
@@ -2314,7 +2332,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Update the group in the conversations store as well
         const conversationsStore = useConversationsStore.getState();
         conversationsStore.updateConversation(groupId, {
-          group: result.group,
+          group: {
+            id: result.group.id,
+            name: result.group.name,
+            avatarUrl: result.group.avatarUrl,
+            createdAt: result.group.createdAt,
+            memberIds: result.group.members?.map((m: any) => m.id) || [],
+            memberUsers:
+              result.group.members?.map((member: any) => ({
+                id: member.userId,
+                fullName:
+                  member.user?.userInfo?.fullName ||
+                  `Người dùng ${member.userId.slice(-4)}`,
+                profilePictureUrl: member.user?.userInfo?.profilePictureUrl,
+                role: member.role,
+              })) || [],
+          },
         });
 
         // Don't force UI update here to prevent infinite loops

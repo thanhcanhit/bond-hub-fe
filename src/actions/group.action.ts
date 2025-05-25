@@ -176,9 +176,9 @@ export async function createGroup(createGroupDto: CreateGroupDto) {
       // Join immediately
       joinGroupRoom();
 
-      // And retry after a short delay to ensure it works
-      setTimeout(joinGroupRoom, 500);
-      setTimeout(joinGroupRoom, 1500);
+      // And retry after a delay to ensure it works - reduced frequency
+      setTimeout(joinGroupRoom, 1000);
+      setTimeout(joinGroupRoom, 3000);
     } else {
       console.log(
         `[group.action] Socket not available or not connected, cannot join group room: ${response.data.id}`,
@@ -261,7 +261,7 @@ export async function getGroupById(groupId: string, token?: string) {
       `Fetching group by ID: ${groupId} with token: ${token ? "provided" : "not provided"}`,
     );
 
-    let response;
+    let response: any;
 
     if (token) {
       // If token is provided, use fetch with the token

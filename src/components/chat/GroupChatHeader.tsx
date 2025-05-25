@@ -11,8 +11,8 @@ import {
   Users,
   ChevronLeft,
   AlertTriangle,
-  Phone,
-  Video,
+  // Phone,
+  // Video,
 } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { getGroupById } from "@/actions/group.action";
 import CallButton from "@/components/call/CallButton";
+import GroupChatHeaderSocketHandler from "@/components/group/GroupChatHeaderSocketHandler";
 
 interface GroupChatHeaderProps {
   group: Group | null;
@@ -37,6 +38,7 @@ export default function GroupChatHeader({
   const [isCheckingMembership, setIsCheckingMembership] = useState(false);
   const [membershipCheckInterval, setMembershipCheckInterval] =
     useState<NodeJS.Timeout | null>(null);
+  const [forceUpdateCounter, setForceUpdateCounter] = useState(0);
   const lastCheckTimestampRef = useRef<number>(0);
   const API_THROTTLE_MS = 30000; // 30 giây
 
@@ -55,6 +57,14 @@ export default function GroupChatHeader({
     );
   }, [conversations, group]);
 
+  // Callback để xử lý cập nhật từ socket
+  const handleGroupUpdated = useCallback(() => {
+    console.log(
+      "[GroupChatHeader] Group updated via socket, forcing re-render",
+    );
+    setForceUpdateCounter((prev) => prev + 1);
+  }, []);
+
   // Tính toán số lượng thành viên
   const memberCount = useMemo(() => {
     // Ưu tiên sử dụng thông tin từ conversationsStore
@@ -63,7 +73,11 @@ export default function GroupChatHeader({
     }
     // Nếu không có, sử dụng thông tin từ group prop
     return group?.members?.length || 0;
-  }, [groupConversation?.group?.memberUsers, group?.members]);
+  }, [
+    groupConversation?.group?.memberUsers,
+    group?.members,
+    forceUpdateCounter,
+  ]);
 
   // Hàm xử lý khi người dùng không còn là thành viên của nhóm
   const handleUserNotInGroup = useCallback(
@@ -336,6 +350,13 @@ export default function GroupChatHeader({
 
   return (
     <>
+      {/* Socket handler for real-time updates */}
+      {group && (
+        <GroupChatHeaderSocketHandler
+          groupId={group.id}
+          onGroupUpdated={handleGroupUpdated}
+        />
+      )}
       <div className="bg-white border-b border-gray-200 p-3 h-[69px] flex items-center justify-between">
         <div className="flex items-center">
           {onBackToList && (

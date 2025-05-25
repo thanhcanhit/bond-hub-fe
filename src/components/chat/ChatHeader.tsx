@@ -10,12 +10,12 @@ import {
   X,
   ChevronLeft,
   Users,
-  Phone,
-  Video,
+  // Phone,
+  // Video,
 } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
-import { toast } from "sonner";
+// Toast removed from header - handled at UI level only
 
 import { Input } from "@/components/ui/input";
 
