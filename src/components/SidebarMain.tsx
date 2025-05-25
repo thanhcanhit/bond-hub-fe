@@ -26,13 +26,14 @@ import { useState, useCallback, useMemo, memo } from "react";
 import ProfileDialog from "./profile/ProfileDialog";
 import { LoadingWithMessage } from "./Loading";
 import { IconType } from "react-icons";
-import { ClockIcon, LucideBookUser } from "lucide-react";
+import { ClockIcon, LucideBookUser, Mail, MailPlus } from "lucide-react";
+import AIEmailDialog from "./email-generate/AIEmailDialog";
 
 // Định nghĩa các mục điều hướng bên ngoài component để tránh tạo lại mỗi lần render
 const NAV_ITEMS: { path: string; icon: IconType; label: string }[] = [
   { path: "/dashboard/chat", icon: BsChatDotsFill, label: "Chat" },
   { path: "/dashboard/contact", icon: LucideBookUser, label: "Contacts" },
-  { path: "/dashboard/post", icon: ClockIcon, label: "Posts" },
+  // { path: "/dashboard/post", icon: ClockIcon, label: "Posts" },
 ];
 
 function Sidebar() {
@@ -44,6 +45,7 @@ function Sidebar() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showAIEmailDialog, setShowAIEmailDialog] = useState(false);
 
   // Sử dụng useCallback để tránh tạo lại hàm mỗi lần render
   const handleLogout = useCallback(async () => {
@@ -180,6 +182,14 @@ function Sidebar() {
               </Link>
             </div>
           ))}
+
+          <Button
+            variant="ghost"
+            className="flex items-center justify-center text-white hover:bg-[#0045b8] hover:text-white active:bg-[#0045b8] active:text-white [&_svg]:!size-7 !h-12 !w-12 !rounded-2sm !p-0"
+            onClick={() => setShowAIEmailDialog(true)}
+          >
+            <MailPlus size={40} className="!w-8 !h-8" />
+          </Button>
         </div>
 
         <div className="flex-1" />
@@ -262,6 +272,12 @@ function Sidebar() {
           <SettingsDialog
             isOpen={isSettingsOpen}
             onOpenChange={setIsSettingsOpen}
+          />
+        )}
+        {showAIEmailDialog && (
+          <AIEmailDialog
+            isOpen={showAIEmailDialog}
+            onClose={() => setShowAIEmailDialog(false)}
           />
         )}
       </div>

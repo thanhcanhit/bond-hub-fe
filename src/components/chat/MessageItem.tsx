@@ -211,20 +211,6 @@ function getSenderName(
   userInfo?: UserInfo,
   userInfoFromConversations?: UserInfo | null,
 ): string {
-  // Log the available information for debugging
-  if (process.env.NODE_ENV !== "production") {
-    console.log(
-      `[MessageItem] Getting sender name for message ${message.id}:`,
-      {
-        conversationsStoreFullName: userInfoFromConversations?.fullName,
-        senderUserInfoFullName: message.sender?.userInfo?.fullName,
-        propsUserInfoFullName: userInfo?.fullName,
-        extendedMessageSenderName: (message as ExtendedMessage).senderName,
-        senderId: message.senderId,
-      },
-    );
-  }
-
   // Try to get the best available name with priority order
   const senderName =
     userInfoFromConversations?.fullName ||

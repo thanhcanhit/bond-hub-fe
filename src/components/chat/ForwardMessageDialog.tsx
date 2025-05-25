@@ -115,7 +115,10 @@ export default function ForwardMessageDialog({
     // Exclude the original sender or group of the message
     if (message) {
       // For user messages, exclude the original sender
-      if (message.senderId === conv.contact.id) {
+      if (
+        message.senderId === conv.contact.id ||
+        message.receiverId === conv.contact.id
+      ) {
         return false;
       }
 

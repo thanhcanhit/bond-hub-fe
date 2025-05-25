@@ -17,6 +17,7 @@ import {
   Mic,
   Loader2,
   Sparkles,
+  Mail,
 } from "lucide-react";
 import AudioRecorder from "./AudioRecorder";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
 import { enhanceMessage } from "@/actions/ai.action";
+import AIEmailDialog from "../email-generate/AIEmailDialog";
 
 interface MessageInputProps {
   onSendMessage: (message: string, files?: File[]) => void;
@@ -521,7 +523,7 @@ export default function MessageInput({
   };
 
   return (
-    <div className="border-t bg-white flex flex-col">
+    <div className="relative">
       {/* Reply preview */}
       {replyingTo && (
         <div className="px-3 py-2 border-b flex items-center justify-between">
@@ -625,7 +627,7 @@ export default function MessageInput({
       )}
 
       <div
-        className="flex flex-col border-t"
+        className="flex flex-col border-t bg-white"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={(e) => handleDrop(e)}
@@ -776,13 +778,13 @@ export default function MessageInput({
                 placeholder={
                   disabled ? "Chọn một cuộc trò chuyện" : "Nhập tin nhắn..."
                 }
-                className="w-full p-2 pl-3 pr-10 rounded-md focus:outline-none focus:ring-none resize-none overflow-auto"
+                className="w-full p-2 pl-3 pr-10 rounded-md focus:outline-none focus:ring-none resize-none overflow-auto min-h-[40px] max-h-[100px]"
                 value={message}
                 onChange={handleTextareaChange}
                 onKeyDown={handleKeyDown}
                 disabled={disabled}
                 rows={1}
-                style={{ maxHeight: "100px", minHeight: "40px" }}
+                style={{ height: message ? "auto" : "40px" }}
               />
 
               <div className="absolute right-2 top-1/2 -translate-y-1/2">
