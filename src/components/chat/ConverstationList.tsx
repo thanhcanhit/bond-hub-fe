@@ -245,8 +245,18 @@ export default function ContactList({
                         : // Add prefix based on sender
                           (isGroupConversation &&
                           conversation.lastMessage.senderId !== currentUser?.id
-                            ? (conversation.lastMessage.sender?.userInfo
-                                ?.fullName || "Thành viên") + ": "
+                            ? (() => {
+                                // Try to find sender in group members
+                                const sender =
+                                  conversation.group?.memberUsers?.find(
+                                    (member) =>
+                                      member.id ===
+                                      conversation.lastMessage?.senderId,
+                                  );
+                                return (
+                                  (sender?.fullName || "Thành viên") + ": "
+                                );
+                              })()
                             : conversation.lastMessage.senderId ===
                                 currentUser?.id
                               ? "Bạn: "

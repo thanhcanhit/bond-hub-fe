@@ -28,7 +28,7 @@ export default function ChatPage() {
     currentChatType,
     setSelectedContact,
   } = useChatStore();
-  const { loadConversations } = useConversationsStore();
+  const { loadConversations, markAsRead } = useConversationsStore();
 
   // Get URL search params
   const searchParams = useSearchParams();
@@ -150,18 +150,8 @@ export default function ChatPage() {
         // Use the contact from the conversations store immediately
         setSelectedContact(existingConversation.contact);
 
-        // Mark all messages as read
-        const result = await markAllMessagesAsRead("USER", id);
-        if (result.success) {
-          console.log(
-            `[ChatPage] Successfully marked all messages as read for user ${id}`,
-          );
-        } else {
-          console.error(
-            `[ChatPage] Failed to mark messages as read:`,
-            result.error,
-          );
-        }
+        // Mark all messages as read using the store
+        conversationsStore.markAsRead(id);
 
         // Check if we have cached messages before forcing a reload
         const cacheKey = `USER_${id}`;
@@ -207,18 +197,8 @@ export default function ChatPage() {
               chatStore.setShouldFetchMessages(true);
               chatStore.reloadConversationMessages(id, "USER");
 
-              // Mark all messages as read
-              const markReadResult = await markAllMessagesAsRead("USER", id);
-              if (markReadResult.success) {
-                console.log(
-                  `[ChatPage] Successfully marked all messages as read for user ${id}`,
-                );
-              } else {
-                console.error(
-                  `[ChatPage] Failed to mark messages as read:`,
-                  markReadResult.error,
-                );
-              }
+              // Mark all messages as read using the store
+              conversationsStore.markAsRead(id);
             }
           }
         } catch (error) {
@@ -257,18 +237,8 @@ export default function ChatPage() {
         // Proceed with opening the chat
         const success = await chatStore.openChat(id, "GROUP");
 
-        // Mark all messages as read
-        const result = await markAllMessagesAsRead("GROUP", id);
-        if (result.success) {
-          console.log(
-            `[ChatPage] Successfully marked all messages as read for group ${id}`,
-          );
-        } else {
-          console.error(
-            `[ChatPage] Failed to mark messages as read:`,
-            result.error,
-          );
-        }
+        // Mark all messages as read using the store
+        conversationsStore.markAsRead(id);
 
         // Only reload if the initial load failed or if there are no messages
         if (!success) {

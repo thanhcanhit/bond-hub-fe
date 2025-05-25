@@ -805,6 +805,29 @@ export const useConversationsStore = create<ConversationsState>()(
         );
 
         try {
+          // Immediately set unreadCount to 0 and force UI update
+          set((state) => {
+            const updatedConversations = state.conversations.map((conv) => {
+              const isTargetConversation =
+                conv.contact.id === contactId ||
+                (conv.type === "GROUP" && conv.group?.id === contactId);
+
+              if (isTargetConversation) {
+                return {
+                  ...conv,
+                  unreadCount: 0,
+                  lastActivity: conv.lastActivity || new Date(),
+                };
+              }
+              return conv;
+            });
+
+            return { conversations: updatedConversations };
+          });
+
+          // Force UI update immediately
+          get().forceUpdate();
+
           // Call the API to mark all messages as read
           const result = await markAllMessagesAsRead(
             conversation.type,
@@ -812,66 +835,61 @@ export const useConversationsStore = create<ConversationsState>()(
           );
           console.log("[conversationsStore] API Response:", result);
 
-          if (result.success) {
-            // Update the conversation's unread count and last activity
-            set((state) => {
-              console.log("[conversationsStore] Before update:", {
-                conversations: state.conversations.map((c) => ({
-                  id: c.contact.id,
-                  unreadCount: c.unreadCount,
-                })),
-              });
+          if (!result.success) {
+            // If API call fails, revert the unreadCount
+            console.error(
+              `[conversationsStore] Failed to mark messages as read for ${contactId}:`,
+              result.error,
+            );
 
+            set((state) => {
               const updatedConversations = state.conversations.map((conv) => {
                 const isTargetConversation =
                   conv.contact.id === contactId ||
                   (conv.type === "GROUP" && conv.group?.id === contactId);
 
                 if (isTargetConversation) {
-                  console.log("[conversationsStore] Updating conversation:", {
-                    id: conv.contact.id,
-                    oldUnreadCount: conv.unreadCount,
-                    newUnreadCount: 0,
-                  });
                   return {
                     ...conv,
-                    unreadCount: 0,
-                    lastActivity: conv.lastActivity || new Date(),
+                    unreadCount: conversation.unreadCount,
                   };
                 }
                 return conv;
               });
 
-              console.log("[conversationsStore] After update:", {
-                conversations: updatedConversations.map((c) => ({
-                  id: c.contact.id,
-                  unreadCount: c.unreadCount,
-                })),
-              });
-
               return { conversations: updatedConversations };
             });
 
-            // Force UI update to reflect changes immediately
+            // Force UI update after reverting
             get().forceUpdate();
-
-            // Log success with count if available
-            if (result.data?.count !== undefined) {
-              console.log(
-                `[conversationsStore] Successfully marked ${result.data.count} messages as read for ${contactId}`,
-              );
-            }
-          } else {
-            console.error(
-              `[conversationsStore] Failed to mark messages as read for ${contactId}:`,
-              result.error,
-            );
           }
         } catch (error) {
           console.error(
             `[conversationsStore] Error marking messages as read for ${contactId}:`,
             error,
           );
+
+          // Revert the unreadCount on error
+          set((state) => {
+            const updatedConversations = state.conversations.map((conv) => {
+              const isTargetConversation =
+                conv.contact.id === contactId ||
+                (conv.type === "GROUP" && conv.group?.id === contactId);
+
+              if (isTargetConversation) {
+                return {
+                  ...conv,
+                  unreadCount: conversation.unreadCount,
+                };
+              }
+              return conv;
+            });
+
+            return { conversations: updatedConversations };
+          });
+
+          // Force UI update after reverting
+          get().forceUpdate();
         }
       } else {
         console.log(
