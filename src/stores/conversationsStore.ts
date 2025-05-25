@@ -1222,8 +1222,8 @@ export const useConversationsStore = create<ConversationsState>()(
           const timeSinceLastUpdate = now - window._lastConversationsUpdateTime;
 
           // If we've updated too recently, skip this update
-          if (timeSinceLastUpdate < 1000) {
-            // 1 second throttle
+          if (timeSinceLastUpdate < 2000) {
+            // Increased to 2 second throttle
             console.log(
               `[conversationsStore] Skipping update, last update was ${timeSinceLastUpdate}ms ago`,
             );
@@ -1255,7 +1255,7 @@ export const useConversationsStore = create<ConversationsState>()(
                 error,
               );
             }
-          }, 300); // Longer delay to batch multiple calls and prevent rapid updates
+          }, 500); // Increased delay to batch multiple calls and prevent rapid updates
         } else {
           // Fallback for SSR
           set((state) => ({

@@ -394,36 +394,39 @@ export default function MessageItem({
       // Use setTimeout to break potential update cycles
       setTimeout(() => {
         try {
+          // Get fresh references to avoid stale closures
+          const currentChatStore = useChatStore.getState();
+          const conversationsStore = useConversationsStore.getState();
+
           // Trigger a refresh of the selected group to get updated member information
           if (
-            chatStore.refreshSelectedGroup &&
-            chatStore.selectedGroup?.id === message.groupId
+            currentChatStore.refreshSelectedGroup &&
+            currentChatStore.selectedGroup?.id === message.groupId
           ) {
             console.log(
               `[MessageItem] Refreshing group data for ${message.groupId}`,
             );
-            chatStore.refreshSelectedGroup();
+            currentChatStore.refreshSelectedGroup();
           } else {
             // If not the selected group, force an update of the conversations list
             console.log(
               `[MessageItem] Forcing update of conversations to get group ${message.groupId}`,
             );
-            const conversationsStore = useConversationsStore.getState();
             conversationsStore.forceUpdate();
           }
         } catch (error) {
           console.error(`[MessageItem] Error refreshing group data:`, error);
         }
-      }, 500);
+      }, 1000); // Increased delay to prevent rapid updates
     }
   }, [
     isGroup,
     isCurrentUser,
     message.senderId,
-    message.sender?.userInfo,
+    message.sender?.userInfo?.fullName, // More specific dependency
     message.id,
     message.groupId,
-    chatStore,
+    // Removed chatStore from dependencies to prevent infinite loops
   ]);
 
   // Đánh dấu tin nhắn đã đọc khi hiển thị (nếu chưa đọc và không phải tin nhắn của người dùng hiện tại)
@@ -432,7 +435,9 @@ export default function MessageItem({
       // Chỉ đánh dấu đã đọc nếu tin nhắn không phải của người dùng hiện tại và chưa được đọc
       // Kiểm tra lại một lần nữa để tránh trường hợp đã được đánh dấu đọc nhiều lần
       if (!message.readBy.includes(currentUserId)) {
-        chatStore.markMessageAsReadById(message.id);
+        // Get fresh store reference to avoid stale closures
+        const currentChatStore = useChatStore.getState();
+        currentChatStore.markMessageAsReadById(message.id);
       }
     }
   }, [
@@ -440,9 +445,9 @@ export default function MessageItem({
     isRead,
     isSent,
     message.id,
-    chatStore,
     currentUserId,
     message.readBy,
+    // Removed chatStore from dependencies to prevent infinite loops
   ]);
 
   // Get current user's reaction
