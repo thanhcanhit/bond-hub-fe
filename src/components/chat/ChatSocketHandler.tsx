@@ -206,7 +206,7 @@ export default function ChatSocketHandler() {
           );
 
           let senderInfo: {
-            fullName: string;
+            fullName: string | null | undefined;
             profilePictureUrl?: string | null;
             statusMessage?: string;
             blockStrangers?: boolean;
@@ -239,7 +239,7 @@ export default function ChatSocketHandler() {
                   updatedAt: userInfo.updatedAt,
                 };
                 console.log(
-                  `[ChatSocketHandler] Found sender info in group members: ${senderInfo.fullName}`,
+                  `[ChatSocketHandler] Found sender info in group members: ${userInfo.fullName}`,
                 );
               }
             }
@@ -264,7 +264,7 @@ export default function ChatSocketHandler() {
                 updatedAt: userInfo.updatedAt,
               };
               console.log(
-                `[ChatSocketHandler] Found sender info in user conversation: ${senderInfo.fullName}`,
+                `[ChatSocketHandler] Found sender info in user conversation: ${userInfo.fullName}`,
               );
             }
           }
@@ -273,6 +273,7 @@ export default function ChatSocketHandler() {
           if (
             senderInfo &&
             senderInfo.fullName &&
+            typeof senderInfo.fullName === "string" &&
             senderInfo.fullName !== "Unknown"
           ) {
             message.sender.userInfo = {
