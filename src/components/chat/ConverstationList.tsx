@@ -245,7 +245,10 @@ export default function ContactList({
                           (isGroupConversation &&
                           conversation.lastMessage.senderId !== currentUser?.id
                             ? (conversation.lastMessage.sender?.userInfo
-                                ?.fullName || "Thành viên") + ": "
+                                ?.fullName ||
+                                (conversation.lastMessage.senderId
+                                  ? `Người dùng ${conversation.lastMessage.senderId.slice(-4)}`
+                                  : "Thành viên")) + ": "
                             : conversation.lastMessage.senderId ===
                                 currentUser?.id
                               ? "Bạn: "

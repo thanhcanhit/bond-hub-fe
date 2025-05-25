@@ -180,6 +180,7 @@ interface ConversationsState {
     conversation: Conversation,
     message: Message,
   ) => boolean;
+  getUserInfoFromConversations: (userId: string) => UserInfo | null;
 }
 
 // Add TypeScript declaration for window property
@@ -424,7 +425,9 @@ export const useConversationsStore = create<ConversationsState>()(
                   id: conv.user.id,
                   userInfo: {
                     id: conv.user.id,
-                    fullName: conv.user.fullName || "Unknown",
+                    fullName:
+                      conv.user.fullName ||
+                      `Người dùng ${conv.user.id.slice(-4)}`,
                     profilePictureUrl: conv.user.profilePictureUrl || null,
                     statusMessage: conv.user.statusMessage || null,
                     lastSeen: conv.user.lastSeen
@@ -473,7 +476,9 @@ export const useConversationsStore = create<ConversationsState>()(
                       id: member.addedBy?.id || "",
                       userInfo: {
                         id: member.addedBy?.id || "",
-                        fullName: member.addedBy?.fullName || "Unknown",
+                        fullName:
+                          member.addedBy?.fullName ||
+                          `Người dùng ${member.addedBy?.id?.slice(-4) || ""}`,
                         createdAt: new Date(),
                         updatedAt: new Date(),
                         blockStrangers: false,
@@ -572,14 +577,14 @@ export const useConversationsStore = create<ConversationsState>()(
                           user.userInfo.fullName ||
                           extractNameFromEmail(user.email) ||
                           user.phoneNumber ||
-                          "Unknown",
+                          `Người dùng ${user.id.slice(-4)}`,
                       }
                     : {
                         id: user.id,
                         fullName:
                           extractNameFromEmail(user.email) ||
                           user.phoneNumber ||
-                          "Unknown",
+                          `Người dùng ${user.id.slice(-4)}`,
                         profilePictureUrl: null,
                         statusMessage: "No status",
                         blockStrangers: false,
@@ -615,7 +620,7 @@ export const useConversationsStore = create<ConversationsState>()(
                       fullName:
                         extractNameFromEmail(updatedUser.email) ||
                         updatedUser.phoneNumber ||
-                        "Unknown",
+                        `Người dùng ${updatedUser.id.slice(-4)}`,
                       profilePictureUrl: null,
                       statusMessage: "No status",
                       blockStrangers: false,
@@ -1555,6 +1560,43 @@ export const useConversationsStore = create<ConversationsState>()(
           `[conversationsStore] Message ${message.id} is older than current last message, skipping update`,
         );
       }
+    },
+
+    // Helper function to get user info from conversations store
+    getUserInfoFromConversations: (userId: string) => {
+      const state = get();
+
+      // First, try to find the user in existing conversations
+      for (const conversation of state.conversations) {
+        // Check if this is a user conversation with the target user
+        if (
+          conversation.type === "USER" &&
+          conversation.contact.id === userId
+        ) {
+          return conversation.contact.userInfo;
+        }
+
+        // Check if this is a group conversation and the user is a member
+        if (conversation.type === "GROUP" && conversation.group?.memberUsers) {
+          const member = conversation.group.memberUsers.find(
+            (m) => m.id === userId,
+          );
+          if (member && member.fullName) {
+            return {
+              id: userId,
+              fullName: member.fullName,
+              profilePictureUrl: member.profilePictureUrl,
+              statusMessage: "",
+              blockStrangers: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              userAuth: { id: userId } as User,
+            } as UserInfo;
+          }
+        }
+      }
+
+      return null;
     },
   }),
 );

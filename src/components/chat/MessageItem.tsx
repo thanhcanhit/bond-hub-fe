@@ -209,12 +209,14 @@ interface ExtendedMessage extends Message {
 function getSenderName(
   message: Message | ExtendedMessage,
   userInfo?: UserInfo,
+  userInfoFromConversations?: UserInfo | null,
 ): string {
   // Log the available information for debugging
   if (process.env.NODE_ENV !== "production") {
     console.log(
       `[MessageItem] Getting sender name for message ${message.id}:`,
       {
+        conversationsStoreFullName: userInfoFromConversations?.fullName,
         senderUserInfoFullName: message.sender?.userInfo?.fullName,
         propsUserInfoFullName: userInfo?.fullName,
         extendedMessageSenderName: (message as ExtendedMessage).senderName,
@@ -223,8 +225,9 @@ function getSenderName(
     );
   }
 
-  // Try to get the best available name
+  // Try to get the best available name with priority order
   const senderName =
+    userInfoFromConversations?.fullName ||
     message.sender?.userInfo?.fullName ||
     userInfo?.fullName ||
     (message as ExtendedMessage).senderName ||
@@ -352,6 +355,12 @@ export default function MessageItem({
   const currentUser = useAuthStore((state) => state.user);
   // Get chat store for message operations
   const chatStore = useChatStore();
+
+  // Get user info from conversations store
+  const conversationsStore = useConversationsStore();
+  const userInfoFromConversations = message.senderId
+    ? conversationsStore.getUserInfoFromConversations(message.senderId)
+    : null;
 
   // Store chatStore in a ref to prevent re-renders
   const chatStoreRef = useRef(chatStore);
@@ -668,9 +677,11 @@ export default function MessageItem({
               <AvatarImage
                 className="select-none relative object-cover"
                 src={
-                  // Ưu tiên thông tin từ sender trong message
+                  // Ưu tiên thông tin từ conversations store
+                  userInfoFromConversations?.profilePictureUrl ||
+                  // Sau đó đến thông tin từ sender trong message
                   message.sender?.userInfo?.profilePictureUrl ||
-                  // Sau đó đến userInfo được truyền vào từ props
+                  // Cuối cùng đến userInfo được truyền vào từ props
                   userInfo?.profilePictureUrl ||
                   undefined
                 }
@@ -678,9 +689,11 @@ export default function MessageItem({
               <AvatarFallback>
                 {getUserInitials({
                   userInfo:
-                    // Ưu tiên thông tin từ sender trong message
+                    // Ưu tiên thông tin từ conversations store
+                    userInfoFromConversations ||
+                    // Sau đó đến thông tin từ sender trong message
                     message.sender?.userInfo ||
-                    // Sau đó đến userInfo được truyền vào từ props
+                    // Cuối cùng đến userInfo được truyền vào từ props
                     userInfo ||
                     ({
                       fullName: isGroup ? "Thành viên" : "Người dùng",
@@ -833,7 +846,7 @@ export default function MessageItem({
           {/* Display sender name for group messages */}
           {isGroup && !isCurrentUser && !message.recalled && (
             <div className="text-xs font-medium text-blue-600 mb-1">
-              {getSenderName(message, userInfo)}
+              {getSenderName(message, userInfo, userInfoFromConversations)}
             </div>
           )}
 
