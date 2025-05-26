@@ -290,8 +290,14 @@ export default function MessageInput({
         return;
       }
 
-      e.preventDefault();
-      handleSendMessage();
+      // Chỉ gửi nếu có nội dung hoặc file đính kèm
+      if (message.trim() || selectedFiles.length > 0) {
+        e.preventDefault();
+        e.stopPropagation(); // Ngăn event bubbling
+        handleSendMessage();
+      } else {
+        e.preventDefault(); // Ngăn xuống dòng khi không có nội dung
+      }
     }
   };
 
