@@ -2149,29 +2149,11 @@ export default function GroupInfo({
         GroupRole.CO_LEADER,
       );
       if (result.success) {
-        // Cập nhật UI hoặc reload dữ liệu nhóm
+        // Đóng dialog
         setShowPromoteDialog(false);
 
-        // Cập nhật vai trò trong state để UI hiển thị đúng
-        if (group.members) {
-          const updatedMembers = group.members.map((member) => {
-            if (member.userId === selectedMemberId) {
-              return { ...member, role: GroupRole.CO_LEADER };
-            }
-            return member;
-          });
-          group.members = updatedMembers;
-        }
-
-        // Force UI update by updating the group state
-        if (group.members) {
-          setGroup({ ...group, members: [...group.members] });
-        }
-
-        // Force refresh group data to ensure all components are updated
-        setTimeout(() => {
-          updateMembersList(true);
-        }, 500);
+        // Refresh group data ngay lập tức để tránh hiển thị fallback
+        await updateMembersList(true);
 
         toast.success("Đã thăng cấp thành viên thành phó nhóm");
       } else {
@@ -2203,29 +2185,11 @@ export default function GroupInfo({
         GroupRole.MEMBER,
       );
       if (result.success) {
-        // Cập nhật UI hoặc reload dữ liệu nhóm
+        // Đóng dialog
         setShowDemoteDialog(false);
 
-        // Cập nhật vai trò trong state để UI hiển thị đúng
-        if (group.members) {
-          const updatedMembers = group.members.map((member) => {
-            if (member.userId === selectedMemberId) {
-              return { ...member, role: GroupRole.MEMBER };
-            }
-            return member;
-          });
-          group.members = updatedMembers;
-        }
-
-        // Force UI update by updating the group state
-        if (group.members) {
-          setGroup({ ...group, members: [...group.members] });
-        }
-
-        // Force refresh group data to ensure all components are updated
-        setTimeout(() => {
-          updateMembersList(true);
-        }, 500);
+        // Refresh group data ngay lập tức để tránh hiển thị fallback
+        await updateMembersList(true);
 
         toast.success("Đã hạ cấp thành viên xuống thành viên thường");
       } else {
@@ -2255,21 +2219,11 @@ export default function GroupInfo({
     try {
       const result = await removeGroupMember(group.id, selectedMemberId);
       if (result.success) {
-        // Cập nhật UI hoặc reload dữ liệu nhóm
+        // Đóng dialog
         setShowKickDialog(false);
 
-        // Cập nhật danh sách thành viên trong state để UI hiển thị đúng
-        if (group.members) {
-          const updatedMembers = group.members.filter(
-            (member) => member.userId !== selectedMemberId,
-          );
-          group.members = updatedMembers;
-        }
-
-        // Force UI update by updating the group state
-        if (group.members) {
-          setGroup({ ...group, members: [...group.members] });
-        }
+        // Refresh group data ngay lập tức để tránh hiển thị fallback
+        await updateMembersList(true);
 
         toast.success("Đã xóa thành viên khỏi nhóm");
       } else {
@@ -2345,32 +2299,8 @@ export default function GroupInfo({
         setShowConfirmTransferDialog(false);
         setShowTransferLeadershipDialog(false);
 
-        // Cập nhật vai trò trong state để UI hiển thị đúng
-        if (group.members && currentUser) {
-          const updatedMembers = group.members.map((member) => {
-            if (member.userId === newLeaderId) {
-              return { ...member, role: GroupRole.LEADER };
-            }
-            if (member.userId === currentUser.id) {
-              return { ...member, role: GroupRole.MEMBER };
-            }
-            return member;
-          });
-          group.members = updatedMembers;
-
-          // Cập nhật vai trò của người dùng hiện tại
-          setCurrentUserRole(GroupRole.MEMBER);
-        }
-
-        // Force UI update by updating the group state
-        if (group.members) {
-          setGroup({ ...group, members: [...group.members] });
-        }
-
-        // Force refresh group data to ensure all components are updated
-        setTimeout(() => {
-          updateMembersList(true);
-        }, 500);
+        // Refresh group data ngay lập tức để tránh hiển thị fallback
+        await updateMembersList(true);
 
         // Thông báo cho người dùng
         toast.success("Đã chuyển quyền trưởng nhóm thành công");

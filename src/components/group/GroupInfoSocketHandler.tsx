@@ -53,7 +53,7 @@ const GroupInfoSocketHandler = ({
   onGroupUpdated,
 }: {
   groupId: string;
-  onGroupUpdated?: () => void;
+  onGroupUpdated?: (forceRefresh?: boolean) => void;
 }) => {
   const currentUser = useAuthStore((state) => state.user);
   const { socket, joinGroupRoom } = useGroupSocket();
@@ -213,30 +213,10 @@ const GroupInfoSocketHandler = ({
           `[GroupInfoSocketHandler] Role changed in group ${groupId}, refreshing data`,
         );
 
-        // Thêm throttle để tránh gọi onGroupUpdated quá thường xuyên
-        if (!window._lastGroupInfoUpdateTime) {
-          window._lastGroupInfoUpdateTime = {};
-        }
-
-        const now = Date.now();
-        const lastUpdateTime = window._lastGroupInfoUpdateTime[groupId] || 0;
-        const timeSinceLastUpdate = now - lastUpdateTime;
-
-        // Nếu đã gọi trong vòng 2 giây, bỏ qua
-        if (timeSinceLastUpdate < 2000) {
-          console.log(
-            `[GroupInfoSocketHandler] Skipping update, last update was ${timeSinceLastUpdate}ms ago`,
-          );
-          return;
-        }
-
-        // Cập nhật thời gian gọi cuối cùng
-        window._lastGroupInfoUpdateTime[groupId] = now;
-
-        // Call the onGroupUpdated callback if provided
-        // This will use the cache system to avoid redundant API calls
+        // Call the onGroupUpdated callback immediately to refresh group data
+        // This matches the mobile app behavior of calling fetchGroupDetails()
         if (onGroupUpdated) {
-          onGroupUpdated();
+          onGroupUpdated(true); // Force refresh to get latest data from server
         }
 
         // Force update conversations to ensure all components get updated
