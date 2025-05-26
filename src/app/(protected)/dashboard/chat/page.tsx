@@ -11,7 +11,6 @@ import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useConversationsStore } from "@/stores/conversationsStore";
 import { getUserDataById } from "@/actions/user.action";
-import { markAllMessagesAsRead } from "@/actions/message.action";
 
 export default function ChatPage() {
   const [isTabContentVisible, setIsTabContentVisible] = useState(true);
@@ -28,12 +27,7 @@ export default function ChatPage() {
     currentChatType,
     setSelectedContact,
   } = useChatStore();
-  const { loadConversations, markAsRead } = useConversationsStore();
-
-  // Get URL search params (currently unused but may be needed for future features)
-  const searchParams = useSearchParams();
-  // const groupIdParam = searchParams.get("groupId");
-  // const userIdParam = searchParams.get("userId");
+  const { loadConversations } = useConversationsStore();
 
   // Use a ref to track if conversations have been loaded
   const conversationsLoadedRef = useRef(false);

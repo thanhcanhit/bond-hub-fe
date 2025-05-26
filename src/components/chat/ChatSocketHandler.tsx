@@ -106,19 +106,45 @@ export default function ChatSocketHandler() {
       }
 
       // If message already has complete sender info, return as is
-      if (message.sender?.userInfo?.fullName) {
+      if (
+        message.sender?.userInfo?.fullName &&
+        message.sender.userInfo.fullName !== "Unknown"
+      ) {
         return message;
       }
 
       // If sender is current user, use current user's info
       if (message.senderId === currentUser?.id && currentUser?.userInfo) {
-        return {
+        const updatedMessage = {
           ...message,
           sender: {
             ...currentUser,
             userInfo: currentUser.userInfo,
           },
         };
+        // Cache user info for future use
+        cacheUserInfo(currentUser.id, currentUser.userInfo);
+        return updatedMessage;
+      }
+
+      // Try to get user info from conversations store first
+      const conversationsStore = useConversationsStore.getState();
+      const userInfoFromConversations = message.senderId
+        ? conversationsStore.getUserInfoFromConversations(message.senderId)
+        : null;
+
+      if (userInfoFromConversations) {
+        const updatedMessage = {
+          ...message,
+          sender: {
+            ...message.sender,
+            id: message.senderId,
+            userInfo: userInfoFromConversations,
+          },
+        };
+        // Cache user info for future use
+        cacheUserInfo(message.senderId, userInfoFromConversations);
+        return updatedMessage;
       }
 
       // For group messages, try to find sender in group members
@@ -193,16 +219,19 @@ export default function ChatSocketHandler() {
         selectedContact?.id === message.senderId &&
         selectedContact.userInfo
       ) {
-        return {
+        const updatedMessage = {
           ...message,
           sender: {
             ...selectedContact,
             userInfo: selectedContact.userInfo,
           },
         };
+        // Cache user info for future use
+        cacheUserInfo(message.senderId, selectedContact.userInfo);
+        return updatedMessage;
       }
 
-      // Try to get user info from cache first
+      // Try to get user info from cache
       const cachedUserInfo = getCachedUserInfo(message.senderId);
       if (cachedUserInfo) {
         return {
@@ -211,23 +240,6 @@ export default function ChatSocketHandler() {
             ...message.sender,
             id: message.senderId,
             userInfo: cachedUserInfo,
-          },
-        };
-      }
-
-      // Try to get user info from conversations store cache
-      const conversationsStore = useConversationsStore.getState();
-      const conversationUserInfo =
-        conversationsStore.getUserInfoFromConversations(message.senderId);
-      if (conversationUserInfo) {
-        // Cache it for future use
-        cacheUserInfo(message.senderId, conversationUserInfo);
-        return {
-          ...message,
-          sender: {
-            ...message.sender,
-            id: message.senderId,
-            userInfo: conversationUserInfo,
           },
         };
       }
@@ -263,7 +275,7 @@ export default function ChatSocketHandler() {
   const handleNewMessage = useCallback(
     (data: MessageEventData) => {
       // Normalize message structure like mobile app
-      const normalizedMessage: Message = {
+      let normalizedMessage: Message = {
         ...data.message,
         content: {
           text: data.message.content.text || "",
@@ -272,6 +284,9 @@ export default function ChatSocketHandler() {
           video: data.message.content.video,
         },
       };
+
+      // Ensure message has complete sender info
+      normalizedMessage = ensureMessageHasUserInfo(normalizedMessage);
 
       // Check if this is current user chat or current group chat (like mobile)
       const isCurrentUserChat =
@@ -285,55 +300,46 @@ export default function ChatSocketHandler() {
         selectedGroup &&
         normalizedMessage.groupId === selectedGroup.id;
 
-      // Only add message if we're in the right conversation (like mobile)
-      if (isCurrentUserChat || isCurrentGroupChat) {
-        // Use simple addMessage like mobile app
-        const chatStore = useChatStore.getState();
-        chatStore.addMessage(normalizedMessage, {
-          updateCache: true,
-          notifyConversationStore: false,
-          skipDuplicateCheck: true,
-        });
+      // Kiểm tra xem tin nhắn có phải do chính mình gửi không
+      const isFromCurrentUser = normalizedMessage.senderId === currentUser?.id;
 
-        // Mark as read if from others
-        if (normalizedMessage.senderId !== currentUser?.id) {
-          resetUnread();
+      // Nếu là tin nhắn từ chính mình và đang ở trong chat hiện tại
+      // Chỉ cập nhật tin nhắn tạm thời thành tin nhắn thật
+      if (isFromCurrentUser && (isCurrentUserChat || isCurrentGroupChat)) {
+        console.log(
+          `[ChatSocketHandler] Received own message from socket, updating temporary message`,
+          {
+            messageId: normalizedMessage.id,
+            senderId: normalizedMessage.senderId,
+            currentUserId: currentUser?.id,
+          },
+        );
+
+        // Tìm tin nhắn tạm thời để cập nhật
+        const chatStore = useChatStore.getState();
+        const tempMessage = chatStore.messages.find(
+          (msg) =>
+            msg.id.startsWith("temp-") &&
+            msg.content.text === normalizedMessage.content.text &&
+            Math.abs(
+              new Date(msg.createdAt).getTime() -
+                new Date(normalizedMessage.createdAt).getTime(),
+            ) < 5000, // 5 giây
+        );
+
+        if (tempMessage) {
+          // Cập nhật tin nhắn tạm thời thành tin nhắn thật
+          chatStore.updateMessage(tempMessage.id, normalizedMessage);
+          return;
         }
       }
 
-      // Handle notifications for messages from others (like mobile)
-      if (
-        normalizedMessage.senderId !== currentUser?.id &&
-        !isCurrentUserChat &&
-        !isCurrentGroupChat
-      ) {
-        playNotificationSound();
-        incrementGlobalUnread();
-      }
-
-      // Always update conversations store
-      const conversationsStore = useConversationsStore.getState();
-      conversationsStore.processNewMessage(normalizedMessage, {
-        incrementUnreadCount:
-          normalizedMessage.senderId !== currentUser?.id &&
-          !isCurrentUserChat &&
-          !isCurrentGroupChat,
-        markAsRead: Boolean(
-          (isCurrentUserChat || isCurrentGroupChat) &&
-            normalizedMessage.senderId !== currentUser?.id,
-        ),
-        updateLastActivity: true,
-      });
+      // Nếu không phải tin nhắn từ chính mình hoặc không tìm thấy tin nhắn tạm thời
+      // Xử lý như bình thường
+      const chatStore = useChatStore.getState();
+      chatStore.processNewMessage(normalizedMessage);
     },
-    [
-      currentUser,
-      selectedContact,
-      selectedGroup,
-      currentChatType,
-      playNotificationSound,
-      incrementGlobalUnread,
-      resetUnread,
-    ],
+    [currentChatType, selectedContact, selectedGroup, currentUser?.id],
   );
 
   // Handle message read event
