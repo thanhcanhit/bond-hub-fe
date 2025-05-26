@@ -248,34 +248,7 @@ export const useGroupSocket = () => {
       joinGroupRoom(data.groupId);
     });
 
-    // Handle direct join group requests
-    socket.on("directJoinGroup", (data) => {
-      console.log(
-        `[GroupSocket] Received direct join request for group: ${data.groupId}`,
-      );
-      if (data.userId === currentUser?.id) {
-        console.log(
-          `[GroupSocket] Processing direct join request for current user to group: ${data.groupId}`,
-        );
-        // Join the group room
-        joinGroupRoom(data.groupId);
-
-        // Send confirmation back to server
-        socket.emit("joinedGroupDirectly", {
-          userId: currentUser.id,
-          groupId: data.groupId,
-          timestamp: new Date(),
-          isCreator: data.isCreator || false,
-        });
-      }
-    });
-
-    // Handle join confirmation
-    socket.on("joinedGroupDirectly", (data) => {
-      console.log(
-        `[GroupSocket] User ${data.userId} joined group ${data.groupId} directly`,
-      );
-    });
+    // Simplified - remove custom direct join logic as backend handles this
 
     socket.on("joinedUserRoom", (data) => {
       console.log(`[GroupSocket] Joined personal room: user:${data.userId}`);

@@ -29,6 +29,12 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
+        hostname: "qdwfnmnxnoxllcgaaewn.supabase.co",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
         hostname: "picsum.photos",
         port: "",
         pathname: "/**",

@@ -10,6 +10,14 @@ import {
 import { io, Socket } from "socket.io-client";
 import { useAuthStore } from "@/stores/authStore";
 
+// Declare the window interface to include our socket and helper functions
+declare global {
+  interface Window {
+    messageSocket: Socket | null;
+    triggerConversationsReload?: () => void;
+  }
+}
+
 // Định nghĩa context cho socket
 interface SocketContextType {
   messageSocket: Socket | null;
@@ -108,6 +116,47 @@ export function SocketChatProvider({ children }: SocketProviderProps) {
         clearInterval(heartbeatInterval);
       };
     });
+
+    // Listen for updateGroupList events from message gateway
+    socket.on(
+      "updateGroupList",
+      (data: {
+        action: string;
+        groupId: string;
+        addedById?: string;
+        removedById?: string;
+        kicked?: boolean;
+        left?: boolean;
+        timestamp: Date;
+      }) => {
+        console.log("[SocketProvider] updateGroupList event received:", data);
+
+        if (data.action === "added_to_group" && currentUser?.id) {
+          console.log(
+            `[SocketProvider] Current user added to group ${data.groupId} via message gateway`,
+          );
+          // Backend has already joined us to the group room
+          // Trigger conversations reload to show new group
+          if (
+            typeof window !== "undefined" &&
+            window.triggerConversationsReload
+          ) {
+            window.triggerConversationsReload();
+          }
+        } else if (data.action === "removed_from_group" && currentUser?.id) {
+          console.log(
+            `[SocketProvider] Current user removed from group ${data.groupId} via message gateway`,
+          );
+          // Trigger conversations reload to remove group
+          if (
+            typeof window !== "undefined" &&
+            window.triggerConversationsReload
+          ) {
+            window.triggerConversationsReload();
+          }
+        }
+      },
+    );
 
     socket.on("disconnect", (reason) => {
       console.log(

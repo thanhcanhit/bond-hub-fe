@@ -1,10 +1,12 @@
-import { User } from "@/types/base";
+import { User, UserInfo } from "@/types/base";
 
 // Create a cache for user data to avoid redundant API calls
 const userDataCache: Record<string, { user: User; timestamp: number }> = {};
+const userInfoCache: Record<string, { userInfo: UserInfo; timestamp: number }> =
+  {};
 
-// Cache expiration time in milliseconds (5 minutes)
-const CACHE_EXPIRATION = 5 * 60 * 1000;
+// Cache expiration time in milliseconds (10 minutes for better performance)
+const CACHE_EXPIRATION = 10 * 60 * 1000;
 
 // Function to check if cached data is still valid
 export function isCacheValid(userId: string): boolean {
@@ -12,6 +14,16 @@ export function isCacheValid(userId: string): boolean {
 
   const now = Date.now();
   const cacheTime = userDataCache[userId].timestamp;
+
+  return now - cacheTime < CACHE_EXPIRATION;
+}
+
+// Function to check if cached userInfo is still valid
+export function isUserInfoCacheValid(userId: string): boolean {
+  if (!userInfoCache[userId]) return false;
+
+  const now = Date.now();
+  const cacheTime = userInfoCache[userId].timestamp;
 
   return now - cacheTime < CACHE_EXPIRATION;
 }
@@ -33,13 +45,20 @@ export function getCachedUserData(
     return userDataCache[userId].user;
   }
 
-  // If we get here, either the data doesn't exist or it's expired and we don't allow expired
-  if (userDataCache[userId]) {
-    console.log(
-      `[USER_CACHE] Cache data for user ${userId} exists but is expired`,
-    );
-  } else {
-    console.log(`[USER_CACHE] No cache data exists for user ${userId}`);
+  return null;
+}
+
+// Function to get userInfo from cache
+export function getCachedUserInfo(
+  userId: string,
+  allowExpired: boolean = true, // Allow expired for better UX
+): UserInfo | null {
+  if (allowExpired && userInfoCache[userId]) {
+    return userInfoCache[userId].userInfo;
+  }
+
+  if (isUserInfoCacheValid(userId)) {
+    return userInfoCache[userId].userInfo;
   }
 
   return null;
@@ -51,6 +70,19 @@ export function cacheUserData(userId: string, user: User): void {
     user,
     timestamp: Date.now(),
   };
+
+  // Also cache userInfo if available
+  if (user.userInfo) {
+    cacheUserInfo(userId, user.userInfo);
+  }
+}
+
+// Function to store userInfo in cache
+export function cacheUserInfo(userId: string, userInfo: UserInfo): void {
+  userInfoCache[userId] = {
+    userInfo,
+    timestamp: Date.now(),
+  };
 }
 
 // Function to remove user data from cache
@@ -58,6 +90,33 @@ export function removeCachedUserData(userId: string): void {
   if (userDataCache[userId]) {
     delete userDataCache[userId];
   }
+  if (userInfoCache[userId]) {
+    delete userInfoCache[userId];
+  }
+}
+
+// Function to cache user info from group members
+export function cacheUserInfoFromGroupMembers(
+  memberUsers: Array<{
+    id: string;
+    fullName: string;
+    profilePictureUrl?: string | null;
+  }>,
+): void {
+  memberUsers.forEach((member) => {
+    if (member.id && member.fullName) {
+      cacheUserInfo(member.id, {
+        id: member.id,
+        fullName: member.fullName,
+        profilePictureUrl: member.profilePictureUrl || null,
+        statusMessage: "",
+        blockStrangers: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        userAuth: { id: member.id } as User,
+      });
+    }
+  });
 }
 
 // Function to clear the entire cache
