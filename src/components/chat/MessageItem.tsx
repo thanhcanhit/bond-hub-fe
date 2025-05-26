@@ -329,7 +329,27 @@ const getMessageMedia = (message: Message | ExtendedMessage): Media[] => {
   return message.content.media || [];
 };
 
-export default function MessageItem({
+// Add comparison function before the component definition
+const arePropsEqual = (
+  prevProps: MessageItemProps,
+  nextProps: MessageItemProps,
+) => {
+  // Compare essential props that should trigger re-render
+  return (
+    prevProps.message.id === nextProps.message.id &&
+    prevProps.message.recalled === nextProps.message.recalled &&
+    prevProps.message.content.text === nextProps.message.content.text &&
+    prevProps.message.readBy?.length === nextProps.message.readBy?.length &&
+    JSON.stringify(prevProps.message.reactions) ===
+      JSON.stringify(nextProps.message.reactions) &&
+    prevProps.isCurrentUser === nextProps.isCurrentUser &&
+    prevProps.showAvatar === nextProps.showAvatar &&
+    prevProps.highlight === nextProps.highlight &&
+    prevProps.isGroupMessage === nextProps.isGroupMessage
+  );
+};
+
+function MessageItem({
   message,
   isCurrentUser,
   showAvatar = true,
@@ -1110,3 +1130,5 @@ export default function MessageItem({
     </>
   );
 }
+
+export default React.memo(MessageItem, arePropsEqual);
