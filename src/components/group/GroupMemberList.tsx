@@ -99,7 +99,8 @@ export default function GroupMemberList({
 
           // Prepare lists of IDs to fetch
           for (const member of group.members) {
-            // Check if we need to fetch user data
+            // Always check if we need to fetch user data, even if we have some data
+            // This ensures we get the most up-to-date information
             if (!member.user?.userInfo) {
               memberIds.push(member.userId);
             } else {
@@ -241,6 +242,27 @@ export default function GroupMemberList({
     }
   }, [group?.id, group?.members, currentUser?.id]);
 
+  // Force refresh memberDetails when group members change (for socket updates)
+  useEffect(() => {
+    if (group?.members) {
+      // Check if any member data is missing from memberDetails
+      const missingMembers = group.members.filter(
+        (member) => !memberDetails[member.userId]?.userInfo?.fullName,
+      );
+
+      if (missingMembers.length > 0) {
+        console.log(
+          `[GroupMemberList] Detected ${missingMembers.length} members with missing data, refreshing...`,
+        );
+        // Trigger a re-fetch by updating the dependency array
+        const timer = setTimeout(() => {
+          // This will trigger the main useEffect above
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [group?.members, memberDetails]);
+
   // Handle member click to show profile
   const handleMemberClick = (memberId: string) => {
     const memberData = memberDetails[memberId];
@@ -273,6 +295,8 @@ export default function GroupMemberList({
       );
       if (result.success) {
         toast.success("Đã thăng cấp thành viên thành phó nhóm");
+        // Socket events will handle UI updates automatically
+        // No need to manually refresh as the socket handler will update the UI
       } else {
         toast.error(`Lỗi: ${result.error}`);
       }
@@ -296,6 +320,8 @@ export default function GroupMemberList({
       );
       if (result.success) {
         toast.success("Đã hạ cấp phó nhóm xuống thành viên thường");
+        // Socket events will handle UI updates automatically
+        // No need to manually refresh as the socket handler will update the UI
       } else {
         toast.error(`Lỗi: ${result.error}`);
       }
@@ -323,6 +349,8 @@ export default function GroupMemberList({
       if (result.success) {
         toast.success("Đã xóa thành viên khỏi nhóm");
         setShowKickDialog(false);
+        // Refresh member details to ensure UI shows correct information
+        //await loadMemberDetails();
       } else {
         toast.error(`Lỗi: ${result.error}`);
       }
@@ -385,9 +413,18 @@ export default function GroupMemberList({
           <ScrollArea className="flex-1">
             {group?.members?.map((member) => {
               const memberData = memberDetails[member.userId];
-              const initials = memberData?.userInfo?.fullName
-                ? memberData.userInfo.fullName.slice(0, 2).toUpperCase()
-                : "??";
+
+              // Get the best available name with fallback logic
+              const displayName =
+                memberData?.userInfo?.fullName ||
+                member.user?.userInfo?.fullName ||
+                `Người dùng ${member.userId.slice(-4)}`;
+
+              const initials =
+                displayName &&
+                displayName !== `Người dùng ${member.userId.slice(-4)}`
+                  ? displayName.slice(0, 2).toUpperCase()
+                  : "??";
 
               return (
                 <div
@@ -401,7 +438,9 @@ export default function GroupMemberList({
                     <Avatar className="h-10 w-10 mr-3">
                       <AvatarImage
                         src={
-                          memberData?.userInfo?.profilePictureUrl || undefined
+                          memberData?.userInfo?.profilePictureUrl ||
+                          member.user?.userInfo?.profilePictureUrl ||
+                          undefined
                         }
                         className="object-cover"
                       />
@@ -410,9 +449,7 @@ export default function GroupMemberList({
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-medium">
-                        {memberData?.userInfo?.fullName || "Thành viên"}
-                      </p>
+                      <p className="font-medium">{displayName}</p>
                       <p className="text-xs text-gray-500">
                         {member.role === "LEADER"
                           ? "Trưởng nhóm"

@@ -206,17 +206,11 @@ function ContactItem({ user, onRemove }: ContactItemProps) {
               >
                 Xem thông tin
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer">
+              <DropdownMenuItem className="cursor-pointer" disabled>
                 Phân loại
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer">
+              <DropdownMenuItem className="cursor-pointer" disabled>
                 Đặt tên gọi nhớ
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onClick={() => setShowBlockDialog(true)}
-              >
-                Chặn người này
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

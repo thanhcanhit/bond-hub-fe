@@ -194,6 +194,12 @@ export default function GroupDialog({
         // Thông báo cho người dùng
         toast.success("Đã chuyển quyền trưởng nhóm thành công");
 
+        // Force refresh group data to update UI
+        // setTimeout(() => {
+        //   const chatStore = useChatStore.getState();
+        //   chatStore.refreshSelectedGroup();
+        // }, 500);
+
         // Tiếp tục rời nhóm
         setShowLeaveDialog(true);
       } else {
