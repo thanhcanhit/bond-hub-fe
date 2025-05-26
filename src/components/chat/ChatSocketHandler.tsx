@@ -106,19 +106,45 @@ export default function ChatSocketHandler() {
       }
 
       // If message already has complete sender info, return as is
-      if (message.sender?.userInfo?.fullName) {
+      if (
+        message.sender?.userInfo?.fullName &&
+        message.sender.userInfo.fullName !== "Unknown"
+      ) {
         return message;
       }
 
       // If sender is current user, use current user's info
       if (message.senderId === currentUser?.id && currentUser?.userInfo) {
-        return {
+        const updatedMessage = {
           ...message,
           sender: {
             ...currentUser,
             userInfo: currentUser.userInfo,
           },
         };
+        // Cache user info for future use
+        cacheUserInfo(currentUser.id, currentUser.userInfo);
+        return updatedMessage;
+      }
+
+      // Try to get user info from conversations store first
+      const conversationsStore = useConversationsStore.getState();
+      const userInfoFromConversations = message.senderId
+        ? conversationsStore.getUserInfoFromConversations(message.senderId)
+        : null;
+
+      if (userInfoFromConversations) {
+        const updatedMessage = {
+          ...message,
+          sender: {
+            ...message.sender,
+            id: message.senderId,
+            userInfo: userInfoFromConversations,
+          },
+        };
+        // Cache user info for future use
+        cacheUserInfo(message.senderId, userInfoFromConversations);
+        return updatedMessage;
       }
 
       // For group messages, try to find sender in group members
@@ -193,16 +219,19 @@ export default function ChatSocketHandler() {
         selectedContact?.id === message.senderId &&
         selectedContact.userInfo
       ) {
-        return {
+        const updatedMessage = {
           ...message,
           sender: {
             ...selectedContact,
             userInfo: selectedContact.userInfo,
           },
         };
+        // Cache user info for future use
+        cacheUserInfo(message.senderId, selectedContact.userInfo);
+        return updatedMessage;
       }
 
-      // Try to get user info from cache first
+      // Try to get user info from cache
       const cachedUserInfo = getCachedUserInfo(message.senderId);
       if (cachedUserInfo) {
         return {
@@ -211,23 +240,6 @@ export default function ChatSocketHandler() {
             ...message.sender,
             id: message.senderId,
             userInfo: cachedUserInfo,
-          },
-        };
-      }
-
-      // Try to get user info from conversations store cache
-      const conversationsStore = useConversationsStore.getState();
-      const conversationUserInfo =
-        conversationsStore.getUserInfoFromConversations(message.senderId);
-      if (conversationUserInfo) {
-        // Cache it for future use
-        cacheUserInfo(message.senderId, conversationUserInfo);
-        return {
-          ...message,
-          sender: {
-            ...message.sender,
-            id: message.senderId,
-            userInfo: conversationUserInfo,
           },
         };
       }
@@ -263,7 +275,7 @@ export default function ChatSocketHandler() {
   const handleNewMessage = useCallback(
     (data: MessageEventData) => {
       // Normalize message structure like mobile app
-      const normalizedMessage: Message = {
+      let normalizedMessage: Message = {
         ...data.message,
         content: {
           text: data.message.content.text || "",
@@ -272,6 +284,9 @@ export default function ChatSocketHandler() {
           video: data.message.content.video,
         },
       };
+
+      // Ensure message has complete sender info
+      normalizedMessage = ensureMessageHasUserInfo(normalizedMessage);
 
       // Check if this is current user chat or current group chat (like mobile)
       const isCurrentUserChat =
@@ -333,6 +348,7 @@ export default function ChatSocketHandler() {
       playNotificationSound,
       incrementGlobalUnread,
       resetUnread,
+      ensureMessageHasUserInfo,
     ],
   );
 

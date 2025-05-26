@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
 import { formatMessageTime } from "@/utils/dateUtils";
@@ -209,14 +209,14 @@ interface ExtendedMessage extends Message {
 function getSenderName(
   message: Message | ExtendedMessage,
   userInfo?: UserInfo,
-  userInfoFromConversations?: UserInfo | null,
+  conversationsUserInfo?: UserInfo | null,
 ): string {
   // Try to get the best available name with priority order
   const senderName =
-    userInfoFromConversations?.fullName ||
-    message.sender?.userInfo?.fullName ||
-    userInfo?.fullName ||
-    (message as ExtendedMessage).senderName ||
+    conversationsUserInfo?.fullName || // First priority: info from conversations store
+    message.sender?.userInfo?.fullName || // Second priority: info from message sender
+    userInfo?.fullName || // Third priority: info from props
+    (message as ExtendedMessage).senderName || // Fourth priority: extended message info
     (message.senderId
       ? `Người dùng ${message.senderId.slice(-4)}`
       : "Thành viên nhóm");
@@ -354,11 +354,17 @@ export default function MessageItem({
   // Get chat store for message operations
   const chatStore = useChatStore();
 
-  // Get user info from conversations store
+  // Get user info from conversations store with proper error handling
   const conversationsStore = useConversationsStore();
-  const userInfoFromConversations = message.senderId
-    ? conversationsStore.getUserInfoFromConversations(message.senderId)
-    : null;
+  const senderInfoFromConversations = useMemo(() => {
+    if (!message.senderId) return null;
+    try {
+      return conversationsStore.getUserInfoFromConversations(message.senderId);
+    } catch (error) {
+      console.error("Error getting user info from conversations:", error);
+      return null;
+    }
+  }, [message.senderId, conversationsStore]);
 
   // Store chatStore in a ref to prevent re-renders
   const chatStoreRef = useRef(chatStore);
@@ -679,7 +685,7 @@ export default function MessageItem({
                 className="select-none relative object-cover"
                 src={
                   // Ưu tiên thông tin từ conversations store
-                  userInfoFromConversations?.profilePictureUrl ||
+                  senderInfoFromConversations?.profilePictureUrl ||
                   // Sau đó đến thông tin từ sender trong message
                   message.sender?.userInfo?.profilePictureUrl ||
                   // Cuối cùng đến userInfo được truyền vào từ props
@@ -691,7 +697,7 @@ export default function MessageItem({
                 {getUserInitials({
                   userInfo:
                     // Ưu tiên thông tin từ conversations store
-                    userInfoFromConversations ||
+                    senderInfoFromConversations ||
                     // Sau đó đến thông tin từ sender trong message
                     message.sender?.userInfo ||
                     // Cuối cùng đến userInfo được truyền vào từ props
@@ -847,7 +853,7 @@ export default function MessageItem({
           {/* Display sender name for group messages */}
           {isGroup && !isCurrentUser && !message.recalled && (
             <div className="text-xs font-medium text-blue-600 mb-1">
-              {getSenderName(message, userInfo, userInfoFromConversations)}
+              {getSenderName(message, userInfo, senderInfoFromConversations)}
             </div>
           )}
 
