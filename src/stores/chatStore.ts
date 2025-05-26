@@ -273,9 +273,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } = options;
 
     // Kiểm tra trùng lặp nếu không bỏ qua
-    if (!skipDuplicateCheck && get().isDuplicateMessage(message)) {
-      console.log(`[chatStore] Message ${message.id} is duplicate, skipping`);
-      return;
+    if (!skipDuplicateCheck) {
+      // Kiểm tra ID chính xác
+      const exactMessageExists = get().messages.some(
+        (msg) => msg.id === message.id,
+      );
+      if (exactMessageExists) {
+        console.log(
+          `[chatStore] Message with ID ${message.id} already exists, skipping`,
+        );
+        return;
+      }
+
+      // Kiểm tra tin nhắn tạm thời có nội dung giống nhau
+      const tempMessageExists = get().messages.some(
+        (msg) =>
+          msg.id.startsWith("temp-") &&
+          msg.senderId === message.senderId &&
+          msg.content.text === message.content.text &&
+          Math.abs(
+            new Date(msg.createdAt).getTime() -
+              new Date(message.createdAt).getTime(),
+          ) < 5000, // 5 giây
+      );
+
+      if (tempMessageExists) {
+        console.log(
+          `[chatStore] Similar temporary message exists, skipping to avoid duplication`,
+        );
+        return;
+      }
     }
 
     console.log(`[chatStore] Processing new message ${message.id}`, {
