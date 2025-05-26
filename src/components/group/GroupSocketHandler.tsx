@@ -140,19 +140,66 @@ export default function GroupSocketHandler() {
           );
 
           if (conversation) {
-            // Update the conversation with the provided group data
-            updateConversation(groupId, {
-              group: {
-                ...conversation.group,
-                ...groupData,
-              },
-            });
+            // For role updates, we need to properly update memberUsers
+            if (groupData.userId && (groupData.role || groupData.newRole)) {
+              // This is a role update event
+              const newRole = groupData.role || groupData.newRole; // Backend sends "role", some events might send "newRole"
 
-            // Force update to ensure UI reflects changes immediately
-            setTimeout(() => {
-              useConversationsStore.getState().forceUpdate();
-            }, 100);
-            return;
+              if (
+                conversation.group?.memberUsers &&
+                conversation.group.memberUsers.length > 0
+              ) {
+                // Update existing memberUsers
+                const updatedMemberUsers = conversation.group.memberUsers.map(
+                  (member) => {
+                    if (member.id === groupData.userId) {
+                      return {
+                        ...member,
+                        role: newRole,
+                      };
+                    }
+                    return member;
+                  },
+                );
+
+                updateConversation(groupId, {
+                  group: {
+                    ...conversation.group,
+                    memberUsers: updatedMemberUsers,
+                  },
+                });
+
+                console.log(
+                  `[GroupSocketHandler] Updated role for user ${groupData.userId} to ${newRole} in conversation store`,
+                );
+
+                // Force update to ensure UI reflects changes immediately
+                setTimeout(() => {
+                  useConversationsStore.getState().forceUpdate();
+                }, 100);
+                return; // Successfully updated, no need to call API
+              } else {
+                // No memberUsers data, force a full refresh via API call
+                console.log(
+                  `[GroupSocketHandler] No memberUsers data for role update, forcing refresh for group ${groupId}`,
+                );
+                // Continue to API call below
+              }
+            } else {
+              // For other updates, merge normally
+              updateConversation(groupId, {
+                group: {
+                  ...conversation.group,
+                  ...groupData,
+                },
+              });
+
+              // Force update to ensure UI reflects changes immediately
+              setTimeout(() => {
+                useConversationsStore.getState().forceUpdate();
+              }, 100);
+              return; // Successfully updated, no need to call API
+            }
           }
         }
 
@@ -306,17 +353,18 @@ export default function GroupSocketHandler() {
         refreshSelectedGroup();
 
         // Role changed - no toast in socket handler
-      } else {
-        // Find the group in conversations
-        const groupConversation = conversations.find(
-          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
-        );
+      }
 
-        if (groupConversation) {
-          // Refresh this group's data in the conversations store
-          // Sử dụng dữ liệu từ socket nếu có
-          updateConversationWithLatestGroupData(data.groupId, data);
-        }
+      // Always update conversations store for both selected and non-selected groups
+      // This ensures GroupChatHeader and other components get updated
+      const groupConversation = conversations.find(
+        (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+      );
+
+      if (groupConversation) {
+        // Refresh this group's data in the conversations store
+        // Sử dụng dữ liệu từ socket nếu có
+        updateConversationWithLatestGroupData(data.groupId, data);
       }
     };
 
@@ -358,16 +406,18 @@ export default function GroupSocketHandler() {
         refreshSelectedGroup();
 
         // Role changed - no toast in socket handler
-      } else {
-        // Find the group in conversations
-        const groupConversation = conversations.find(
-          (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
-        );
+      }
 
-        if (groupConversation) {
-          // Refresh this group's data in the conversations store
-          updateConversationWithLatestGroupData(data.groupId);
-        }
+      // Always update conversations store for both selected and non-selected groups
+      // This ensures GroupChatHeader and other components get updated
+      const groupConversation = conversations.find(
+        (conv) => conv.type === "GROUP" && conv.group?.id === data.groupId,
+      );
+
+      if (groupConversation) {
+        // Refresh this group's data in the conversations store
+        // Sử dụng dữ liệu từ socket nếu có
+        updateConversationWithLatestGroupData(data.groupId, data);
       }
     };
 
