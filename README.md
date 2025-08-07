@@ -1,10 +1,115 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Vodka - Modern Messaging Application
 
-Auto build with Nixpacks
+Vodka is a modern real-time messaging application built with Next.js, similar to Zalo, that enables users to connect, chat, and share moments with friends and family.
+
+## Features
+
+- 💬 Real-time messaging with WebSocket
+- 👥 User authentication and profile management
+  - QR code login
+  - Traditional form login
+- 🔍 Advanced search functionality
+  - Friend search
+  - Message search
+- 🤖 AI-powered assistance
+  - Email composition
+  - Smart replies
+  - Content suggestions
+- 🎨 Modern UI with Shadcn UI and Tailwind CSS
+- 🔒 Secure communication with JWT authentication
+- 🌐 Server-side rendering for optimal performance
+- ⚙️ Comprehensive settings management
+  - Email updates
+  - Phone number changes
+  - Password management
+
+## Screenshots
+
+### Landing Page
+
+![Landing Page Screenshot](/public/screenshots/landing.jpg)
+_Welcome page showcasing Vodka's features and benefits_
+
+### Authentication
+
+![QR Login Screenshot](/public/screenshots/qr-login.jpg)
+_QR code-based login for quick access_
+
+![Form Login Screenshot](/public/screenshots/form-login.jpg)
+_Traditional login form with email/password_
+
+### Chat Interface
+
+![Chat Interface Screenshot](/public/screenshots/chat.jpg)
+_Real-time messaging interface with message history and AI suggestions_
+
+### Friend List & Search
+
+![Friend List Screenshot](/public/screenshots/friend.jpg)
+_Manage connections and search for new friends_
+
+### AI Assistant
+
+![AI Assistant Screenshot](/public/screenshots/ai-assistant.jpg)
+_AI-powered features for email composition and smart replies_
+
+### Settings
+
+![Settings Screenshot](/public/screenshots/settings.jpg)
+_Comprehensive settings panel for account management_
+
+### Profile
+
+![Profile Screenshot](/public/screenshots/profile.jpg)
+_User profile management and settings_
+
+## Tech Stack
+
+- **Framework:** Next.js 14 (App Router)
+- **Language:** TypeScript
+- **UI Components:** Shadcn UI, Radix UI
+- **Styling:** Tailwind CSS
+- **State Management:** Zustand
+- **Real-time Communication:** Socket.io
+- **Authentication:** JWT
+- **Form Handling:** React Hook Form
+- **API Integration:** Server Actions
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18.17 or later
+- npm, yarn, or pnpm
+
+### Installation
+
+1. Clone the repository:
+
+```bash
+git clone [your-repository-url]
+cd bond-hub-fe
+```
+
+2. Install dependencies:
+
+```bash
+npm install
+# or
+yarn install
+# or
+pnpm install
+```
+
+3. Set up environment variables:
+   Create a `.env.local` file in the root directory and add necessary environment variables:
+
+```env
+NEXT_PUBLIC_API_URL=your_api_url
+NEXT_PUBLIC_WS_URL=your_websocket_url
+```
+
+4. Run the development server:
 
 ```bash
 npm run dev
@@ -12,27 +117,56 @@ npm run dev
 yarn dev
 # or
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the application.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+src/
+├── app/              # Next.js app router pages
+├── components/       # Reusable UI components
+├── hooks/           # Custom React hooks
+├── lib/             # Utility libraries and configurations
+├── providers/       # React context providers
+├── services/        # API and external service integrations
+├── stores/          # Zustand state management
+├── types/           # TypeScript type definitions
+└── utils/           # Helper functions and utilities
+```
 
-## Learn More
+## Development
 
-To learn more about Next.js, take a look at the following resources:
+- Use `npm run lint` to run ESLint
+- Use `npm run type-check` to run TypeScript type checking
+- Use `npm run build` to create a production build
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deployment
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The application requires a Node.js environment with WebSocket support. You can deploy it on any platform that supports WebSocket connections, such as:
 
-## Deploy on Vercel
+- DigitalOcean
+- AWS (EC2, ECS)
+- Google Cloud Platform
+- Heroku
+- Railway
+- Custom VPS
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Make sure your chosen platform supports:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- WebSocket connections
+- Node.js runtime
+- SSL certificates for secure connections
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
